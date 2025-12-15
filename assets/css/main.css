@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* NetMan - Unified Infrastructure Management System */
+/* Custom theme overrides for DaisyUI */
+
+:root {
+  --netman-primary: #3b82f6;
+  --netman-secondary: #6366f1;
+  --netman-accent: #22d3ee;
+  --netman-success: #22c55e;
+  --netman-warning: #f59e0b;
+  --netman-error: #ef4444;
+}
+
+/* Custom utility classes */
+.status-online {
+  @apply bg-success/20 text-success border-success;
+}
+
+.status-offline {
+  @apply bg-error/20 text-error border-error;
+}
+
+.status-unknown {
+  @apply bg-warning/20 text-warning border-warning;
+}
+
+.status-maintenance {
+  @apply bg-info/20 text-info border-info;
+}
+
+/* Device type icons styling */
+.device-icon {
+  @apply w-8 h-8 flex items-center justify-center rounded-lg;
+}
+
+/* Dashboard card styling */
+.stat-card {
+  @apply bg-base-100 rounded-xl shadow-lg p-6 border border-base-200 hover:border-primary/30 transition-all duration-300;
+}
+
+/* Glassmorphism effect for modals */
+.glass-modal {
+  @apply bg-base-100/80 backdrop-blur-xl border border-base-200/50 shadow-2xl;
+}
+
+/* Animated pulse for online status */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.1); }
+}
+
+.pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Sidebar styling */
+.sidebar-link {
+  @apply flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200;
+  @apply hover:bg-primary/10 hover:text-primary;
+}
+
+.sidebar-link.active {
+  @apply bg-primary text-primary-content;
+}

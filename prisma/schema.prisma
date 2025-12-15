@@ -1,0 +1,184 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// DEVICE MANAGEMENT
+// ============================================
+
+model Device {
+  id          String       @id @default(uuid())
+  name        String
+  type        DeviceType
+  ip          String?
+  mac         String?      @unique
+  hostname    String?
+  location    String?
+  status      DeviceStatus @default(UNKNOWN)
+  lastSeen    DateTime?
+  owner       String?
+  notes       String?
+  wakeable    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  ports       NetworkPort[]
+  sessions    RemoteSession[]
+
+  @@index([type])
+  @@index([status])
+  @@index([location])
+}
+
+enum DeviceType {
+  SMART_TV
+  PC_WINDOWS
+  PC_LINUX
+  SERVER_LINUX
+  PRINTER
+  VM
+  ROUTER
+  SWITCH
+  ACCESS_POINT
+  OTHER
+}
+
+enum DeviceStatus {
+  ONLINE
+  OFFLINE
+  UNKNOWN
+  MAINTENANCE
+}
+
+// ============================================
+// NETWORK PORT TRACKING
+// ============================================
+
+model NetworkPort {
+  id          String     @id @default(uuid())
+  deviceId    String
+  portName    String
+  portNumber  Int?
+  vlan        String?
+  speed       String?
+  status      PortStatus @default(DOWN)
+  macLearned  String[]
+  description String?
+  device      Device     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, portName])
+}
+
+enum PortStatus {
+  UP
+  DOWN
+  DISABLED
+}
+
+// ============================================
+// REMOTE ACCESS SESSION LOGGING
+// ============================================
+
+model RemoteSession {
+  id        String         @id @default(uuid())
+  user      String
+  targetId  String
+  protocol  RemoteProtocol
+  startedAt DateTime       @default(now())
+  endedAt   DateTime?
+  notes     String?
+  target    Device         @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([user])
+  @@index([targetId])
+}
+
+enum RemoteProtocol {
+  SSH
+  RDP
+  VNC
+  CONSOLE
+  HTTP
+}
+
+// ============================================
+// AUDIT TRAIL
+// ============================================
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actor     String
+  action    String
+  target    String
+  details   Json?
+  result    String
+  createdAt DateTime @default(now())
+
+  @@index([actor])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ============================================
+// IP ADDRESS MANAGEMENT (IPAM)
+// ============================================
+
+model IPRange {
+  id          String        @id @default(uuid())
+  name        String
+  network     String        // e.g., "192.168.1.0/24"
+  gateway     String?
+  vlan        String?
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  allocations IPAllocation[]
+
+  @@unique([network])
+}
+
+model IPAllocation {
+  id        String         @id @default(uuid())
+  rangeId   String
+  ip        String
+  mac       String?
+  hostname  String?
+  type      AllocationType
+  createdAt DateTime       @default(now())
+  range     IPRange        @relation(fields: [rangeId], references: [id], onDelete: Cascade)
+
+  @@unique([rangeId, ip])
+}
+
+enum AllocationType {
+  STATIC
+  DHCP
+  RESERVED
+}
+
+// ============================================
+// MIKROTIK CREDENTIALS (ENCRYPTED)
+// ============================================
+
+model MikrotikDevice {
+  id          String   @id @default(uuid())
+  name        String
+  host        String
+  port        Int      @default(8728)
+  username    String
+  password    String   // Should be encrypted in production
+  isActive    Boolean  @default(true)
+  lastSync    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([host, port])
+}

@@ -143,3 +143,16 @@
 .sidebar-link.active {
   @apply bg-primary text-primary-content;
 }
+
+/* Custom utility classes for text opacity (workaround for DaisyUI + TailwindCSS v4) */
+.text-base-content\/50 {
+  color: oklch(90% 0.01 250 / 0.9);
+}
+
+.text-base-content\/60 {
+  color: oklch(90% 0.01 250 / 0.9);
+}
+
+.text-base-content\/70 {
+  color: oklch(90% 0.01 250 / 0.9);
+}

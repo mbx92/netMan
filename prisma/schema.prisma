@@ -15,23 +15,25 @@ datasource db {
 // ============================================
 
 model Device {
-  id          String       @id @default(uuid())
-  name        String
-  type        DeviceType
-  ip          String?
-  mac         String?      @unique
-  hostname    String?
-  location    String?
-  status      DeviceStatus @default(UNKNOWN)
-  lastSeen    DateTime?
-  owner       String?
-  notes       String?
-  wakeable    Boolean      @default(false)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id        String       @id @default(uuid())
+  name      String
+  type      DeviceType
+  ip        String?
+  mac       String?      @unique
+  hostname  String?
+  location  String?
+  status    DeviceStatus @default(UNKNOWN)
+  lastSeen  DateTime?
+  owner     String?
+  notes     String?
+  wakeable  Boolean      @default(false)
+  portCount Int? // Number of physical ports (for switches/routers)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
-  ports       NetworkPort[]
-  sessions    RemoteSession[]
+  ports          NetworkPort[]   @relation("DevicePorts") // Ports ON this device
+  connectedPorts NetworkPort[]   @relation("PortConnections") // Ports this device is connected TO
+  sessions       RemoteSession[]
 
   @@index([type])
   @@index([status])
@@ -64,17 +66,23 @@ enum DeviceStatus {
 
 model NetworkPort {
   id          String     @id @default(uuid())
-  deviceId    String
-  portName    String
-  portNumber  Int?
+  deviceId    String // Parent switch/router ID
+  portName    String // e.g., "eth1", "ether1"
+  portNumber  Int? // Physical port number (1, 2, 3...)
   vlan        String?
   speed       String?
   status      PortStatus @default(DOWN)
   macLearned  String[]
   description String?
-  device      Device     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  // Connected device assignment
+  connectedDeviceId String? // Device connected to this port
+  connectedDevice   Device? @relation("PortConnections", fields: [connectedDeviceId], references: [id], onDelete: SetNull)
+
+  device Device @relation("DevicePorts", fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@unique([deviceId, portName])
+  @@index([connectedDeviceId])
 }
 
 enum PortStatus {
@@ -132,14 +140,14 @@ model AuditLog {
 // ============================================
 
 model IPRange {
-  id          String        @id @default(uuid())
+  id          String         @id @default(uuid())
   name        String
-  network     String        // e.g., "192.168.1.0/24"
+  network     String // e.g., "192.168.1.0/24"
   gateway     String?
   vlan        String?
   description String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
   allocations IPAllocation[]
 
   @@unique([network])
@@ -169,16 +177,16 @@ enum AllocationType {
 // ============================================
 
 model MikrotikDevice {
-  id          String   @id @default(uuid())
-  name        String
-  host        String
-  port        Int      @default(8728)
-  username    String
-  password    String   // Should be encrypted in production
-  isActive    Boolean  @default(true)
-  lastSync    DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String    @id @default(uuid())
+  name      String
+  host      String
+  port      Int       @default(8728)
+  username  String
+  password  String // Should be encrypted in production
+  isActive  Boolean   @default(true)
+  lastSync  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@unique([host, port])
 }

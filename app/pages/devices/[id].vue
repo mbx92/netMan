@@ -55,7 +55,19 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label class="text-sm text-base-content/60">IP Address</label>
-                <div class="font-mono text-lg mt-1">{{ device.ip || '-' }}</div>
+                <div class="flex items-center gap-2 mt-1">
+                  <!-- Network Icon -->
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="5" y="8" width="14" height="10" rx="1"/>
+                    <rect x="7" y="10" width="10" height="6" rx="0.5"/>
+                    <line x1="8" y1="4" x2="8" y2="8"/>
+                    <line x1="10" y1="4" x2="10" y2="8"/>
+                    <line x1="12" y1="4" x2="12" y2="8"/>
+                    <line x1="14" y1="4" x2="14" y2="8"/>
+                    <line x1="16" y1="4" x2="16" y2="8"/>
+                  </svg>
+                  <span class="font-mono text-lg">{{ device.ip || '-' }}</span>
+                </div>
               </div>
               <div>
                 <label class="text-sm text-base-content/60">MAC Address</label>
@@ -82,14 +94,64 @@
                 </div>
               </div>
             </div>
+            
+            <!-- Assigned To Section -->
+            <div v-if="connectedToPort" class="mt-6 pt-6 border-t border-base-200">
+              <label class="text-sm text-base-content/60">Assigned To</label>
+              <div class="flex items-center gap-3 mt-2 p-3 bg-base-200/50 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="5" y="8" width="14" height="10" rx="1"/>
+                  <rect x="7" y="10" width="10" height="6" rx="0.5"/>
+                  <line x1="8" y1="4" x2="8" y2="8"/>
+                  <line x1="10" y1="4" x2="10" y2="8"/>
+                  <line x1="12" y1="4" x2="12" y2="8"/>
+                  <line x1="14" y1="4" x2="14" y2="8"/>
+                  <line x1="16" y1="4" x2="16" y2="8"/>
+                </svg>
+                <div>
+                  <NuxtLink 
+                    :to="`/devices/${connectedToPort.device.id}`"
+                    class="font-semibold text-primary hover:underline"
+                  >
+                    {{ connectedToPort.device.name }}
+                  </NuxtLink>
+                  <div class="text-sm text-base-content/60">
+                    Port: <span class="font-mono">{{ connectedToPort.portName }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
             <div v-if="device.notes" class="mt-6 pt-6 border-t border-base-200">
               <label class="text-sm text-base-content/60">Notes</label>
               <p class="mt-1 whitespace-pre-wrap">{{ device.notes }}</p>
             </div>
           </div>
 
-          <!-- Network Ports (if applicable) -->
-          <div v-if="device.ports?.length" class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6">
+          <!-- Network Ports (for switches/routers) -->
+          <div v-if="isNetworkDevice" class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6">
+            <ClientOnly>
+              <PortGrid 
+                :ports="portsWithStatus" 
+                :available-devices="availableDevices"
+                :is-network-device="true"
+                :is-live="sseConnected"
+                @assign="handleAssign"
+                @unassign="handleUnassign"
+                @delete-port="handleDeletePort"
+                @add-ports="showAddPortsModal = true"
+                @refresh="fetchPorts"
+              />
+              <template #fallback>
+                <div class="flex items-center justify-center py-8">
+                  <span class="loading loading-spinner loading-md"></span>
+                </div>
+              </template>
+            </ClientOnly>
+          </div>
+          
+          <!-- Legacy Port Table (if not using PortGrid) -->
+          <div v-else-if="device.ports?.length" class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6">
             <h2 class="text-lg font-semibold mb-4">Network Ports</h2>
             <div class="overflow-x-auto">
               <table class="table table-sm">
@@ -232,18 +294,60 @@
         <button @click="editMode = false">close</button>
       </form>
     </dialog>
+
+    <!-- Add Ports Modal -->
+    <dialog :class="['modal', showAddPortsModal && 'modal-open']">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Add Network Ports</h3>
+        <div class="space-y-4">
+          <div class="form-control">
+            <label class="label"><span class="label-text">Number of ports</span></label>
+            <input v-model.number="portCountToAdd" type="number" min="1" max="48" class="input input-bordered w-full" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Port name prefix</span></label>
+            <input v-model="portPrefix" type="text" placeholder="e.g., eth, ether, port" class="input input-bordered w-full" />
+            <label class="label"><span class="label-text-alt">Ports will be named: {{ portPrefix }}1, {{ portPrefix }}2, ...</span></label>
+          </div>
+        </div>
+        <div class="modal-action">
+          <button class="btn btn-ghost" @click="showAddPortsModal = false">Cancel</button>
+          <button class="btn btn-primary" @click="addPorts">Add Ports</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click="showAddPortsModal = false">close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
 <script setup lang="ts">
+interface ConnectedDevice {
+  id: string
+  name: string
+  ip: string | null
+  type: string
+  status: string
+}
+
 interface Port {
   id: string
   portName: string
+  portNumber: number
   status: string
   vlan: string | null
   speed: string | null
+  description: string | null
   macLearned: string[]
+  connectedDeviceId: string | null
+  connectedDevice: ConnectedDevice | null
 }
+
+interface PortWithStatus extends Port {
+  pingStatus?: 'online' | 'offline' | 'unknown'
+}
+
 
 interface Session {
   id: string
@@ -276,6 +380,201 @@ const deviceId = route.params.id as string
 
 // Fetch device
 const { data: device, pending, error, refresh } = await useFetch<Device>(`/api/devices/${deviceId}`)
+
+// PortGrid state
+const portsWithStatus = ref<PortWithStatus[]>([])
+const availableDevices = ref<{ id: string; name: string; ip: string | null; type: string }[]>([])
+const showAddPortsModal = ref(false)
+const portCountToAdd = ref(8)
+const portPrefix = ref('eth')
+
+// Connected to port (which switch/port this device is assigned to)
+const connectedToPort = ref<{
+  portId: string
+  portName: string
+  portNumber: number
+  device: {
+    id: string
+    name: string
+    type: string
+    ip: string | null
+  }
+} | null>(null)
+
+// Fetch connected to port
+async function fetchConnectedTo() {
+  try {
+    const response = await $fetch<{ connectedToPort: typeof connectedToPort.value }>(`/api/devices/${deviceId}/connected-to`)
+    connectedToPort.value = response.connectedToPort
+  } catch (e) {
+    console.error('Failed to fetch connected to port:', e)
+  }
+}
+
+// Check if device is a network device (switch/router/AP)
+const isNetworkDevice = computed(() => {
+  const networkTypes = ['SWITCH', 'ROUTER', 'ACCESS_POINT']
+  return device.value && networkTypes.includes(device.value.type)
+})
+
+// Fetch ports with ping status
+async function fetchPorts() {
+  if (!isNetworkDevice.value) return
+  
+  try {
+    const response = await $fetch<{ ports: PortWithStatus[] }>(`/api/devices/${deviceId}/ports`)
+    portsWithStatus.value = response.ports
+  } catch (e) {
+    console.error('Failed to fetch ports:', e)
+  }
+}
+
+// Fetch available devices for assignment
+async function fetchAvailableDevices() {
+  try {
+    const response = await $fetch<{ devices: { id: string; name: string; ip: string | null; type: string }[] }>('/api/devices')
+    availableDevices.value = response.devices.filter(d => d.id !== deviceId)
+  } catch (e) {
+    console.error('Failed to fetch devices:', e)
+  }
+}
+
+// Handle port assignment
+async function handleAssign(portId: string, connectedDeviceId: string) {
+  try {
+    await $fetch(`/api/ports/${portId}/assign`, {
+      method: 'POST',
+      body: { connectedDeviceId },
+    })
+    await fetchPorts()
+  } catch (e) {
+    alert('Failed to assign device to port')
+  }
+}
+
+// Handle port unassignment
+async function handleUnassign(portId: string) {
+  try {
+    await $fetch(`/api/ports/${portId}/assign`, {
+      method: 'POST',
+      body: { connectedDeviceId: null },
+    })
+    await fetchPorts()
+  } catch (e) {
+    alert('Failed to unassign device from port')
+  }
+}
+
+// Handle port deletion
+async function handleDeletePort(portId: string) {
+  try {
+    await $fetch(`/api/ports/${portId}`, {
+      method: 'DELETE',
+    })
+    await fetchPorts()
+    refresh()
+  } catch (e) {
+    alert('Failed to delete port')
+  }
+}
+
+// Add ports to device
+async function addPorts() {
+  try {
+    const ports = Array.from({ length: portCountToAdd.value }, (_, i) => ({
+      portName: `${portPrefix.value}${i + 1}`,
+      portNumber: i + 1,
+    }))
+    
+    await $fetch(`/api/devices/${deviceId}/ports`, {
+      method: 'POST',
+      body: { ports },
+    })
+    
+    showAddPortsModal.value = false
+    await fetchPorts()
+    refresh()
+  } catch (e) {
+    alert('Failed to add ports')
+  }
+}
+// SSE connection for real-time port status
+let eventSource: EventSource | null = null
+const sseConnected = ref(false)
+const lastUpdate = ref<string | null>(null)
+
+function connectSSE() {
+  if (!isNetworkDevice.value || eventSource) return
+  
+  console.log('[SSE] Connecting to port status stream...')
+  eventSource = new EventSource(`/api/devices/${deviceId}/ports/stream`)
+  
+  eventSource.addEventListener('portStatus', (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      lastUpdate.value = data.timestamp
+      sseConnected.value = true
+      
+      // Update ports with new status
+      if (data.ports && Array.isArray(data.ports)) {
+        // Merge SSE data with existing port data
+        portsWithStatus.value = portsWithStatus.value.map(port => {
+          const update = data.ports.find((p: any) => p.id === port.id)
+          if (update) {
+            return {
+              ...port,
+              pingStatus: update.pingStatus,
+            }
+          }
+          return port
+        })
+        
+        // If no ports yet, fetch full data
+        if (portsWithStatus.value.length === 0) {
+          fetchPorts()
+        }
+      }
+    } catch (e) {
+      console.error('[SSE] Error parsing port status:', e)
+    }
+  })
+  
+  eventSource.addEventListener('error', () => {
+    console.log('[SSE] Connection error, reconnecting in 5s...')
+    sseConnected.value = false
+    closeSSE()
+    setTimeout(connectSSE, 5000)
+  })
+  
+  eventSource.onopen = () => {
+    console.log('[SSE] Connected to port status stream')
+    sseConnected.value = true
+  }
+}
+
+function closeSSE() {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+    sseConnected.value = false
+  }
+}
+
+// Load initial data and connect SSE on mount
+onMounted(async () => {
+  // Fetch connected-to port for all devices
+  await fetchConnectedTo()
+  
+  if (isNetworkDevice.value) {
+    await Promise.all([fetchPorts(), fetchAvailableDevices()])
+    connectSSE()
+  }
+})
+
+// Clean up SSE connection on unmount
+onUnmounted(() => {
+  closeSSE()
+})
 
 // Edit mode
 const editMode = ref(false)

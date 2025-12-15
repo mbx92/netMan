@@ -3,8 +3,18 @@
     <!-- Page Header -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-3xl font-bold">Devices</h1>
-        <p class="text-base-content/60 mt-1">Manage all infrastructure devices</p>
+        <div class="flex items-center gap-3">
+          <h1 class="text-3xl font-bold">Devices</h1>
+          <!-- Real-time indicator -->
+          <span v-if="sseConnected" class="flex items-center gap-1 text-xs text-success">
+            <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+            Real-time
+          </span>
+        </div>
+        <p class="text-base-content/60 mt-1">
+          Manage all infrastructure devices
+          <span v-if="lastUpdate" class="text-xs ml-2">• Last update: {{ formatTimeAgo(lastUpdate) }}</span>
+        </p>
       </div>
       <button class="btn btn-primary" @click="showAddModal = true">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -66,19 +76,20 @@
               <th>Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <ClientOnly>
+            <tbody>
             <tr v-if="pending" class="h-32">
               <td colspan="8" class="text-center">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
               </td>
             </tr>
-            <tr v-else-if="!devices?.length" class="h-32">
+            <tr v-else-if="!devicesWithStatus?.length" class="h-32">
               <td colspan="8" class="text-center text-base-content/60">
                 No devices found
               </td>
             </tr>
             <tr 
-              v-for="device in devices" 
+              v-for="device in devicesWithStatus" 
               :key="device.id" 
               class="hover:bg-base-200/50 cursor-pointer"
               @click="navigateTo(`/devices/${device.id}`)"
@@ -122,6 +133,16 @@
               </td>
             </tr>
           </tbody>
+            <template #fallback>
+              <tbody>
+                <tr class="h-32">
+                  <td colspan="8" class="text-center">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                  </td>
+                </tr>
+              </tbody>
+            </template>
+          </ClientOnly>
         </table>
       </div>
       <div class="p-4 border-t border-base-200 text-sm text-base-content/60">
@@ -255,6 +276,85 @@ const { data: deviceData, pending, refresh: loadDevices } = await useFetch('/api
 
 const devices = computed(() => deviceData.value?.devices as Device[] || [])
 const totalDevices = computed(() => deviceData.value?.total || 0)
+
+// SSE connection for real-time status updates
+let eventSource: EventSource | null = null
+const sseConnected = ref(false)
+const lastUpdate = ref<string | null>(null)
+
+// Store for real-time status updates (device id -> status)
+const statusUpdates = ref<Map<string, { status: string; lastSeen: string | null }>>(new Map())
+
+// Computed devices with merged real-time status
+const devicesWithStatus = computed(() => {
+  return devices.value.map(device => {
+    const update = statusUpdates.value.get(device.id)
+    if (update) {
+      return {
+        ...device,
+        status: update.status,
+        lastSeen: update.lastSeen,
+      }
+    }
+    return device
+  })
+})
+
+function connectSSE() {
+  if (eventSource) return
+  
+  console.log('[SSE] Connecting to device status stream...')
+  eventSource = new EventSource('/api/devices/stream')
+  
+  eventSource.addEventListener('deviceStatus', (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      lastUpdate.value = data.timestamp
+      sseConnected.value = true
+      
+      // Update status map
+      if (data.devices && Array.isArray(data.devices)) {
+        const newMap = new Map(statusUpdates.value)
+        data.devices.forEach((d: { id: string; status: string; lastSeen: string | null }) => {
+          newMap.set(d.id, { status: d.status, lastSeen: d.lastSeen })
+        })
+        statusUpdates.value = newMap
+      }
+    } catch (e) {
+      console.error('[SSE] Error parsing device status:', e)
+    }
+  })
+  
+  eventSource.addEventListener('error', () => {
+    console.log('[SSE] Connection error, reconnecting in 5s...')
+    sseConnected.value = false
+    closeSSE()
+    setTimeout(connectSSE, 5000)
+  })
+  
+  eventSource.onopen = () => {
+    console.log('[SSE] Connected to device status stream')
+    sseConnected.value = true
+  }
+}
+
+function closeSSE() {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+    sseConnected.value = false
+  }
+}
+
+// Connect SSE on mount
+onMounted(() => {
+  connectSSE()
+})
+
+// Clean up SSE on unmount
+onUnmounted(() => {
+  closeSSE()
+})
 
 // Debounced search
 let searchTimeout: ReturnType<typeof setTimeout>

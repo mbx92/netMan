@@ -154,6 +154,7 @@ async function startConnection(peer: any, params: ConnectParams) {
     socket.on('data', (data: Buffer) => {
         // Forward VNC data to WebSocket as binary
         try {
+            console.log(`[VNC] Received ${data.length} bytes from VNC server, first bytes:`, data.slice(0, 20).toString('hex'))
             peer.send(data)
         } catch (e) {
             console.error('[VNC] Failed to send data to WebSocket:', e)
@@ -212,6 +213,7 @@ function handleBinaryData(peer: any, data: any) {
         } else {
             buffer = Buffer.from(data)
         }
+        console.log(`[VNC] Sending ${buffer.length} bytes to VNC server`)
         socket.write(buffer)
     }
 }

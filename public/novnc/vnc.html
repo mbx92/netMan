@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VNC Viewer</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a1a;
+    }
+
+    #vnc-container {
+      width: 100%;
+      height: 100%;
+    }
+
+    #status {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 4px 12px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #888;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    #error {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #dc2626;
+      color: white;
+      padding: 20px 40px;
+      border-radius: 8px;
+      display: none;
+      font-family: sans-serif;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="vnc-container"></div>
+  <div id="status">Loading noVNC...</div>
+  <div id="error"></div>
+
+  <script type="module">
+    import RFB from './core/rfb.js';
+
+    const statusEl = document.getElementById('status');
+    const errorEl = document.getElementById('error');
+    const container = document.getElementById('vnc-container');
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.style.display = 'block';
+      statusEl.textContent = 'Error: ' + msg;
+    }
+
+    function showStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    // Get connection params from URL
+    const params = new URLSearchParams(window.location.search);
+    const wsUrl = params.get('wsUrl');
+    const passwordB64 = params.get('passwordB64') || '';
+    const password = passwordB64 ? atob(passwordB64) : '';
+
+    console.log('[VNC] URL params:', { wsUrl: wsUrl ? 'present' : 'missing', passwordB64: passwordB64 ? 'present' : 'empty', hasPassword: !!password });
+
+    if (!wsUrl) {
+      showError('Missing wsUrl parameter');
+    } else {
+      try {
+        showStatus('Connecting to ' + wsUrl);
+        console.log('[VNC] Creating RFB with password:', password ? 'yes (length: ' + password.length + ')' : 'no');
+
+        // Pass credentials in initial options
+        const rfb = new RFB(container, wsUrl, {
+          credentials: { password: password },
+        });
+
+        rfb.addEventListener('connect', () => {
+          console.log('[VNC] Connected!');
+          showStatus('Connected');
+          // Notify parent window
+          if (window.parent !== window) {
+            window.parent.postMessage({ type: 'vnc-connected' }, '*');
+          }
+        });
+
+        rfb.addEventListener('disconnect', (e) => {
+          if (e.detail.clean) {
+            showStatus('Disconnected');
+          } else {
+            showError('Connection lost');
+          }
+          if (window.parent !== window) {
+            window.parent.postMessage({ type: 'vnc-disconnected', clean: e.detail.clean }, '*');
+          }
+        });
+
+        rfb.addEventListener('credentialsrequired', () => {
+          console.log('[VNC] Credentials required event fired, password available:', !!password);
+          showStatus('Credentials required');
+          if (password) {
+            console.log('[VNC] Sending credentials...');
+            rfb.sendCredentials({ password });
+          } else {
+            showError('VNC password required');
+            if (window.parent !== window) {
+              window.parent.postMessage({ type: 'vnc-error', message: 'Password required' }, '*');
+            }
+          }
+        });
+
+        rfb.addEventListener('securityfailure', (e) => {
+          console.log('[VNC] Security failure:', e.detail);
+          showError('Authentication failed: ' + (e.detail.reason || 'Invalid password'));
+          if (window.parent !== window) {
+            window.parent.postMessage({ type: 'vnc-error', message: 'Authentication failed' }, '*');
+          }
+        });
+
+        rfb.addEventListener('desktopname', (e) => {
+          showStatus('Desktop: ' + e.detail.name);
+          if (window.parent !== window) {
+            window.parent.postMessage({ type: 'vnc-desktopname', name: e.detail.name }, '*');
+          }
+        });
+
+        // Configure RFB
+        rfb.scaleViewport = true;
+        rfb.resizeSession = true;
+        rfb.clipViewport = false;
+        rfb.focusOnClick = true;
+
+        // Expose for parent window control
+        window.vncRfb = rfb;
+
+      } catch (e) {
+        showError('Failed to connect: ' + e.message);
+      }
+    }
+  </script>
+</body>
+
+</html>

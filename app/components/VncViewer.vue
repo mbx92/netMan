@@ -72,7 +72,7 @@
       <!-- VNC Header -->
       <div class="flex items-center justify-between px-4 py-2 bg-base-300 border-b border-base-200">
         <div class="flex items-center gap-2">
-          <div class="w-3 h-3 rounded-full bg-success animate-pulse"></div>
+          <div class="w-3 h-3 rounded-full" :class="vncConnected ? 'bg-success animate-pulse' : 'bg-warning'"></div>
           <span class="text-sm font-mono">{{ rfbState || `VNC: ${host}:${port}` }}</span>
         </div>
         <div class="flex items-center gap-2">
@@ -94,12 +94,17 @@
         </div>
       </div>
       
-      <!-- noVNC Canvas Container -->
-      <div ref="vncContainerRef" class="flex-1 bg-black overflow-hidden"></div>
+      <!-- noVNC iframe -->
+      <iframe 
+        ref="vncIframeRef"
+        :src="iframeSrc"
+        class="flex-1 w-full border-0"
+        allow="clipboard-read; clipboard-write"
+      ></iframe>
 
       <!-- Status Bar -->
       <div class="px-4 py-1 bg-base-300 border-t border-base-200 text-xs text-base-content/60 flex justify-between">
-        <span>{{ vncStatus || 'Connected' }}</span>
+        <span>{{ vncStatus || 'Connecting...' }}</span>
         <span v-if="rfbState">{{ rfbState }}</span>
       </div>
     </div>
@@ -107,10 +112,6 @@
 </template>
 
 <script setup lang="ts">
-// Use novnc-core package (CommonJS version for Node/bundler compatibility)
-// @ts-ignore - no types available
-import RFB from 'novnc-core'
-
 const props = defineProps<{
   deviceId: string
   deviceName?: string
@@ -125,156 +126,117 @@ const emit = defineEmits<{
 
 // Connection state
 const connected = ref(false)
+const vncConnected = ref(false)
 const connecting = ref(false)
 const error = ref('')
 const vncStatus = ref('')
 const rfbState = ref('')
+const iframeSrc = ref('')
 
 // Form data
 const host = ref(props.deviceIp || '')
 const port = ref(5900)
 const password = ref('')
 
-// VNC refs
-const vncContainerRef = ref<HTMLElement | null>(null)
-let rfb: any = null
+// Refs
+const vncIframeRef = ref<HTMLIFrameElement | null>(null)
 
 // Update host when deviceIp changes
 watch(() => props.deviceIp, (newIp) => {
   if (newIp) host.value = newIp
 })
 
-async function connect() {
+// Listen for messages from iframe
+onMounted(() => {
+  window.addEventListener('message', handleIframeMessage)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('message', handleIframeMessage)
+  disconnect()
+})
+
+function handleIframeMessage(event: MessageEvent) {
+  if (!event.data || typeof event.data !== 'object') return
+  
+  switch (event.data.type) {
+    case 'vnc-connected':
+      vncConnected.value = true
+      vncStatus.value = 'Connected'
+      emit('connected')
+      break
+    case 'vnc-disconnected':
+      if (!event.data.clean) {
+        error.value = 'Connection lost unexpectedly'
+      }
+      handleDisconnected()
+      break
+    case 'vnc-error':
+      error.value = event.data.message
+      emit('error', event.data.message)
+      break
+    case 'vnc-desktopname':
+      rfbState.value = event.data.name
+      break
+  }
+}
+
+function connect() {
   if (connecting.value || connected.value) return
   if (!host.value) return
 
   connecting.value = true
   error.value = ''
-  vncStatus.value = 'Initializing...'
+  vncStatus.value = 'Loading...'
 
-  try {
-    // Switch to connected view FIRST to render the container
-    connected.value = true
-    connecting.value = false
-    vncStatus.value = 'Connecting...'
-    
-    // Wait for Vue to render the container
-    await nextTick()
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    if (!vncContainerRef.value) {
-      throw new Error('VNC container failed to initialize')
-    }
+  // Build WebSocket URL to our proxy
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${protocol}//${window.location.host}/api/remote/vnc?host=${encodeURIComponent(host.value)}&port=${port.value}&deviceId=${props.deviceId}`
 
-    // Build WebSocket URL to our proxy
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/api/remote/vnc?host=${encodeURIComponent(host.value)}&port=${port.value}&deviceId=${props.deviceId}`
-
-    // Create RFB instance
-    rfb = new RFB(vncContainerRef.value, wsUrl, {
-      credentials: password.value ? { password: password.value } : undefined,
-    })
-
-    // Event handlers
-    rfb.addEventListener('connect', () => {
-      console.log('[VNC] noVNC connected')
-      vncStatus.value = 'Connected'
-      rfbState.value = 'Ready'
-      emit('connected')
-    })
-
-    rfb.addEventListener('disconnect', (e: any) => {
-      console.log('[VNC] noVNC disconnected', e.detail)
-      if (e.detail.clean) {
-        vncStatus.value = 'Disconnected'
-      } else {
-        error.value = 'Connection lost unexpectedly'
-      }
-      handleDisconnected()
-    })
-
-    rfb.addEventListener('credentialsrequired', () => {
-      console.log('[VNC] Credentials required')
-      vncStatus.value = 'Authenticating...'
-      if (password.value) {
-        rfb.sendCredentials({ password: password.value })
-      } else {
-        error.value = 'VNC password required'
-        handleDisconnected()
-      }
-    })
-
-    rfb.addEventListener('securityfailure', (e: any) => {
-      console.error('[VNC] Security failure:', e.detail)
-      error.value = `Authentication failed: ${e.detail.reason || 'Invalid password'}`
-      handleDisconnected()
-    })
-
-    rfb.addEventListener('desktopname', (e: any) => {
-      console.log('[VNC] Desktop name:', e.detail.name)
-      rfbState.value = e.detail.name
-    })
-
-    // Configure RFB
-    rfb.scaleViewport = true
-    rfb.resizeSession = true
-    rfb.clipViewport = false
-    rfb.dragViewport = false
-    rfb.focusOnClick = true
-
-  } catch (e: any) {
-    console.error('[VNC] Connection error:', e)
-    error.value = e.message || 'Failed to connect'
-    connecting.value = false
-    connected.value = false
-    emit('error', e.message)
-  }
+  // Build iframe URL - use base64 for password to avoid URL encoding issues
+  const passwordB64 = password.value ? btoa(password.value) : ''
+  const iframeParams = new URLSearchParams({
+    wsUrl,
+    passwordB64,
+  })
+  iframeSrc.value = `/novnc/vnc.html?${iframeParams.toString()}`
+  
+  connected.value = true
+  connecting.value = false
+  vncStatus.value = 'Connecting...'
 }
 
 function handleDisconnected() {
   connected.value = false
+  vncConnected.value = false
   connecting.value = false
   rfbState.value = ''
+  iframeSrc.value = ''
   emit('disconnected')
-  cleanup()
 }
 
 function disconnect() {
-  if (rfb) {
+  // Try to disconnect via iframe
+  if (vncIframeRef.value?.contentWindow) {
     try {
-      rfb.disconnect()
+      const rfb = (vncIframeRef.value.contentWindow as any).vncRfb
+      if (rfb) {
+        rfb.disconnect()
+      }
     } catch (e) {
-      console.error('[VNC] Error disconnecting:', e)
+      // Ignore - might be cross-origin
     }
   }
   handleDisconnected()
 }
 
 function toggleFullscreen() {
-  if (!vncContainerRef.value) return
+  if (!vncIframeRef.value) return
 
   if (!document.fullscreenElement) {
-    vncContainerRef.value.requestFullscreen()
+    vncIframeRef.value.requestFullscreen()
   } else {
     document.exitFullscreen()
   }
 }
-
-function cleanup() {
-  rfb = null
-}
-
-onUnmounted(() => {
-  disconnect()
-  cleanup()
-})
 </script>
-
-<style>
-/* noVNC canvas styling - make it fill the container */
-:deep(canvas) {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain;
-}
-</style>

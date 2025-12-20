@@ -13,17 +13,23 @@
     "@prisma/client": "^5.22.0",
     "@tailwindcss/vite": "^4.1.18",
     "@types/d3": "^7.4.3",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
     "d3": "^7.9.0",
     "daisyui": "^5.5.13",
     "node-routeros": "^1.6.8",
+    "novnc-core": "^0.3.0",
     "nuxt": "^4.2.2",
     "prisma": "^5.22.0",
+    "ssh2": "^1.17.0",
     "tailwindcss": "^4.1.18",
     "vue": "^3.5.25",
     "vue-router": "^4.6.3"
   },
   "devDependencies": {
     "@types/node": "^25.0.2",
+    "@types/ssh2": "^1.15.5",
     "tsx": "^4.21.0"
   },
   "prisma": {

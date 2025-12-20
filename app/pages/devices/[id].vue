@@ -31,6 +31,24 @@
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
+          <!-- SSH Button (for Linux servers) -->
+          <button 
+            v-if="canSSH && device.ip" 
+            class="btn btn-success"
+            @click="showSshModal = true"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            SSH
+          </button>
+          <!-- VNC Button (for Windows PCs) -->
+          <button 
+            v-if="canVNC && device.ip" 
+            class="btn btn-info"
+            @click="showVncModal = true"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            VNC
+          </button>
           <button 
             v-if="device.wakeable && device.mac" 
             class="btn btn-warning"
@@ -402,6 +420,62 @@
         <button @click="showFeedbackModal = false">close</button>
       </form>
     </dialog>
+
+    <!-- SSH Terminal Modal -->
+    <dialog :class="['modal', showSshModal && 'modal-open']">
+      <div class="modal-box max-w-4xl h-[80vh] p-0 flex flex-col">
+        <div class="flex items-center justify-between p-4 border-b border-base-200">
+          <h3 class="font-bold text-lg">SSH Terminal - {{ device?.name }}</h3>
+          <button class="btn btn-sm btn-circle btn-ghost" @click="closeSshModal">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-hidden">
+          <ClientOnly>
+            <SshTerminal
+              v-if="showSshModal && device"
+              :device-id="device.id"
+              :device-name="device.name"
+              :device-ip="device.ip || undefined"
+              @connected="onRemoteConnected('SSH')"
+              @disconnected="onRemoteDisconnected('SSH')"
+              @error="onRemoteError"
+            />
+          </ClientOnly>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click="closeSshModal">close</button>
+      </form>
+    </dialog>
+
+    <!-- VNC Viewer Modal -->
+    <dialog :class="['modal', showVncModal && 'modal-open']">
+      <div class="modal-box max-w-6xl h-[85vh] p-0 flex flex-col">
+        <div class="flex items-center justify-between p-4 border-b border-base-200">
+          <h3 class="font-bold text-lg">VNC Remote Desktop - {{ device?.name }}</h3>
+          <button class="btn btn-sm btn-circle btn-ghost" @click="closeVncModal">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-hidden">
+          <ClientOnly>
+            <VncViewer
+              v-if="showVncModal && device"
+              :device-id="device.id"
+              :device-name="device.name"
+              :device-ip="device.ip || undefined"
+              @connected="onRemoteConnected('VNC')"
+              @disconnected="onRemoteDisconnected('VNC')"
+              @error="onRemoteError"
+            />
+          </ClientOnly>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click="closeVncModal">close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -539,6 +613,44 @@ const isNetworkDevice = computed(() => {
   const networkTypes = ['SWITCH', 'SWITCH_MANAGED', 'SWITCH_UNMANAGED', 'ROUTER', 'ACCESS_POINT']
   return device.value && device.value.typeCode && networkTypes.includes(device.value.typeCode)
 })
+
+// Check if device supports SSH (Linux servers/PCs)
+const canSSH = computed(() => {
+  if (!device.value?.typeCode) return false
+  const sshTypes = ['SERVER_LINUX', 'PC_LINUX', 'ROUTER']
+  return sshTypes.some(t => device.value!.typeCode.includes(t))
+})
+
+// Check if device supports VNC (Windows PCs/servers)
+const canVNC = computed(() => {
+  if (!device.value?.typeCode) return false
+  const vncTypes = ['PC_WINDOWS', 'SERVER_WINDOWS']
+  return vncTypes.some(t => device.value!.typeCode.includes(t))
+})
+
+// Remote access modal state
+const showSshModal = ref(false)
+const showVncModal = ref(false)
+
+function closeSshModal() {
+  showSshModal.value = false
+}
+
+function closeVncModal() {
+  showVncModal.value = false
+}
+
+function onRemoteConnected(protocol: string) {
+  console.log(`[Remote] ${protocol} connected to ${device.value?.name}`)
+}
+
+function onRemoteDisconnected(protocol: string) {
+  console.log(`[Remote] ${protocol} disconnected from ${device.value?.name}`)
+}
+
+function onRemoteError(message: string) {
+  showFeedback('error', 'Connection Error', message)
+}
 
 // Fetch ports with ping status
 async function fetchPorts() {

@@ -1,17 +1,19 @@
-import prisma from '~/server/utils/prisma'
-import type { DeviceType, DeviceStatus } from '~/generated/prisma'
+import prisma from '../../utils/prisma'
 
 interface CreateDeviceBody {
     name: string
-    type: DeviceType
+    typeCode: string  // Changed from type enum to typeCode string
     ip?: string
     mac?: string
     hostname?: string
+    floor?: string
     location?: string
-    status?: DeviceStatus
+    siteId?: string
+    status?: string
     owner?: string
     notes?: string
     wakeable?: boolean
+    isManaged?: boolean
 }
 
 // POST /api/devices - Create a new device
@@ -19,10 +21,21 @@ export default defineEventHandler(async (event) => {
     const body = await readBody<CreateDeviceBody>(event)
 
     // Validate required fields
-    if (!body.name || !body.type) {
+    if (!body.name || !body.typeCode) {
         throw createError({
             statusCode: 400,
             statusMessage: 'Name and type are required',
+        })
+    }
+
+    // Validate type code exists
+    const deviceType = await prisma.deviceType.findUnique({
+        where: { code: body.typeCode }
+    })
+    if (!deviceType) {
+        throw createError({
+            statusCode: 400,
+            statusMessage: `Invalid device type: ${body.typeCode}`,
         })
     }
 
@@ -42,15 +55,21 @@ export default defineEventHandler(async (event) => {
     const device = await prisma.device.create({
         data: {
             name: body.name,
-            type: body.type,
+            typeCode: body.typeCode,
             ip: body.ip,
             mac: body.mac?.toLowerCase().replace(/[:-]/g, ''),
             hostname: body.hostname,
+            floor: body.floor,
             location: body.location,
-            status: body.status || 'UNKNOWN',
+            siteId: body.siteId || null,
+            status: (body.status as 'ONLINE' | 'OFFLINE' | 'UNKNOWN' | 'MAINTENANCE') || 'UNKNOWN',
             owner: body.owner,
             notes: body.notes,
             wakeable: body.wakeable || false,
+            isManaged: body.isManaged ?? true,
+        },
+        include: {
+            deviceType: true,
         },
     })
 
@@ -60,7 +79,7 @@ export default defineEventHandler(async (event) => {
             actor: 'system', // TODO: Replace with actual user
             action: 'CREATE_DEVICE',
             target: device.id,
-            details: { name: device.name, type: device.type },
+            details: { name: device.name, typeCode: device.typeCode },
             result: 'success',
         },
     })

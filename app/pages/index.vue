@@ -147,7 +147,7 @@
             <tr v-for="device in stats.recentOffline" :key="device.id" class="border-base-200 hover:bg-base-200/50">
               <td class="font-medium">{{ device.name }}</td>
               <td>
-                <span class="badge badge-sm">{{ getTypeLabel(device.type) }}</span>
+                <span class="badge badge-sm">{{ getTypeLabel(device.typeCode) }}</span>
               </td>
               <td class="font-mono text-sm">{{ device.ip || '-' }}</td>
               <td class="text-sm text-base-content/60">{{ formatTimeAgo(device.lastSeen) }}</td>

@@ -1,5 +1,4 @@
-import prisma from '~/server/utils/prisma'
-import type { DeviceType, DeviceStatus } from '~/generated/prisma'
+import prisma from '../../utils/prisma'
 
 // GET /api/devices - List all devices with optional filters
 export default defineEventHandler(async (event) => {
@@ -7,14 +6,14 @@ export default defineEventHandler(async (event) => {
 
     const where: Record<string, unknown> = {}
 
-    // Filter by type
+    // Filter by type code
     if (query.type && typeof query.type === 'string') {
-        where.type = query.type as DeviceType
+        where.typeCode = query.type
     }
 
     // Filter by status
     if (query.status && typeof query.status === 'string') {
-        where.status = query.status as DeviceStatus
+        where.status = query.status
     }
 
     // Filter by location
@@ -38,6 +37,8 @@ export default defineEventHandler(async (event) => {
             { name: 'asc' },
         ],
         include: {
+            deviceType: true,
+            site: { select: { id: true, name: true } },
             _count: {
                 select: { ports: true, sessions: true }
             }

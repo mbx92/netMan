@@ -11,46 +11,94 @@ datasource db {
 }
 
 // ============================================
+// SITE / BUILDING MANAGEMENT
+// ============================================
+
+model Site {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  location    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  devices         Device[]
+  mikrotikDevices MikrotikDevice[]
+  ipRanges        IPRange[]
+}
+
+// ============================================
 // DEVICE MANAGEMENT
 // ============================================
+
+// Device Type Master Data
+model DeviceType {
+  id              String    @id @default(uuid())
+  code            String    @unique  // e.g., "SWITCH_MANAGED"
+  name            String              // e.g., "Managed Switch"
+  icon            String?             // Icon name for UI
+  color           String?             // Color hex for UI
+  isNetworkDevice Boolean   @default(false)  // Shows port management
+  canHavePorts    Boolean   @default(false)  // Can add ports
+  topologyTier    Int       @default(2)      // 0=router, 1=switch/AP, 2=end device
+  sortOrder       Int       @default(0)      // Display order in dropdowns
+  isActive        Boolean   @default(true)   // Soft delete
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  devices         Device[]
+}
 
 model Device {
   id        String       @id @default(uuid())
   name      String
-  type      DeviceType
+  typeCode  String       // References DeviceType.code (e.g., "SWITCH_MANAGED")
   ip        String?
   mac       String?      @unique
   hostname  String?
+  floor     String?      // Floor number/name
   location  String?
   status    DeviceStatus @default(UNKNOWN)
   lastSeen  DateTime?
   owner     String?
   notes     String?
   wakeable  Boolean      @default(false)
-  portCount Int? // Number of physical ports (for switches/routers)
+  isManaged Boolean      @default(true)  // For unmanaged switches (no ping)
+  portCount Int?         // Number of physical ports (for switches/routers)
+  
+  // MikroTik/Router API credentials (only for ROUTER type)
+  apiPort     Int?       // e.g., 8728
+  apiUser     String?
+  apiPass     String?    // Should be encrypted in production
+  apiVersion  String?    // "v6" or "v7"
+  isApiActive Boolean    @default(false)
+  lastApiSync DateTime?
+  
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
+
+  // Site relation
+  siteId    String?
+  site      Site?        @relation(fields: [siteId], references: [id])
+  
+  // Device type relation
+  deviceType DeviceType? @relation(fields: [typeCode], references: [code])
+
+  // Parent device relation (for VMs linked to hypervisor host)
+  parentDeviceId String?
+  parentDevice   Device?   @relation("DeviceHierarchy", fields: [parentDeviceId], references: [id], onDelete: SetNull)
+  childDevices   Device[]  @relation("DeviceHierarchy")
 
   ports          NetworkPort[]   @relation("DevicePorts") // Ports ON this device
   connectedPorts NetworkPort[]   @relation("PortConnections") // Ports this device is connected TO
   sessions       RemoteSession[]
 
-  @@index([type])
+  @@index([typeCode])
   @@index([status])
+  @@index([floor])
   @@index([location])
-}
-
-enum DeviceType {
-  SMART_TV
-  PC_WINDOWS
-  PC_LINUX
-  SERVER_LINUX
-  PRINTER
-  VM
-  ROUTER
-  SWITCH
-  ACCESS_POINT
-  OTHER
+  @@index([siteId])
+  @@index([parentDeviceId])
 }
 
 enum DeviceStatus {
@@ -150,7 +198,12 @@ model IPRange {
   updatedAt   DateTime       @updatedAt
   allocations IPAllocation[]
 
-  @@unique([network])
+  // Site relation
+  siteId      String?
+  site        Site?          @relation(fields: [siteId], references: [id])
+
+  @@unique([siteId, network])
+  @@index([siteId])
 }
 
 model IPAllocation {
@@ -173,20 +226,26 @@ enum AllocationType {
 }
 
 // ============================================
-// MIKROTIK CREDENTIALS (ENCRYPTED)
+// MIKROTIK CREDENTIALS
 // ============================================
 
 model MikrotikDevice {
-  id        String    @id @default(uuid())
-  name      String
-  host      String
-  port      Int       @default(8728)
-  username  String
-  password  String // Should be encrypted in production
-  isActive  Boolean   @default(true)
-  lastSync  DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         String    @id @default(uuid())
+  name       String
+  host       String
+  port       Int       @default(8728)
+  username   String
+  password   String    // Should be encrypted in production
+  apiVersion String    @default("v6") // "v6" (API protocol) or "v7" (REST API)
+  isActive   Boolean   @default(true)
+  lastSync   DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Site relation
+  siteId     String?
+  site       Site?     @relation(fields: [siteId], references: [id])
 
   @@unique([host, port])
+  @@index([siteId])
 }

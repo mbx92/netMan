@@ -1,5 +1,4 @@
 import prisma from '../../utils/prisma'
-import type { DeviceType } from '@prisma/client'
 
 interface ImportDeviceRequest {
     ip: string
@@ -58,8 +57,8 @@ export default defineEventHandler(async (event) => {
                 }
             }
 
-            // Map device type string to enum
-            const typeMap: Record<string, DeviceType> = {
+            // Map device type string to typeCode
+            const typeCodeMap: Record<string, string> = {
                 ROUTER: 'ROUTER',
                 SWITCH: 'SWITCH',
                 ACCESS_POINT: 'ACCESS_POINT',
@@ -72,20 +71,20 @@ export default defineEventHandler(async (event) => {
                 OTHER: 'OTHER',
             }
 
-            const deviceType = typeMap[device.deviceType] || 'OTHER'
+            const typeCode = typeCodeMap[device.deviceType] || 'OTHER'
 
             // Create the device
             const createdDevice = await prisma.device.create({
                 data: {
                     name: device.name || device.hostname || `Device-${device.ip}`,
-                    type: deviceType,
+                    typeCode: typeCode,
                     ip: device.ip,
                     mac: device.mac?.toLowerCase().replace(/[:-]/g, ''),
                     hostname: device.hostname,
                     location: device.location,
                     status: 'ONLINE',
                     lastSeen: new Date(),
-                    wakeable: deviceType === 'PC_WINDOWS',
+                    wakeable: typeCode === 'PC_WINDOWS',
                 },
             })
 
@@ -98,7 +97,7 @@ export default defineEventHandler(async (event) => {
                     details: {
                         name: createdDevice.name,
                         ip: createdDevice.ip,
-                        type: createdDevice.type,
+                        typeCode: createdDevice.typeCode,
                         source: 'discovery',
                     },
                     result: 'success',

@@ -831,36 +831,53 @@ export async function enrichWithMikroTikData(
     devices: DiscoveredDevice[]
 ): Promise<DiscoveredDevice[]> {
     try {
-        // Dynamically import MikroTik client to avoid circular dependencies
-        const { getMikroTikClient } = await import('./mikrotik')
-        const client = getMikroTikClient()
+        // Dynamically import to avoid circular dependencies
+        const { getAllMikroTikClients } = await import('./mikrotik')
+        const clients = await getAllMikroTikClients()
 
-        if (!client) {
-            console.log('[Discovery] MikroTik client not configured, skipping enrichment')
+        if (clients.length === 0) {
+            console.log('[Discovery] No MikroTik clients configured, skipping enrichment')
             return devices
         }
 
-        console.log('[Discovery] Fetching MikroTik ARP/DHCP data for enrichment...')
-        const routerDevices = await client.getNetworkDevices()
+        console.log(`[Discovery] Fetching MikroTik ARP/DHCP data from ${clients.length} router(s)...`)
 
-        // Get MikroTik router identity (for the router itself)
-        const routerHost = process.env.MIKROTIK_HOST
-        const routerIdentity = await client.getIdentity()
+        // Collect data from all routers
+        const allRouterDevices: { ip: string; mac: string; hostname?: string }[] = []
 
-        // Create IP -> router data map
-        const routerDataMap = new Map(
-            routerDevices.map(d => [d.ip, d])
-        )
+        for (const { client, config } of clients) {
+            try {
+                console.log(`[Discovery] Fetching ARP/DHCP from router: ${config.name || config.host}`)
+
+                // Add timeout to prevent hanging
+                const timeoutMs = 15000 // 15 seconds
+                const routerDevices = await Promise.race([
+                    client.getNetworkDevices(),
+                    new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs)
+                    )
+                ])
+
+                console.log(`[Discovery] Got ${routerDevices.length} devices from ${config.name || config.host}`)
+                allRouterDevices.push(...routerDevices)
+            } catch (err) {
+                console.error(`[Discovery] Failed to fetch from ${config.name || config.host}:`, err instanceof Error ? err.message : err)
+            }
+        }
+
+        console.log(`[Discovery] Total devices from all routers: ${allRouterDevices.length}`)
+
+        // Create IP -> router data map (use first match if multiple)
+        const routerDataMap = new Map<string, { mac: string; hostname?: string }>()
+        for (const d of allRouterDevices) {
+            if (!routerDataMap.has(d.ip)) {
+                routerDataMap.set(d.ip, { mac: d.mac, hostname: d.hostname })
+            }
+        }
 
         // Enrich each discovered device
         const enriched = devices.map(device => {
             const routerData = routerDataMap.get(device.ip)
-
-            // If this is the MikroTik router itself, use identity as hostname
-            if (device.ip === routerHost && routerIdentity && !device.hostname) {
-                device.hostname = routerIdentity
-                console.log('[Discovery] Using MikroTik identity for router:', routerIdentity)
-            }
 
             if (routerData) {
                 // Use router data for MAC if not available locally

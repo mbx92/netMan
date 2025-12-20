@@ -1,4 +1,4 @@
-import prisma from '~/server/utils/prisma'
+import prisma from '../../utils/prisma'
 
 // GET /api/audit - Get audit logs with filtering
 export default defineEventHandler(async (event) => {

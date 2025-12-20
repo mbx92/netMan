@@ -36,16 +36,7 @@
         </div>
         <select v-model="filters.type" class="select select-bordered" @change="loadDevices">
           <option value="">All Types</option>
-          <option value="SMART_TV">Smart TV</option>
-          <option value="PC_WINDOWS">Windows PC</option>
-          <option value="PC_LINUX">Linux PC</option>
-          <option value="SERVER_LINUX">Linux Server</option>
-          <option value="PRINTER">Printer</option>
-          <option value="VM">Virtual Machine</option>
-          <option value="ROUTER">Router</option>
-          <option value="SWITCH">Switch</option>
-          <option value="ACCESS_POINT">Access Point</option>
-          <option value="OTHER">Other</option>
+          <option v-for="dt in deviceTypes" :key="dt.code" :value="dt.code">{{ dt.name }}</option>
         </select>
         <select v-model="filters.status" class="select select-bordered" @change="loadDevices">
           <option value="">All Status</option>
@@ -71,6 +62,7 @@
               <th>Type</th>
               <th>IP Address</th>
               <th>MAC</th>
+              <th>Site</th>
               <th>Location</th>
               <th>Last Seen</th>
               <th>Actions</th>
@@ -79,12 +71,12 @@
           <ClientOnly>
             <tbody>
             <tr v-if="pending" class="h-32">
-              <td colspan="8" class="text-center">
+              <td colspan="9" class="text-center">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
               </td>
             </tr>
             <tr v-else-if="!devicesWithStatus?.length" class="h-32">
-              <td colspan="8" class="text-center text-base-content/60">
+              <td colspan="9" class="text-center text-base-content/60">
                 No devices found
               </td>
             </tr>
@@ -107,10 +99,14 @@
                 <div v-if="device.hostname" class="text-xs text-base-content/60">{{ device.hostname }}</div>
               </td>
               <td>
-                <span class="badge badge-ghost">{{ getTypeLabel(device.type) }}</span>
+                <span class="badge badge-ghost">{{ getTypeLabel(device.typeCode) }}</span>
               </td>
               <td class="font-mono text-sm">{{ device.ip || '-' }}</td>
               <td class="font-mono text-xs">{{ formatMac(device.mac) }}</td>
+              <td>
+                <span v-if="device.site" class="badge badge-outline badge-sm">{{ device.site.name }}</span>
+                <span v-else class="text-base-content/40">-</span>
+              </td>
               <td>{{ device.location || '-' }}</td>
               <td class="text-sm text-base-content/60">{{ formatTimeAgo(device.lastSeen) }}</td>
               <td>
@@ -136,7 +132,7 @@
             <template #fallback>
               <tbody>
                 <tr class="h-32">
-                  <td colspan="8" class="text-center">
+                  <td colspan="9" class="text-center">
                     <span class="loading loading-spinner loading-lg text-primary"></span>
                   </td>
                 </tr>
@@ -162,37 +158,60 @@
             </div>
             <div class="form-control">
               <label class="label"><span class="label-text">Type *</span></label>
-              <select v-model="newDevice.type" class="select select-bordered w-full" required>
-                <option value="PC_WINDOWS">Windows PC</option>
-                <option value="PC_LINUX">Linux PC</option>
-                <option value="SERVER_LINUX">Linux Server</option>
-                <option value="SMART_TV">Smart TV</option>
-                <option value="PRINTER">Printer</option>
-                <option value="VM">Virtual Machine</option>
-                <option value="ROUTER">Router</option>
-                <option value="SWITCH">Switch</option>
-                <option value="ACCESS_POINT">Access Point</option>
-                <option value="OTHER">Other</option>
+              <select v-model="newDevice.typeCode" class="select select-bordered w-full" required>
+                <option v-for="dt in deviceTypes" :key="dt.code" :value="dt.code">{{ dt.name }}</option>
+              </select>
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text">IP Address</span></label>
+              <div class="flex gap-2">
+                <input v-model="newDevice.ip" type="text" class="input input-bordered flex-1" placeholder="192.168.1.100" />
+                <button 
+                  type="button" 
+                  class="btn btn-outline btn-primary"
+                  :disabled="!newDevice.ip || lookingUpMac"
+                  @click="lookupMac"
+                >
+                  <span v-if="lookingUpMac" class="loading loading-spinner loading-sm"></span>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  Lookup MAC
+                </button>
+              </div>
+              <label v-if="macLookupMessage" class="label">
+                <span :class="['label-text-alt', macLookupSuccess ? 'text-success' : 'text-warning']">{{ macLookupMessage }}</span>
+              </label>
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text">MAC Address</span></label>
+              <input v-model="newDevice.mac" type="text" class="input input-bordered w-full" placeholder="AA:BB:CC:DD:EE:FF" />            
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text">Site</span></label>
+              <select v-model="newDevice.siteId" class="select select-bordered w-full">
+                <option value="">No Site</option>
+                <option v-for="site in sites" :key="site.id" :value="site.id">{{ site.name }}</option>
               </select>
             </div>
             <div class="grid grid-cols-2 gap-4">
               <div class="form-control">
-                <label class="label"><span class="label-text">IP Address</span></label>
-                <input v-model="newDevice.ip" type="text" class="input input-bordered w-full" placeholder="192.168.1.100" />
+                <label class="label"><span class="label-text">Floor</span></label>
+                <input v-model="newDevice.floor" type="text" class="input input-bordered w-full" placeholder="e.g., 1, GF, B1" />
               </div>
               <div class="form-control">
-                <label class="label"><span class="label-text">MAC Address</span></label>
-                <input v-model="newDevice.mac" type="text" class="input input-bordered w-full" placeholder="AA:BB:CC:DD:EE:FF" />
+                <label class="label"><span class="label-text">Location</span></label>
+                <input v-model="newDevice.location" type="text" class="input input-bordered w-full" placeholder="e.g., Server Room" />
               </div>
-            </div>
-            <div class="form-control">
-              <label class="label"><span class="label-text">Location</span></label>
-              <input v-model="newDevice.location" type="text" class="input input-bordered w-full" placeholder="e.g., Server Room, Floor 2" />
             </div>
             <div class="form-control">
               <label class="cursor-pointer label justify-start gap-3">
                 <input v-model="newDevice.wakeable" type="checkbox" class="checkbox checkbox-primary" />
                 <span class="label-text">Supports Wake-on-LAN</span>
+              </label>
+            </div>
+            <div v-if="newDevice.typeCode?.includes('SWITCH')" class="form-control">
+              <label class="cursor-pointer label justify-start gap-3">
+                <input v-model="newDevice.isManaged" type="checkbox" class="checkbox checkbox-info" />
+                <span class="label-text">Managed (supports SNMP/ping)</span>
               </label>
             </div>
             <div class="form-control">
@@ -234,6 +253,29 @@
         <button @click="showDeleteModal = false">close</button>
       </form>
     </dialog>
+
+    <!-- Feedback Modal -->
+    <dialog :class="['modal', showFeedbackModal && 'modal-open']">
+      <div class="modal-box glass-modal">
+        <div class="flex items-start gap-3">
+          <div :class="['w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
+            <svg v-if="feedbackType === 'success'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <svg v-else-if="feedbackType === 'error'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <div>
+            <h3 class="font-bold text-lg">{{ feedbackTitle }}</h3>
+            <p class="py-2 text-base-content/80">{{ feedbackMessage }}</p>
+          </div>
+        </div>
+        <div class="modal-action">
+          <button class="btn btn-primary" @click="showFeedbackModal = false">OK</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click="showFeedbackModal = false">close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -241,7 +283,7 @@
 interface Device {
   id: string
   name: string
-  type: string
+  typeCode: string
   ip: string | null
   mac: string | null
   hostname: string | null
@@ -249,6 +291,8 @@ interface Device {
   status: string
   lastSeen: string | null
   wakeable: boolean
+  siteId: string | null
+  site: { id: string; name: string } | null
 }
 
 // Filters state
@@ -275,7 +319,17 @@ const { data: deviceData, pending, refresh: loadDevices } = await useFetch('/api
 })
 
 const devices = computed(() => deviceData.value?.devices as Device[] || [])
+
+// Fetch sites for dropdown
+interface Site { id: string; name: string }
+const { data: sitesData } = await useFetch('/api/sites')
+const sites = computed(() => sitesData.value?.sites as Site[] || [])
 const totalDevices = computed(() => deviceData.value?.total || 0)
+
+// Fetch device types for dropdowns
+interface DeviceType { id: string; code: string; name: string; isNetworkDevice: boolean; canHavePorts: boolean }
+const { data: deviceTypesData } = await useFetch<DeviceType[]>('/api/device-types')
+const deviceTypes = computed(() => deviceTypesData.value || [])
 
 // SSE connection for real-time status updates
 let eventSource: EventSource | null = null
@@ -373,15 +427,71 @@ function clearFilters() {
 // Add device modal
 const showAddModal = ref(false)
 const addingDevice = ref(false)
+const lookingUpMac = ref(false)
+const macLookupMessage = ref('')
+const macLookupSuccess = ref(false)
 const newDevice = reactive({
   name: '',
-  type: 'PC_WINDOWS',
+  typeCode: 'PC_WINDOWS',
   ip: '',
   mac: '',
+  siteId: '',
+  floor: '',
   location: '',
   wakeable: false,
+  isManaged: true,
   notes: '',
 })
+
+// Feedback modal (replaces browser alerts)
+const showFeedbackModal = ref(false)
+const feedbackType = ref<'success' | 'error' | 'warning'>('success')
+const feedbackTitle = ref('')
+const feedbackMessage = ref('')
+
+function showFeedback(type: 'success' | 'error' | 'warning', title: string, message: string) {
+  feedbackType.value = type
+  feedbackTitle.value = title
+  feedbackMessage.value = message
+  showFeedbackModal.value = true
+}
+
+// MAC address lookup
+async function lookupMac() {
+  if (!newDevice.ip) return
+  
+  lookingUpMac.value = true
+  macLookupMessage.value = ''
+  macLookupSuccess.value = false
+  
+  try {
+    const result = await $fetch<{
+      success: boolean
+      mac: string | null
+      macFormatted?: string
+      online: boolean
+      message: string
+    }>('/api/discovery/mac', {
+      method: 'POST',
+      body: { ip: newDevice.ip },
+    })
+    
+    if (result.success && result.macFormatted) {
+      newDevice.mac = result.macFormatted
+      macLookupMessage.value = `✓ MAC found: ${result.macFormatted}`
+      macLookupSuccess.value = true
+    } else {
+      macLookupMessage.value = result.message
+      macLookupSuccess.value = false
+    }
+  } catch (error: unknown) {
+    const err = error as { data?: { statusMessage?: string } }
+    macLookupMessage.value = err.data?.statusMessage || 'Failed to lookup MAC address'
+    macLookupSuccess.value = false
+  } finally {
+    lookingUpMac.value = false
+  }
+}
 
 async function addDevice() {
   addingDevice.value = true
@@ -394,17 +504,22 @@ async function addDevice() {
     // Reset form
     Object.assign(newDevice, {
       name: '',
-      type: 'PC_WINDOWS',
+      typeCode: 'PC_WINDOWS',
       ip: '',
       mac: '',
+      siteId: '',
+      floor: '',
       location: '',
       wakeable: false,
+      isManaged: true,
       notes: '',
     })
+    macLookupMessage.value = ''
+    macLookupSuccess.value = false
     loadDevices()
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string } }
-    alert(err.data?.statusMessage || 'Failed to add device')
+    showFeedback('error', 'Failed to Add Device', err.data?.statusMessage || 'An error occurred while adding the device')
   } finally {
     addingDevice.value = false
   }
@@ -431,7 +546,7 @@ async function deleteDevice() {
     deviceToDelete.value = null
     loadDevices()
   } catch (error) {
-    alert('Failed to delete device')
+    showFeedback('error', 'Failed to Delete', 'An error occurred while deleting the device')
   } finally {
     deletingDevice.value = false
   }
@@ -440,14 +555,14 @@ async function deleteDevice() {
 // Wake on LAN
 async function sendWoL(device: Device) {
   if (!device.mac) {
-    alert('No MAC address configured for this device')
+    showFeedback('warning', 'No MAC Address', 'No MAC address configured for this device')
     return
   }
   try {
     await $fetch(`/api/wol/${device.mac}`, { method: 'POST' })
-    alert(`Wake-on-LAN packet sent to ${device.name}`)
+    showFeedback('success', 'Wake-on-LAN Sent', `Magic packet sent to ${device.name}`)
   } catch (error) {
-    alert('Failed to send Wake-on-LAN packet')
+    showFeedback('error', 'WoL Failed', 'Failed to send Wake-on-LAN packet')
   }
 }
 
@@ -478,10 +593,13 @@ function getTypeLabel(type: string): string {
     PC_WINDOWS: 'Windows PC',
     PC_LINUX: 'Linux PC',
     SERVER_LINUX: 'Linux Server',
+    SERVER_WINDOWS: 'Windows Server',
     PRINTER: 'Printer',
     VM: 'Virtual Machine',
     ROUTER: 'Router',
     SWITCH: 'Switch',
+    SWITCH_MANAGED: 'Managed Switch',
+    SWITCH_UNMANAGED: 'Unmanaged Switch',
     ACCESS_POINT: 'Access Point',
     OTHER: 'Other',
   }
@@ -490,7 +608,9 @@ function getTypeLabel(type: string): string {
 
 function formatMac(mac: string | null): string {
   if (!mac) return '-'
-  return mac.toUpperCase().match(/.{1,2}/g)?.join(':') || mac
+  // Remove existing separators and format with colons
+  const clean = mac.replace(/[:\-]/g, '').toUpperCase()
+  return clean.match(/.{1,2}/g)?.join(':') || mac
 }
 
 function formatTimeAgo(dateStr: string | null): string {

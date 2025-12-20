@@ -1,4 +1,4 @@
-import prisma from '~/server/utils/prisma'
+import prisma from '../../utils/prisma'
 
 // DELETE /api/devices/[id] - Delete a device
 export default defineEventHandler(async (event) => {
@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
             actor: 'system', // TODO: Replace with actual user
             action: 'DELETE_DEVICE',
             target: id,
-            details: { name: existing.name, type: existing.type },
+            details: { name: existing.name, typeCode: existing.typeCode },
             result: 'success',
         },
     })

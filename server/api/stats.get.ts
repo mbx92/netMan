@@ -1,4 +1,4 @@
-import prisma from '~/server/utils/prisma'
+import prisma from '../utils/prisma'
 
 // GET /api/stats - Dashboard statistics
 export default defineEventHandler(async () => {
@@ -10,7 +10,7 @@ export default defineEventHandler(async () => {
 
     // Get device counts by type
     const typeCounts = await prisma.device.groupBy({
-        by: ['type'],
+        by: ['typeCode'],
         _count: { id: true },
     })
 
@@ -33,7 +33,7 @@ export default defineEventHandler(async () => {
         select: {
             id: true,
             name: true,
-            type: true,
+            typeCode: true,
             ip: true,
             lastSeen: true,
         },
@@ -46,7 +46,7 @@ export default defineEventHandler(async () => {
 
     // Format type counts into object
     const byType = Object.fromEntries(
-        typeCounts.map((t) => [t.type, t._count.id])
+        typeCounts.map((t) => [t.typeCode, t._count.id])
     )
 
     return {

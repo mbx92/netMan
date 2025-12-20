@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
                     id: true,
                     name: true,
                     ip: true,
-                    type: true,
+                    typeCode: true,
                 },
             },
         },

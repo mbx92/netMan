@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
                 select: {
                     id: true,
                     name: true,
-                    type: true,
+                    typeCode: true,
                     ip: true,
                 },
             },

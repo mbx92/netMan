@@ -1,4 +1,4 @@
-import prisma from '~/server/utils/prisma'
+import prisma from '../../utils/prisma'
 import dgram from 'dgram'
 
 // POST /api/wol/[mac] - Send Wake-on-LAN magic packet
@@ -53,48 +53,79 @@ export default defineEventHandler(async (event) => {
         macBytes.copy(magicPacket, 6 + i * 6)
     }
 
-    // Send packet via UDP broadcast
-    return new Promise((resolve, reject) => {
-        const socket = dgram.createSocket('udp4')
+    // Broadcast addresses to try - include common subnet broadcasts
+    const broadcastAddresses = [
+        '255.255.255.255',      // Global broadcast
+        '192.168.1.255',        // Common home subnet
+        '192.168.0.255',        // Common home subnet
+        '10.0.0.255',           // Common private subnet
+        '10.5.50.255',          // User's subnet
+        '10.255.255.255',       // Class A broadcast
+    ]
 
-        socket.on('error', (err) => {
-            socket.close()
-            reject(createError({
-                statusCode: 500,
-                statusMessage: `Failed to send WoL packet: ${err.message}`,
-            }))
-        })
+    // If device has an IP, calculate its subnet broadcast address
+    if (device?.ip) {
+        const ipParts = device.ip.split('.')
+        if (ipParts.length === 4) {
+            // Assume /24 subnet, replace last octet with 255
+            const subnetBroadcast = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}.255`
+            if (!broadcastAddresses.includes(subnetBroadcast)) {
+                broadcastAddresses.unshift(subnetBroadcast) // Add at the beginning
+            }
+        }
+    }
 
-        socket.bind(() => {
-            socket.setBroadcast(true)
-            socket.send(magicPacket, 0, magicPacket.length, 9, '255.255.255.255', async (err) => {
+    console.log(`[WoL] Sending magic packet to ${cleanMac} via broadcasts:`, broadcastAddresses)
+
+    // Send packet via UDP broadcast to all addresses
+    const sendPromises = broadcastAddresses.map(address => {
+        return new Promise<void>((resolve) => {
+            const socket = dgram.createSocket('udp4')
+
+            socket.on('error', (err) => {
+                console.log(`[WoL] Error sending to ${address}:`, err.message)
                 socket.close()
+                resolve() // Don't reject, just continue with other addresses
+            })
 
-                if (err) {
-                    reject(createError({
-                        statusCode: 500,
-                        statusMessage: `Failed to send WoL packet: ${err.message}`,
-                    }))
-                    return
-                }
+            socket.bind(() => {
+                socket.setBroadcast(true)
 
-                // Log the action
-                await prisma.auditLog.create({
-                    data: {
-                        actor: 'system', // TODO: Replace with actual user
-                        action: 'WAKE_ON_LAN',
-                        target: device?.id || mac,
-                        details: { mac: cleanMac, deviceName: device?.name },
-                        result: 'sent',
-                    },
-                })
+                // Send to port 9 (standard WoL port)
+                socket.send(magicPacket, 0, magicPacket.length, 9, address, (err) => {
+                    if (err) {
+                        console.log(`[WoL] Failed to send to ${address}:`, err.message)
+                    } else {
+                        console.log(`[WoL] Successfully sent to ${address}`)
+                    }
 
-                resolve({
-                    success: true,
-                    message: `Wake-on-LAN packet sent to ${cleanMac}`,
-                    device: device ? { id: device.id, name: device.name } : null,
+                    // Also try port 7 (alternate WoL port)
+                    socket.send(magicPacket, 0, magicPacket.length, 7, address, () => {
+                        socket.close()
+                        resolve()
+                    })
                 })
             })
         })
     })
+
+    await Promise.all(sendPromises)
+
+    // Log the action
+    await prisma.auditLog.create({
+        data: {
+            actor: 'system',
+            action: 'WAKE_ON_LAN',
+            target: device?.id || mac,
+            details: { mac: cleanMac, deviceName: device?.name, broadcasts: broadcastAddresses.length },
+            result: 'sent',
+        },
+    })
+
+    return {
+        success: true,
+        message: `Wake-on-LAN packet sent to ${cleanMac} via ${broadcastAddresses.length} broadcast addresses`,
+        device: device ? { id: device.id, name: device.name } : null,
+    }
 })
+

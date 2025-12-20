@@ -1,312 +1,277 @@
 /**
- * MikroTik REST API Client
+ * Unified MikroTik Client Factory
  * 
- * Provides methods to query MikroTik RouterOS 7+ REST API
- * for network discovery, ARP table, DHCP leases, etc.
+ * Supports both RouterOS 6 (API protocol) and RouterOS 7 (REST API)
  */
 
-interface MikroTikConfig {
-    host: string
-    port?: number
-    username: string
-    password: string
-    secure?: boolean  // true = HTTPS, false = HTTP
-}
+import { MikroTikV6Client } from './mikrotik-v6'
+import { MikroTikV7Client } from './mikrotik-v7'
+import prisma from './prisma'
 
-interface ArpEntry {
-    '.id': string
-    address: string
-    'mac-address': string
-    interface: string
-    dynamic?: boolean
-    complete?: boolean
-    published?: boolean
-}
-
-interface DhcpLease {
-    '.id': string
-    address: string
-    'mac-address': string
-    'host-name'?: string
-    'client-id'?: string
-    'address-lists'?: string
-    server: string
-    status: string
-    'last-seen'?: string
-    dynamic?: boolean
-}
-
-interface InterfaceInfo {
-    '.id': string
-    name: string
-    type: string
-    'mac-address'?: string
-    mtu?: number
-    running?: boolean
-    disabled?: boolean
-}
-
-export class MikroTikClient {
-    private config: MikroTikConfig
-    private baseUrl: string
-
-    constructor(config: MikroTikConfig) {
-        this.config = {
-            port: config.secure !== false ? 443 : 80,
-            secure: true,
-            ...config,
-        }
-
-        const protocol = this.config.secure ? 'https' : 'http'
-        this.baseUrl = `${protocol}://${this.config.host}:${this.config.port}/rest`
-    }
-
-    /**
-     * Make authenticated request to MikroTik REST API
-     */
-    private async request<T>(endpoint: string, method: 'GET' | 'POST' = 'GET', body?: object): Promise<T> {
-        const url = `${this.baseUrl}${endpoint}`
-        const auth = Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64')
-
-        const headers: HeadersInit = {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/json',
-        }
-
-        const options: RequestInit = {
-            method,
-            headers,
-        }
-
-        if (body) {
-            options.body = JSON.stringify(body)
-        }
-
-        try {
-            // Use node-fetch or native fetch with SSL ignore for self-signed certs
-            const response = await fetch(url, {
-                ...options,
-                // @ts-ignore - Node.js specific option for self-signed certs
-                agent: this.config.secure ? new (require('https').Agent)({ rejectUnauthorized: false }) : undefined,
-            })
-
-            if (!response.ok) {
-                throw new Error(`MikroTik API error: ${response.status} ${response.statusText}`)
-            }
-
-            return await response.json() as T
-        } catch (error) {
-            console.error('[MikroTik] API request failed:', endpoint, error)
-            throw error
-        }
-    }
-
-    /**
-     * Test connection to MikroTik
-     */
-    async testConnection(): Promise<boolean> {
-        try {
-            await this.request('/system/resource')
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    /**
-     * Get MikroTik system identity (router name)
-     */
-    async getIdentity(): Promise<string | undefined> {
-        try {
-            const result = await this.request<{ name: string }>('/system/identity')
-            console.log('[MikroTik] Router identity:', result.name)
-            return result.name
-        } catch (error) {
-            console.error('[MikroTik] Failed to fetch identity:', error)
-            return undefined
-        }
-    }
-
-    /**
-     * Get ARP table entries
-     */
-    async getArpTable(): Promise<ArpEntry[]> {
-        try {
-            const entries = await this.request<ArpEntry[]>('/ip/arp')
-            console.log(`[MikroTik] Fetched ${entries.length} ARP entries`)
-            return entries
-        } catch (error) {
-            console.error('[MikroTik] Failed to fetch ARP table:', error)
-            return []
-        }
-    }
-
-    /**
-     * Get DHCP leases (includes hostnames)
-     */
-    async getDhcpLeases(): Promise<DhcpLease[]> {
-        try {
-            const leases = await this.request<DhcpLease[]>('/ip/dhcp-server/lease')
-            console.log(`[MikroTik] Fetched ${leases.length} DHCP leases`)
-
-            // Log how many have hostnames
-            const withHostname = leases.filter(l => l['host-name'])
-            console.log(`[MikroTik] DHCP leases with hostname: ${withHostname.length}`)
-
-            // Log first few with hostnames for debugging  
-            withHostname.slice(0, 5).forEach(l => {
-                console.log(`[MikroTik] DHCP: ${l.address} -> ${l['host-name']} (MAC: ${l['mac-address']})`)
-            })
-
-            return leases
-        } catch (error) {
-            console.error('[MikroTik] Failed to fetch DHCP leases:', error)
-            return []
-        }
-    }
-
-    /**
-     * Get interface list
-     */
-    async getInterfaces(): Promise<InterfaceInfo[]> {
-        try {
-            return await this.request<InterfaceInfo[]>('/interface')
-        } catch (error) {
-            console.error('[MikroTik] Failed to fetch interfaces:', error)
-            return []
-        }
-    }
-
-    /**
-     * Get combined device info from ARP + DHCP
-     * This gives us IP, MAC, hostname, and interface for all devices across VLANs
-     */
-    async getNetworkDevices(): Promise<{
+// Common interface for both clients
+export interface IMikroTikClient {
+    testConnection(): Promise<boolean>
+    getIdentity(): Promise<string | undefined>
+    getArpTable(): Promise<{
+        '.id': string
+        address: string
+        'mac-address': string
+        interface: string
+    }[]>
+    getDhcpLeases(): Promise<{
+        '.id': string
+        address: string
+        'mac-address': string
+        'host-name'?: string
+        server: string
+        status: string
+    }[]>
+    getNetworkDevices(): Promise<{
         ip: string
         mac: string
         hostname?: string
         interface: string
         dhcpServer?: string
-    }[]> {
-        const [arpEntries, dhcpLeases] = await Promise.all([
-            this.getArpTable(),
-            this.getDhcpLeases(),
-        ])
-
-        // Create MAC -> DHCP info map
-        const dhcpByMac = new Map<string, typeof dhcpLeases[0]>()
-        // Create IP -> DHCP info map (for direct IP lookup)
-        const dhcpByIp = new Map<string, typeof dhcpLeases[0]>()
-
-        for (const lease of dhcpLeases) {
-            const mac = lease['mac-address']?.toLowerCase()
-            if (mac) {
-                dhcpByMac.set(mac, lease)
-            }
-            // Also index by IP for direct lookup
-            if (lease.address) {
-                dhcpByIp.set(lease.address, lease)
-            }
-        }
-
-        console.log(`[MikroTik] DHCP leases indexed: ${dhcpByMac.size} by MAC, ${dhcpByIp.size} by IP`)
-
-        // Track which IPs we've seen
-        const seenIps = new Set<string>()
-
-        // Combine ARP with DHCP data
-        const devices = arpEntries.map(arp => {
-            const mac = arp['mac-address']?.toLowerCase()
-            const dhcp = dhcpByMac.get(mac)
-            seenIps.add(arp.address)
-
-            const hostname = dhcp?.['host-name']
-            if (hostname) {
-                console.log(`[MikroTik] Found hostname via MAC: ${arp.address} -> ${hostname}`)
-            }
-
-            return {
-                ip: arp.address,
-                mac: arp['mac-address'],
-                hostname,
-                interface: arp.interface,
-                dhcpServer: dhcp?.server,
-            }
-        })
-
-        // Add DHCP-only devices (not in ARP table but have DHCP lease)
-        for (const lease of dhcpLeases) {
-            if (lease.address && !seenIps.has(lease.address)) {
-                seenIps.add(lease.address)
-                const hostname = lease['host-name']
-                if (hostname) {
-                    console.log(`[MikroTik] Found hostname via DHCP-only: ${lease.address} -> ${hostname}`)
-                }
-                devices.push({
-                    ip: lease.address,
-                    mac: lease['mac-address'],
-                    hostname,
-                    interface: 'dhcp-only',
-                    dhcpServer: lease.server,
-                })
-            }
-        }
-
-        console.log(`[MikroTik] Combined ${devices.length} network devices from ARP/DHCP`)
-        console.log(`[MikroTik] Devices with hostname: ${devices.filter(d => d.hostname).length}`)
-        return devices
-    }
-
-    /**
-     * Get device info for a specific IP
-     */
-    async getDeviceByIp(ip: string): Promise<{
+    }[]>
+    getDeviceByIp(ip: string): Promise<{
         mac?: string
         hostname?: string
         interface?: string
-    } | null> {
-        const devices = await this.getNetworkDevices()
-        const device = devices.find(d => d.ip === ip)
+    } | null>
+    getRouterInfo(): Promise<{
+        identity?: string
+        mac?: string
+        model?: string
+        version?: string
+        portCount: number
+        interfaces: { name: string; type: string; mac?: string; running?: boolean }[]
+        bridges: { name: string; mac?: string }[]
+        vlans: { name: string; vlanId: number; interface?: string }[]
+    }>
+}
 
-        if (device) {
-            return {
-                mac: device.mac,
-                hostname: device.hostname,
-                interface: device.interface,
-            }
-        }
+export interface MikroTikConfig {
+    id?: string
+    name?: string
+    host: string
+    port: number
+    username: string
+    password: string
+    apiVersion: 'v6' | 'v7'
+    siteId?: string | null
+}
 
+/**
+ * Create a MikroTik client based on API version
+ */
+export function createMikroTikClient(config: MikroTikConfig): IMikroTikClient {
+    if (config.apiVersion === 'v7') {
+        return new MikroTikV7Client({
+            host: config.host,
+            port: config.port || 443,
+            username: config.username,
+            password: config.password,
+            secure: config.port === 443 || config.port === 8729,
+        })
+    } else {
+        return new MikroTikV6Client({
+            host: config.host,
+            port: config.port || 8728,
+            username: config.username,
+            password: config.password,
+        })
+    }
+}
+
+// Cache of active clients by device ID
+const clientCache = new Map<string, IMikroTikClient>()
+
+/**
+ * Get MikroTik client for a specific device from database
+ */
+export async function getMikroTikClientById(deviceId: string): Promise<IMikroTikClient | null> {
+    // Check cache first
+    if (clientCache.has(deviceId)) {
+        return clientCache.get(deviceId)!
+    }
+
+    // Fetch from database
+    const device = await prisma.mikrotikDevice.findUnique({
+        where: { id: deviceId },
+    })
+
+    if (!device || !device.isActive) {
         return null
     }
+
+    const client = createMikroTikClient({
+        id: device.id,
+        name: device.name,
+        host: device.host,
+        port: device.port,
+        username: device.username,
+        password: device.password,
+        apiVersion: device.apiVersion as 'v6' | 'v7',
+        siteId: device.siteId,
+    })
+
+    // Cache the client
+    clientCache.set(deviceId, client)
+    return client
 }
 
-// Singleton instance (can be configured via environment)
-let mikrotikClient: MikroTikClient | null = null
+/**
+ * Get all active MikroTik clients from database
+ * Checks both MikrotikDevice table (legacy) and Device table (new)
+ */
+export async function getAllMikroTikClients(): Promise<{ config: MikroTikConfig; client: IMikroTikClient }[]> {
+    const results: { config: MikroTikConfig; client: IMikroTikClient }[] = []
 
-export function getMikroTikClient(): MikroTikClient | null {
-    if (!mikrotikClient) {
-        // Check if MikroTik is configured via environment
-        const host = process.env.MIKROTIK_HOST
-        const username = process.env.MIKROTIK_USER
-        const password = process.env.MIKROTIK_PASS
+    // Check legacy MikrotikDevice table
+    const mikrotikDevices = await prisma.mikrotikDevice.findMany({
+        where: { isActive: true },
+    })
 
-        if (host && username && password) {
-            mikrotikClient = new MikroTikClient({
-                host,
-                username,
-                password,
-                port: parseInt(process.env.MIKROTIK_PORT || '443'),
-                secure: process.env.MIKROTIK_SECURE !== 'false',
-            })
-            console.log('[MikroTik] Client initialized for', host)
+    for (const device of mikrotikDevices) {
+        const config: MikroTikConfig = {
+            id: device.id,
+            name: device.name,
+            host: device.host,
+            port: device.port,
+            username: device.username,
+            password: device.password,
+            apiVersion: device.apiVersion as 'v6' | 'v7',
+            siteId: device.siteId,
+        }
+
+        if (!clientCache.has(device.id)) {
+            clientCache.set(device.id, createMikroTikClient(config))
+        }
+
+        results.push({
+            config,
+            client: clientCache.get(device.id)!,
+        })
+    }
+
+    // Also check Device table for routers with API credentials
+    const routerDevices = await prisma.device.findMany({
+        where: {
+            typeCode: 'ROUTER',
+            isApiActive: true,
+            apiUser: { not: null },
+            apiPass: { not: null },
+        },
+    })
+
+    for (const device of routerDevices) {
+        // Skip if already added from MikrotikDevice table (check by IP)
+        if (results.some(r => r.config.host === device.ip)) continue
+        if (!device.apiUser || !device.apiPass || !device.ip) continue
+
+        const config: MikroTikConfig = {
+            id: device.id,
+            name: device.name,
+            host: device.ip,
+            port: device.apiPort || 8728,
+            username: device.apiUser,
+            password: device.apiPass,
+            apiVersion: (device.apiVersion as 'v6' | 'v7') || 'v6',
+            siteId: device.siteId,
+        }
+
+        const cacheKey = `device-${device.id}`
+        if (!clientCache.has(cacheKey)) {
+            clientCache.set(cacheKey, createMikroTikClient(config))
+        }
+
+        results.push({
+            config,
+            client: clientCache.get(cacheKey)!,
+        })
+    }
+
+    return results
+}
+
+/**
+ * Get MikroTik clients for a specific site
+ */
+export async function getMikroTikClientsBySite(siteId: string): Promise<{ config: MikroTikConfig; client: IMikroTikClient }[]> {
+    const devices = await prisma.mikrotikDevice.findMany({
+        where: {
+            isActive: true,
+            siteId: siteId,
+        },
+    })
+
+    return devices.map(device => {
+        const config: MikroTikConfig = {
+            id: device.id,
+            name: device.name,
+            host: device.host,
+            port: device.port,
+            username: device.username,
+            password: device.password,
+            apiVersion: device.apiVersion as 'v6' | 'v7',
+            siteId: device.siteId,
+        }
+
+        if (!clientCache.has(device.id)) {
+            clientCache.set(device.id, createMikroTikClient(config))
+        }
+
+        return {
+            config,
+            client: clientCache.get(device.id)!,
+        }
+    })
+}
+
+/**
+ * Clear client cache (e.g., when device config changes)
+ */
+export function clearClientCache(deviceId?: string): void {
+    if (deviceId) {
+        clientCache.delete(deviceId)
+    } else {
+        clientCache.clear()
+    }
+}
+
+/**
+ * Lookup device info from all MikroTik routers
+ */
+export async function lookupDeviceFromMikroTik(ip: string, siteId?: string): Promise<{
+    mac?: string
+    hostname?: string
+    interface?: string
+    source?: string
+} | null> {
+    const clients = siteId
+        ? await getMikroTikClientsBySite(siteId)
+        : await getAllMikroTikClients()
+
+    console.log(`[MikroTik] Looking up ${ip} from ${clients.length} MikroTik clients`)
+
+    for (const { config, client } of clients) {
+        try {
+            console.log(`[MikroTik] Querying ${config.name || config.host}...`)
+            const device = await client.getDeviceByIp(ip)
+            console.log(`[MikroTik] Result from ${config.host}:`, device)
+            if (device && device.mac) {
+                return {
+                    ...device,
+                    source: config.name || config.host,
+                }
+            }
+        } catch (error) {
+            console.error(`[MikroTik] Failed to lookup ${ip} from ${config.host}:`, error)
         }
     }
 
-    return mikrotikClient
+    console.log(`[MikroTik] IP ${ip} not found in any MikroTik router`)
+    return null
 }
 
-export function setMikroTikClient(client: MikroTikClient): void {
-    mikrotikClient = client
-}
-
-export default MikroTikClient
+export { MikroTikV6Client, MikroTikV7Client }

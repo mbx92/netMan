@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
                             id: true,
                             name: true,
                             ip: true,
-                            type: true,
+                            typeCode: true,
                             status: true,
                         },
                     },
@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
         device: {
             id: device.id,
             name: device.name,
-            type: device.type,
+            typeCode: device.typeCode,
             portCount: device.portCount,
         },
         ports: portsWithStatus,

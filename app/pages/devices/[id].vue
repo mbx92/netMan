@@ -27,7 +27,7 @@
                 {{ device.status }}
               </span>
             </div>
-            <p class="text-base-content/60 mt-1">{{ getTypeLabel(device.type) }}</p>
+            <p class="text-base-content/60 mt-1">{{ device.deviceType?.name || device.typeCode }}</p>
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
@@ -78,6 +78,10 @@
                 <div class="text-lg mt-1">{{ device.hostname || '-' }}</div>
               </div>
               <div>
+                <label class="text-sm text-base-content/60">Floor</label>
+                <div class="text-lg mt-1">{{ device.floor || '-' }}</div>
+              </div>
+              <div>
                 <label class="text-sm text-base-content/60">Location</label>
                 <div class="text-lg mt-1">{{ device.location || '-' }}</div>
               </div>
@@ -90,6 +94,14 @@
                 <div class="mt-1">
                   <span :class="['badge', device.wakeable ? 'badge-success' : 'badge-ghost']">
                     {{ device.wakeable ? 'Supported' : 'Not Supported' }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="device.typeCode?.includes('SWITCH')">
+                <label class="text-sm text-base-content/60">Management</label>
+                <div class="mt-1">
+                  <span :class="['badge', device.isManaged ? 'badge-info' : 'badge-warning']">
+                    {{ device.isManaged ? 'Managed' : 'Unmanaged' }}
                   </span>
                 </div>
               </div>
@@ -244,6 +256,12 @@
               <input v-model="editData.name" type="text" class="input input-bordered w-full" required />
             </div>
             <div class="form-control">
+              <label class="label"><span class="label-text">Type</span></label>
+              <select v-model="editData.type" class="select select-bordered w-full">
+                <option v-for="dt in deviceTypes" :key="dt.code" :value="dt.code">{{ dt.name }}</option>
+              </select>
+            </div>
+            <div class="form-control">
               <label class="label"><span class="label-text">Status</span></label>
               <select v-model="editData.status" class="select select-bordered w-full">
                 <option value="ONLINE">Online</option>
@@ -252,19 +270,45 @@
                 <option value="MAINTENANCE">Maintenance</option>
               </select>
             </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text">IP Address</span></label>
+              <div class="flex gap-2">
+                <input v-model="editData.ip" type="text" class="input input-bordered flex-1" />
+                <button 
+                  type="button" 
+                  class="btn btn-outline btn-primary"
+                  :disabled="!editData.ip || lookingUpMac"
+                  @click="lookupMac"
+                >
+                  <span v-if="lookingUpMac" class="loading loading-spinner loading-sm"></span>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  Lookup
+                </button>
+              </div>
+              <label v-if="macLookupMessage" class="label">
+                <span :class="['label-text-alt', macLookupSuccess ? 'text-success' : 'text-warning']">{{ macLookupMessage }}</span>
+              </label>
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text">MAC Address</span></label>
+              <input v-model="editData.mac" type="text" class="input input-bordered w-full" placeholder="AA:BB:CC:DD:EE:FF" />
+            </div>
             <div class="grid grid-cols-2 gap-4">
               <div class="form-control">
-                <label class="label"><span class="label-text">IP Address</span></label>
-                <input v-model="editData.ip" type="text" class="input input-bordered w-full" />
+                <label class="label"><span class="label-text">Floor</span></label>
+                <input v-model="editData.floor" type="text" class="input input-bordered w-full" placeholder="e.g., 1, GF, B1" />
               </div>
               <div class="form-control">
-                <label class="label"><span class="label-text">MAC Address</span></label>
-                <input v-model="editData.mac" type="text" class="input input-bordered w-full" />
+                <label class="label"><span class="label-text">Location</span></label>
+                <input v-model="editData.location" type="text" class="input input-bordered w-full" />
               </div>
             </div>
             <div class="form-control">
-              <label class="label"><span class="label-text">Location</span></label>
-              <input v-model="editData.location" type="text" class="input input-bordered w-full" />
+              <label class="label"><span class="label-text">Site</span></label>
+              <select v-model="editData.siteId" class="select select-bordered w-full">
+                <option value="">No Site</option>
+                <option v-for="site in sites" :key="site.id" :value="site.id">{{ site.name }}</option>
+              </select>
             </div>
             <div class="form-control">
               <label class="label"><span class="label-text">Owner</span></label>
@@ -274,6 +318,22 @@
               <label class="cursor-pointer label justify-start gap-3">
                 <input v-model="editData.wakeable" type="checkbox" class="checkbox checkbox-primary" />
                 <span class="label-text">Supports Wake-on-LAN</span>
+              </label>
+            </div>
+            <!-- Parent Host (for VMs) -->
+            <div v-if="editData.type === 'VM'" class="form-control">
+              <label class="label"><span class="label-text">Parent Host (Hypervisor)</span></label>
+              <select v-model="editData.parentDeviceId" class="select select-bordered w-full">
+                <option value="">None</option>
+                <option v-for="host in availableHosts" :key="host.id" :value="host.id">
+                  {{ host.name }} {{ host.ip ? `(${host.ip})` : '' }}
+                </option>
+              </select>
+            </div>
+            <div class="form-control">
+              <label class="cursor-pointer label justify-start gap-3">
+                <input v-model="editData.isManaged" type="checkbox" class="checkbox checkbox-info" />
+                <span class="label-text">Managed Switch (supports SNMP/ping)</span>
               </label>
             </div>
             <div class="form-control">
@@ -319,6 +379,29 @@
         <button @click="showAddPortsModal = false">close</button>
       </form>
     </dialog>
+
+    <!-- Feedback Modal -->
+    <dialog :class="['modal', showFeedbackModal && 'modal-open']">
+      <div class="modal-box glass-modal">
+        <div class="flex items-start gap-3">
+          <div :class="['w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
+            <svg v-if="feedbackType === 'success'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <svg v-else-if="feedbackType === 'error'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <div>
+            <h3 class="font-bold text-lg">{{ feedbackTitle }}</h3>
+            <p class="py-2 text-base-content/80">{{ feedbackMessage }}</p>
+          </div>
+        </div>
+        <div class="modal-action">
+          <button class="btn btn-primary" @click="showFeedbackModal = false">OK</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click="showFeedbackModal = false">close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -359,20 +442,38 @@ interface Session {
 interface Device {
   id: string
   name: string
-  type: string
+  typeCode: string  // Changed from type to typeCode
+  deviceType?: { code: string; name: string; isNetworkDevice: boolean; canHavePorts: boolean }
   ip: string | null
   mac: string | null
   hostname: string | null
+  floor: string | null
   location: string | null
   status: string
   lastSeen: string | null
   owner: string | null
   notes: string | null
   wakeable: boolean
+  isManaged: boolean
+  portCount: number | null
+  // Router API fields
+  apiPort: number | null
+  apiUser: string | null
+  apiPass: string | null
+  apiVersion: string | null
+  isApiActive: boolean
+  lastApiSync: string | null
+  siteId: string | null
+  site?: { id: string; name: string }
   createdAt: string
   updatedAt: string
   ports: Port[]
   sessions: Session[]
+}
+
+interface Site {
+  id: string
+  name: string
 }
 
 const route = useRoute()
@@ -381,9 +482,31 @@ const deviceId = route.params.id as string
 // Fetch device
 const { data: device, pending, error, refresh } = await useFetch<Device>(`/api/devices/${deviceId}`)
 
+// Fetch sites for dropdown
+const { data: sitesData } = await useFetch('/api/sites')
+const sites = computed(() => sitesData.value?.sites as Site[] || [])
+
+// Fetch device types for dropdown
+interface DeviceTypeOption { code: string; name: string }
+const { data: deviceTypesData } = await useFetch<DeviceTypeOption[]>('/api/device-types')
+const deviceTypes = computed(() => deviceTypesData.value || [])
+
+// Feedback modal
+const showFeedbackModal = ref(false)
+const feedbackType = ref<'success' | 'error' | 'warning'>('success')
+const feedbackTitle = ref('')
+const feedbackMessage = ref('')
+
+function showFeedback(type: 'success' | 'error' | 'warning', title: string, message: string) {
+  feedbackType.value = type
+  feedbackTitle.value = title
+  feedbackMessage.value = message
+  showFeedbackModal.value = true
+}
+
 // PortGrid state
 const portsWithStatus = ref<PortWithStatus[]>([])
-const availableDevices = ref<{ id: string; name: string; ip: string | null; type: string }[]>([])
+const availableDevices = ref<{ id: string; name: string; ip: string | null; typeCode: string }[]>([])
 const showAddPortsModal = ref(false)
 const portCountToAdd = ref(8)
 const portPrefix = ref('eth')
@@ -413,8 +536,8 @@ async function fetchConnectedTo() {
 
 // Check if device is a network device (switch/router/AP)
 const isNetworkDevice = computed(() => {
-  const networkTypes = ['SWITCH', 'ROUTER', 'ACCESS_POINT']
-  return device.value && networkTypes.includes(device.value.type)
+  const networkTypes = ['SWITCH', 'SWITCH_MANAGED', 'SWITCH_UNMANAGED', 'ROUTER', 'ACCESS_POINT']
+  return device.value && device.value.typeCode && networkTypes.includes(device.value.typeCode)
 })
 
 // Fetch ports with ping status
@@ -432,7 +555,7 @@ async function fetchPorts() {
 // Fetch available devices for assignment
 async function fetchAvailableDevices() {
   try {
-    const response = await $fetch<{ devices: { id: string; name: string; ip: string | null; type: string }[] }>('/api/devices')
+    const response = await $fetch<{ devices: { id: string; name: string; ip: string | null; typeCode: string }[] }>('/api/devices')
     availableDevices.value = response.devices.filter(d => d.id !== deviceId)
   } catch (e) {
     console.error('Failed to fetch devices:', e)
@@ -448,7 +571,7 @@ async function handleAssign(portId: string, connectedDeviceId: string) {
     })
     await fetchPorts()
   } catch (e) {
-    alert('Failed to assign device to port')
+    showFeedback('error', 'Failed', 'An error occurred')
   }
 }
 
@@ -461,7 +584,7 @@ async function handleUnassign(portId: string) {
     })
     await fetchPorts()
   } catch (e) {
-    alert('Failed to unassign device from port')
+    showFeedback('error', 'Failed', 'An error occurred')
   }
 }
 
@@ -474,7 +597,7 @@ async function handleDeletePort(portId: string) {
     await fetchPorts()
     refresh()
   } catch (e) {
-    alert('Failed to delete port')
+    showFeedback('error', 'Failed', 'An error occurred')
   }
 }
 
@@ -495,7 +618,7 @@ async function addPorts() {
     await fetchPorts()
     refresh()
   } catch (e) {
-    alert('Failed to add ports')
+    showFeedback('error', 'Failed', 'An error occurred')
   }
 }
 // SSE connection for real-time port status
@@ -565,8 +688,11 @@ onMounted(async () => {
   // Fetch connected-to port for all devices
   await fetchConnectedTo()
   
+  // Fetch available devices for all (needed for VM parent host selection)
+  await fetchAvailableDevices()
+  
   if (isNetworkDevice.value) {
-    await Promise.all([fetchPorts(), fetchAvailableDevices()])
+    await fetchPorts()
     connectSSE()
   }
 })
@@ -576,17 +702,32 @@ onUnmounted(() => {
   closeSSE()
 })
 
+// Available hosts for VM parent selection (servers and other devices that can host VMs)
+const availableHosts = computed(() => {
+  return availableDevices.value.filter(d => 
+    d.typeCode?.includes('SERVER') || d.typeCode?.includes('PC') || d.typeCode?.includes('NAS')
+  )
+})
+
 // Edit mode
 const editMode = ref(false)
 const saving = ref(false)
+const lookingUpMac = ref(false)
+const macLookupMessage = ref('')
+const macLookupSuccess = ref(false)
 const editData = reactive({
   name: '',
+  type: '',
   status: '',
   ip: '',
   mac: '',
+  floor: '',
   location: '',
+  siteId: '',
+  parentDeviceId: '',  // Parent host for VMs
   owner: '',
   wakeable: false,
+  isManaged: true,
   notes: '',
 })
 
@@ -594,39 +735,91 @@ const editData = reactive({
 watch(device, (d) => {
   if (d) {
     editData.name = d.name
+    editData.type = d.typeCode
     editData.status = d.status
     editData.ip = d.ip || ''
     editData.mac = d.mac || ''
+    editData.floor = d.floor || ''
     editData.location = d.location || ''
+    editData.siteId = d.siteId || ''
+    editData.parentDeviceId = d.parentDeviceId || ''
     editData.owner = d.owner || ''
     editData.wakeable = d.wakeable
+    editData.isManaged = d.isManaged ?? true
     editData.notes = d.notes || ''
   }
 }, { immediate: true })
+
+// MAC Address Lookup
+async function lookupMac() {
+  if (!editData.ip) return
+  
+  lookingUpMac.value = true
+  macLookupMessage.value = ''
+  
+  try {
+    const result = await $fetch<{ success: boolean; mac?: string; hostname?: string; source?: string }>('/api/discovery/mac', {
+      method: 'POST',
+      body: { ip: editData.ip },
+    })
+    
+    if (result.success && result.mac) {
+      editData.mac = result.mac
+      macLookupSuccess.value = true
+      macLookupMessage.value = `Found: ${result.mac}${result.source ? ` (via ${result.source})` : ''}`
+    } else {
+      macLookupSuccess.value = false
+      macLookupMessage.value = 'MAC address not found in local ARP or MikroTik'
+    }
+  } catch (err) {
+    macLookupSuccess.value = false
+    macLookupMessage.value = 'Failed to lookup MAC address'
+  } finally {
+    lookingUpMac.value = false
+  }
+}
 
 async function saveDevice() {
   saving.value = true
   try {
     await $fetch(`/api/devices/${deviceId}`, {
       method: 'PUT',
-      body: editData,
+      body: {
+        name: editData.name,
+        typeCode: editData.type,  // Send typeCode to API
+        status: editData.status,
+        ip: editData.ip,
+        mac: editData.mac,
+        floor: editData.floor,
+        location: editData.location,
+        siteId: editData.siteId || null,
+        parentDeviceId: editData.parentDeviceId || null,  // Parent host for VMs
+        owner: editData.owner,
+        wakeable: editData.wakeable,
+        isManaged: editData.isManaged,
+        notes: editData.notes,
+      },
     })
     editMode.value = false
     refresh()
   } catch (e) {
-    alert('Failed to save changes')
+    showFeedback('error', 'Failed to Save', 'An error occurred while saving the device')
   } finally {
     saving.value = false
   }
 }
 
 // Wake on LAN
-async function sendWoL(mac: string) {
+async function sendWoL(mac: string | null) {
+  if (!mac) {
+    showFeedback('warning', 'No MAC Address', 'Device does not have a MAC address configured')
+    return
+  }
   try {
     await $fetch(`/api/wol/${mac}`, { method: 'POST' })
-    alert('Wake-on-LAN packet sent!')
+    showFeedback('success', 'Wake-on-LAN Sent', 'Magic packet sent to device')
   } catch (e) {
-    alert('Failed to send Wake-on-LAN packet')
+    showFeedback('error', 'WoL Failed', 'Failed to send Wake-on-LAN packet')
   }
 }
 
@@ -666,10 +859,13 @@ function getTypeLabel(type: string): string {
     PC_WINDOWS: 'Windows PC',
     PC_LINUX: 'Linux PC',
     SERVER_LINUX: 'Linux Server',
+    SERVER_WINDOWS: 'Windows Server',
     PRINTER: 'Printer',
     VM: 'Virtual Machine',
     ROUTER: 'Router',
     SWITCH: 'Switch',
+    SWITCH_MANAGED: 'Managed Switch',
+    SWITCH_UNMANAGED: 'Unmanaged Switch',
     ACCESS_POINT: 'Access Point',
     OTHER: 'Other',
   }
@@ -678,7 +874,9 @@ function getTypeLabel(type: string): string {
 
 function formatMac(mac: string | null): string {
   if (!mac) return '-'
-  return mac.toUpperCase().match(/.{1,2}/g)?.join(':') || mac
+  // Remove existing separators and format with colons
+  const clean = mac.replace(/[:\-]/g, '').toUpperCase()
+  return clean.match(/.{1,2}/g)?.join(':') || mac
 }
 
 function formatDateTime(dateStr: string | null): string {

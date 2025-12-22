@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>VNC Test - Direct</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            color: #0f0;
+            font-family: monospace;
+        }
+
+        #status {
+            padding: 20px;
+        }
+
+        #display {
+            width: 100vw;
+            height: calc(100vh - 60px);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status">Initializing...</div>
+    <div id="display"></div>
+
+    <script src="/guacamole/guacamole.js"></script>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const displayEl = document.getElementById('display');
+
+        function setStatus(msg) {
+            console.log('[Test]', msg);
+            statusEl.textContent = msg;
+        }
+
+        // HARDCODED VALUES FOR TESTING
+        const TEST_HOST = '10.5.80.99';
+        const TEST_PORT = '5900';
+        const TEST_PASSWORD = 'testpass123';  // Simplified password to test
+        const TEST_DEVICE_ID = 'test-device';
+
+        console.log('[Test] Hardcoded values:');
+        console.log('  TEST_HOST:', TEST_HOST);
+        console.log('  TEST_PORT:', TEST_PORT);
+        console.log('  TEST_PASSWORD:', JSON.stringify(TEST_PASSWORD));
+        console.log('  TEST_DEVICE_ID:', TEST_DEVICE_ID);
+
+        // Build WebSocket URL - Try double-encoding password to prevent Guacamole corruption
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+        // Double encode password to prevent Guacamole from corrupting it
+        const encodedPassword = encodeURIComponent(encodeURIComponent(TEST_PASSWORD));
+
+        const wsUrl = `${protocol}//${window.location.host}/api/remote/guac-vnc?host=${encodeURIComponent(TEST_HOST)}&port=${TEST_PORT}&deviceId=${TEST_DEVICE_ID}&password=${encodedPassword}`;
+
+        console.log('[Test] Built WebSocket URL:', wsUrl);
+        console.log('[Test] Double-encoded password:', encodedPassword);
+
+        setStatus('Connecting to ' + TEST_HOST + ':' + TEST_PORT);
+
+        // Create Guacamole tunnel and client
+        const tunnel = new Guacamole.WebSocketTunnel(wsUrl);
+
+        // Inspect what tunnel actually sends
+        tunnel.onstatechange = function (state) {
+            console.log('[Test] Tunnel state:', state, 'URL:', tunnel.url || 'N/A');
+        };
+
+        const client = new Guacamole.Client(tunnel);
+
+        // Attach display
+        const display = client.getDisplay();
+        displayEl.appendChild(display.getElement());
+
+        // Handle state changes
+        client.onstatechange = function (state) {
+            const states = ['IDLE', 'CONNECTING', 'WAITING', 'CONNECTED', 'DISCONNECTING', 'DISCONNECTED'];
+            setStatus('State: ' + (states[state] || state));
+
+            if (state === 3) { // CONNECTED
+                setStatus('✓ CONNECTED! Desktop should appear below.');
+            }
+        };
+
+        // Handle errors
+        client.onerror = function (status) {
+            setStatus('ERROR: ' + (status.message || JSON.stringify(status)));
+            console.error('[Test] Error:', status);
+        };
+
+        // Enable mouse
+        const mouse = new Guacamole.Mouse(display.getElement());
+        mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = function (mouseState) {
+            client.sendMouseState(mouseState);
+        };
+
+        // Enable keyboard
+        const keyboard = new Guacamole.Keyboard(document);
+        keyboard.onkeydown = function (keysym) {
+            client.sendKeyEvent(1, keysym);
+        };
+        keyboard.onkeyup = function (keysym) {
+            client.sendKeyEvent(0, keysym);
+        };
+
+        // Connect
+        client.connect();
+        setStatus('Connecting...');
+    </script>
+</body>
+
+</html>

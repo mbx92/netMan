@@ -274,4 +274,3 @@ export async function lookupDeviceFromMikroTik(ip: string, siteId?: string): Pro
     return null
 }
 
-export { MikroTikV6Client, MikroTikV7Client }

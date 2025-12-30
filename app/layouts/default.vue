@@ -27,18 +27,47 @@
           <svg class="swap-off fill-current w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"/></svg>
         </label>
         <!-- User Menu -->
-        <div class="dropdown dropdown-end">
-          <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
-            <div class="w-9 rounded-full bg-primary text-primary-content flex items-center justify-center">
-              <span class="text-sm font-semibold">IT</span>
+        <ClientOnly>
+          <div class="dropdown dropdown-end">
+            <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+              <div v-if="user?.avatarUrl" class="w-9 rounded-full">
+                <img :src="user.avatarUrl" :alt="user.name" />
+              </div>
+              <div v-else class="w-9 rounded-full bg-primary text-primary-content flex items-center justify-center">
+                <span class="text-sm font-semibold">{{ userInitials }}</span>
+              </div>
             </div>
+            <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 border border-base-300 rounded-box w-56 mt-3">
+              <!-- User Info -->
+              <li class="menu-title px-4 py-2">
+                <div class="flex flex-col gap-1">
+                  <span class="font-semibold text-base-content">{{ user?.name || 'User' }}</span>
+                  <span class="text-xs text-base-content/60">{{ user?.email || '' }}</span>
+                  <span v-if="user?.department" class="text-xs text-base-content/50">{{ user.department }}</span>
+                </div>
+              </li>
+              <div class="divider my-0"></div>
+              <li><NuxtLink to="/profile">Profile</NuxtLink></li>
+              <li><NuxtLink to="/settings">Settings</NuxtLink></li>
+              <div class="divider my-0"></div>
+              <li>
+                <button @click="handleLogout" class="text-error">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  Logout
+                </button>
+              </li>
+            </ul>
           </div>
-          <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 border border-base-300 rounded-box w-52 mt-3">
-            <li><a>Profile</a></li>
-            <li><a>Settings</a></li>
-            <li class="border-t border-base-200 mt-1 pt-1"><a>Logout</a></li>
-          </ul>
-        </div>
+          <template #fallback>
+            <div class="btn btn-ghost btn-circle avatar">
+              <div class="w-9 rounded-full bg-base-300 animate-pulse"></div>
+            </div>
+          </template>
+        </ClientOnly>
       </div>
     </header>
 
@@ -116,4 +145,21 @@
 </template>
 
 <script setup lang="ts">
+const { user, logout } = useAuth()
+
+const userInitials = computed(() => {
+  if (!user.value?.name) return 'U'
+  const names = user.value.name.split(' ')
+  if (names.length >= 2) {
+    return (names[0][0] + names[1][0]).toUpperCase()
+  }
+  return names[0].substring(0, 2).toUpperCase()
+})
+
+const handleLogout = async () => {
+  if (confirm('Apakah Anda yakin ingin logout?')) {
+    await logout()
+  }
+}
 </script>
+

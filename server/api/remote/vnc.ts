@@ -14,12 +14,19 @@ export default defineWebSocketHandler({
 
         // Get connection params from URL query
         const url = new URL(peer.request?.url || '', 'http://localhost')
+        console.log(`[VNC] Request URL:`, peer.request?.url)
+        console.log(`[VNC] Parsed URL searchParams:`, Array.from(url.searchParams.entries()))
+
         const host = url.searchParams.get('host')
         const port = parseInt(url.searchParams.get('port') || '5900', 10)
         const deviceId = url.searchParams.get('deviceId')
 
         if (!host || !deviceId) {
             console.log('[VNC] Missing host or deviceId, waiting for connect message')
+            peer.send(JSON.stringify({
+                type: 'error',
+                message: 'Missing connection parameters. Please close and try again.'
+            }))
             return
         }
 
@@ -30,6 +37,7 @@ export default defineWebSocketHandler({
     async message(peer, message) {
         // noVNC sends binary data directly
         if (message instanceof ArrayBuffer || ArrayBuffer.isView(message)) {
+            console.log(`[VNC] Received binary message from client: ${message.byteLength || message.length} bytes`)
             handleBinaryData(peer, message)
             return
         }
@@ -151,13 +159,25 @@ async function startConnection(peer: any, params: ConnectParams) {
         })
     })
 
+    let firstPacket = true
+    let packetCount = 0
     socket.on('data', (data: Buffer) => {
         // Forward VNC data to WebSocket as binary
+        packetCount++
         try {
-            console.log(`[VNC] Received ${data.length} bytes from VNC server, first bytes:`, data.slice(0, 20).toString('hex'))
+            // Log first few packets for debugging
+            if (packetCount <= 5) {
+                console.log(`[VNC] Packet #${packetCount} from server (${data.length} bytes)${packetCount === 1 ? ': ' + data.toString('utf8').substring(0, 20) : ''}`)
+            }
+            if (packetCount === 10) {
+                console.log(`[VNC] Data flowing, stopping detailed packet logs...`)
+            }
+
+            // Send to WebSocket as binary
             peer.send(data)
         } catch (e) {
             console.error('[VNC] Failed to send data to WebSocket:', e)
+            console.error('[VNC] Error details:', (e as Error).message, (e as Error).stack)
         }
     })
 
@@ -197,25 +217,46 @@ async function startConnection(peer: any, params: ConnectParams) {
     socket.connect(params.port, params.host)
 }
 
+// Track client packets per connection
+const clientPacketCounts = new Map<string, number>()
+
 function handleBinaryData(peer: any, data: any) {
     const socket = vncSockets.get(peer.id)
-    if (socket && socket.writable) {
-        // Convert to Buffer if needed
-        let buffer: Buffer
-        if (data instanceof ArrayBuffer) {
-            buffer = Buffer.from(data)
-        } else if (ArrayBuffer.isView(data)) {
-            buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
-        } else if (typeof data === 'string') {
-            buffer = Buffer.from(data, 'binary')
-        } else if (data.text) {
-            buffer = Buffer.from(data.text(), 'binary')
-        } else {
-            buffer = Buffer.from(data)
+    if (!socket || !socket.writable) {
+        // Only log once per connection if socket not ready
+        const count = clientPacketCounts.get(peer.id) || 0
+        if (count === 0) {
+            console.log(`[VNC] Cannot send client data - socket not available (will retry silently)`)
         }
-        console.log(`[VNC] Sending ${buffer.length} bytes to VNC server`)
-        socket.write(buffer)
+        return
     }
+
+    // Increment counter
+    const count = (clientPacketCounts.get(peer.id) || 0) + 1
+    clientPacketCounts.set(peer.id, count)
+
+    // Convert to Buffer if needed
+    let buffer: Buffer
+    if (data instanceof ArrayBuffer) {
+        buffer = Buffer.from(data)
+    } else if (ArrayBuffer.isView(data)) {
+        buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+    } else if (typeof data === 'string') {
+        buffer = Buffer.from(data, 'binary')
+    } else if (data.text) {
+        buffer = Buffer.from(data.text(), 'binary')
+    } else {
+        buffer = Buffer.from(data)
+    }
+
+    // Log first few client packets
+    if (count <= 5) {
+        console.log(`[VNC] Client packet #${count} (${buffer.length} bytes)`)
+    } else if (count === 10) {
+        console.log(`[VNC] Client data flowing...`)
+    }
+
+    socket.write(buffer)
 }
 
 function handleDisconnect(peer: any) {
@@ -232,6 +273,9 @@ async function cleanup(peerId: string, connectionId: string, sessionId?: string)
         try { socket.destroy() } catch { }
         vncSockets.delete(peerId)
     }
+
+    // Clean up packet counter
+    clientPacketCounts.delete(peerId)
 
     // Remove from connection manager
     remoteManager.remove(connectionId)

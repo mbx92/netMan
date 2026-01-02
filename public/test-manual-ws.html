@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>VNC Test - Manual WebSocket</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            color: #0f0;
+            font-family: monospace;
+            padding: 20px;
+        }
+
+        #status {
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status">Ready to test...</div>
+    <button onclick="testConnection()">Test WebSocket Connection</button>
+
+    <script>
+        const statusEl = document.getElementById('status');
+
+        function setStatus(msg) {
+            console.log('[Manual Test]', msg);
+            statusEl.innerHTML += '<br>' + msg;
+        }
+
+        function testConnection() {
+            // HARDCODED TEST VALUES
+            const TEST_HOST = '10.5.80.99';
+            const TEST_PORT = '5900';
+            const TEST_PASSWORD = 'royal123!';  // Your actual password
+            const TEST_DEVICE_ID = 'manual-test';
+
+            setStatus('Building WebSocket URL...');
+
+            // Build URL manually
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/remote/guac-vnc?host=${encodeURIComponent(TEST_HOST)}&port=${TEST_PORT}&deviceId=${TEST_DEVICE_ID}&password=${encodeURIComponent(TEST_PASSWORD)}`;
+
+            setStatus('URL: ' + wsUrl);
+            console.log('[Manual Test] WebSocket URL:', wsUrl);
+
+            // Create MANUAL WebSocket (bypass Guacamole library)
+            const ws = new WebSocket(wsUrl);
+
+            ws.onopen = function () {
+                setStatus('✓ WebSocket OPENED!');
+                console.log('[Manual Test] WebSocket opened successfully');
+            };
+
+            ws.onmessage = function (event) {
+                setStatus('← Received: ' + event.data.substring(0, 100));
+                console.log('[Manual Test] Received:', event.data.substring(0, 200));
+            };
+
+            ws.onerror = function (error) {
+                setStatus('✗ WebSocket ERROR: ' + error);
+                console.error('[Manual Test] WebSocket error:', error);
+            };
+
+            ws.onclose = function (event) {
+                setStatus('WebSocket CLOSED (code: ' + event.code + ')');
+                console.log('[Manual Test] WebSocket closed:', event);
+            };
+        }
+    </script>
+</body>
+
+</html>

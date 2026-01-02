@@ -54,7 +54,7 @@
 
           <button 
             type="submit" 
-            class="btn btn-info w-full"
+            class="btn btn-info flex-1"
             :disabled="connecting || !host"
           >
             <span v-if="connecting" class="loading loading-spinner loading-sm"></span>
@@ -62,6 +62,19 @@
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
             </svg>
             {{ connecting ? 'Connecting...' : 'Connect' }}
+          </button>
+          <button 
+            type="button"
+            class="btn btn-info w-full"
+            :disabled="!host"
+            @click="openInNewWindow"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            Open VNC Viewer
           </button>
         </form>
       </div>
@@ -73,7 +86,7 @@
       <div class="flex items-center justify-between px-4 py-2 bg-base-300 border-b border-base-200">
         <div class="flex items-center gap-2">
           <div class="w-3 h-3 rounded-full" :class="vncConnected ? 'bg-success animate-pulse' : 'bg-warning'"></div>
-          <span class="text-sm font-mono">{{ rfbState || `VNC: ${host}:${port}` }}</span>
+          <span class="text-sm font-mono">VNC: {{ host }}:{{ port }}</span>
         </div>
         <div class="flex items-center gap-2">
           <button 
@@ -99,13 +112,11 @@
         ref="vncIframeRef"
         :src="iframeSrc"
         class="flex-1 w-full border-0"
-        allow="clipboard-read; clipboard-write"
       ></iframe>
-
+      
       <!-- Status Bar -->
-      <div class="px-4 py-1 bg-base-300 border-t border-base-200 text-xs text-base-content/60 flex justify-between">
-        <span>{{ vncStatus || 'Connecting...' }}</span>
-        <span v-if="rfbState">{{ rfbState }}</span>
+      <div class="px-4 py-1 bg-base-300 border-t border-base-200 text-xs text-base-content/60">
+        <span>{{ vncStatus || 'Connected' }}</span>
       </div>
     </div>
   </div>
@@ -130,7 +141,6 @@ const vncConnected = ref(false)
 const connecting = ref(false)
 const error = ref('')
 const vncStatus = ref('')
-const rfbState = ref('')
 const iframeSrc = ref('')
 
 // Form data
@@ -146,88 +156,44 @@ watch(() => props.deviceIp, (newIp) => {
   if (newIp) host.value = newIp
 })
 
-// Listen for messages from iframe
-onMounted(() => {
-  window.addEventListener('message', handleIframeMessage)
-})
-
 onUnmounted(() => {
-  window.removeEventListener('message', handleIframeMessage)
   disconnect()
 })
 
-function handleIframeMessage(event: MessageEvent) {
-  if (!event.data || typeof event.data !== 'object') return
-  
-  switch (event.data.type) {
-    case 'vnc-connected':
-      vncConnected.value = true
-      vncStatus.value = 'Connected'
-      emit('connected')
-      break
-    case 'vnc-disconnected':
-      if (!event.data.clean) {
-        error.value = 'Connection lost unexpectedly'
-      }
-      handleDisconnected()
-      break
-    case 'vnc-error':
-      error.value = event.data.message
-      emit('error', event.data.message)
-      break
-    case 'vnc-desktopname':
-      rfbState.value = event.data.name
-      break
-  }
-}
-
 function connect() {
+  console.log('[VNC] Connect button clicked')
+  
   if (connecting.value || connected.value) return
   if (!host.value) return
 
   connecting.value = true
   error.value = ''
-  vncStatus.value = 'Loading...'
+  vncStatus.value = 'Connecting...'
 
-  // Build WebSocket URL to our proxy
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${protocol}//${window.location.host}/api/remote/vnc?host=${encodeURIComponent(host.value)}&port=${port.value}&deviceId=${props.deviceId}`
-
-  // Build iframe URL - use base64 for password to avoid URL encoding issues
-  const passwordB64 = password.value ? btoa(password.value) : ''
-  const iframeParams = new URLSearchParams({
-    wsUrl,
-    passwordB64,
+  // Build iframe URL to noVNC viewer
+  const params = new URLSearchParams({
+    host: host.value,
+    port: port.value.toString(),
+    deviceId: props.deviceId,
+    password: password.value || ''
   })
-  iframeSrc.value = `/novnc/vnc.html?${iframeParams.toString()}`
+  
+  iframeSrc.value = `/novnc/vnc.html?${params.toString()}`
+  console.log('[VNC] Loading noVNC viewer:', iframeSrc.value)
   
   connected.value = true
   connecting.value = false
-  vncStatus.value = 'Connecting...'
-}
-
-function handleDisconnected() {
-  connected.value = false
-  vncConnected.value = false
-  connecting.value = false
-  rfbState.value = ''
-  iframeSrc.value = ''
-  emit('disconnected')
+  vncConnected.value = true
+  vncStatus.value = 'Connected'
+  emit('connected')
 }
 
 function disconnect() {
-  // Try to disconnect via iframe
-  if (vncIframeRef.value?.contentWindow) {
-    try {
-      const rfb = (vncIframeRef.value.contentWindow as any).vncRfb
-      if (rfb) {
-        rfb.disconnect()
-      }
-    } catch (e) {
-      // Ignore - might be cross-origin
-    }
-  }
-  handleDisconnected()
+  connected.value = false
+  vncConnected.value = false
+  connecting.value = false
+  iframeSrc.value = ''
+  emit('disconnected')
 }
 
 function toggleFullscreen() {
@@ -238,5 +204,28 @@ function toggleFullscreen() {
   } else {
     document.exitFullscreen()
   }
+}
+
+function openInNewWindow() {
+  if (!host.value) return
+  
+  // Create .vnc connection file content
+  const vncContent = `[Connection]
+Host=${host.value}
+Port=${port.value}
+`
+  
+  // Download as .vnc file
+  const blob = new Blob([vncContent], { type: 'application/x-vnc' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${host.value}.vnc`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  
+  console.log('[VNC] Downloaded .vnc file for:', host.value)
 }
 </script>

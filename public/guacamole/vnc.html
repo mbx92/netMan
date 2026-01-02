@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VNC via Guacamole</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #display {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            border-radius: 4px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status">Initializing...</div>
+    <div id="display"></div>
+
+    <!-- Load Guacamole client library - official Apache build -->
+    <script src="/guacamole/guacamole.js"></script>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const displayEl = document.getElementById('display');
+
+        function setStatus(msg) {
+            console.log('[Guac]', msg);
+            statusEl.textContent = msg;
+        }
+
+        // Get connection params from URL
+        const params = new URLSearchParams(window.location.search);
+        const host = params.get('host');
+        const port = params.get('port') || '5900';
+        const deviceId = params.get('deviceId');
+        const password = params.get('password') || '';
+
+        console.log('[vnc.html] Password from URL:', JSON.stringify(password));
+
+        if (!host || !deviceId) {
+            setStatus('Missing connection parameters');
+            throw new Error('Missing host or deviceId');
+        }
+
+        // Build WebSocket URL
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/api/remote/guac-vnc?host=${encodeURIComponent(host)}&port=${port}&deviceId=${deviceId}&password=${encodeURIComponent(password)}`;
+
+        console.log('[vnc.html] WebSocket URL:', wsUrl);
+        setStatus('Connecting to ' + host + ':' + port);
+
+        // Create Guacamole tunnel and client
+        const tunnel = new Guacamole.WebSocketTunnel(wsUrl);
+        const client = new Guacamole.Client(tunnel);
+
+        // Attach display
+        const display = client.getDisplay();
+        displayEl.appendChild(display.getElement());
+
+        // Handle state changes
+        client.onstatechange = function (state) {
+            switch (state) {
+                case Guacamole.Client.IDLE:
+                    setStatus('Idle');
+                    break;
+                case Guacamole.Client.CONNECTING:
+                    setStatus('Connecting...');
+                    break;
+                case Guacamole.Client.WAITING:
+                    setStatus('Waiting...');
+                    break;
+                case Guacamole.Client.CONNECTED:
+                    setStatus('Connected!');
+                    setTimeout(() => statusEl.style.display = 'none', 2000);
+                    break;
+                case Guacamole.Client.DISCONNECTING:
+                    setStatus('Disconnecting...');
+                    break;
+                case Guacamole.Client.DISCONNECTED:
+                    setStatus('Disconnected');
+                    statusEl.style.display = 'block';
+                    break;
+            }
+        };
+
+        // Handle errors
+        client.onerror = function (status) {
+            setStatus('Error: ' + (status.message || 'Unknown error'));
+            console.error('[Guac] Error:', status);
+        };
+
+        // Handle desktop name
+        client.onname = function (name) {
+            document.title = name + ' - VNC';
+        };
+
+        // Enable mouse
+        const mouse = new Guacamole.Mouse(display.getElement());
+        mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = function (mouseState) {
+            client.sendMouseState(mouseState);
+        };
+
+        // Enable keyboard
+        const keyboard = new Guacamole.Keyboard(document);
+        keyboard.onkeydown = function (keysym) {
+            client.sendKeyEvent(1, keysym);
+        };
+        keyboard.onkeyup = function (keysym) {
+            client.sendKeyEvent(0, keysym);
+        };
+
+        // Connect
+        client.connect();
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function () {
+            client.disconnect();
+        });
+    </script>
+</body>
+
+</html>

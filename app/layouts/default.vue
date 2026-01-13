@@ -141,11 +141,35 @@
         <slot />
       </main>
     </div>
+
+    <!-- Logout Confirmation Modal -->
+    <dialog ref="logoutModal" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg">Konfirmasi Logout</h3>
+        <p class="py-4">Apakah Anda yakin ingin logout?</p>
+        <div class="modal-action">
+          <button @click="closeLogoutModal" class="btn btn-ghost">Batal</button>
+          <button @click="confirmLogout" class="btn btn-error">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Logout
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 const { user, logout } = useAuth()
+
+const logoutModal = ref<HTMLDialogElement | null>(null)
 
 const userInitials = computed(() => {
   if (!user.value?.name) return 'U'
@@ -156,10 +180,17 @@ const userInitials = computed(() => {
   return names[0].substring(0, 2).toUpperCase()
 })
 
-const handleLogout = async () => {
-  if (confirm('Apakah Anda yakin ingin logout?')) {
-    await logout()
-  }
+const handleLogout = () => {
+  logoutModal.value?.showModal()
+}
+
+const closeLogoutModal = () => {
+  logoutModal.value?.close()
+}
+
+const confirmLogout = async () => {
+  logoutModal.value?.close()
+  await logout()
 }
 </script>
 

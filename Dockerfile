@@ -9,6 +9,18 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# SSO Configuration - passed as build args
+ARG SSO_BASE_URL=https://sso.baliroyalhospital.co.id
+ARG SSO_CLIENT_ID
+ARG SSO_CLIENT_SECRET
+ARG SSO_REDIRECT_URI=https://netman.baliroyalhospital.co.id/auth/callback
+
+ENV SSO_BASE_URL=$SSO_BASE_URL
+ENV SSO_CLIENT_ID=$SSO_CLIENT_ID
+ENV SSO_CLIENT_SECRET=$SSO_CLIENT_SECRET
+ENV SSO_REDIRECT_URI=$SSO_REDIRECT_URI
+
 RUN npx prisma generate
 RUN npm run build
 

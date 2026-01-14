@@ -11,6 +11,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - SSO_BASE_URL=${SSO_BASE_URL:-https://sso.baliroyalhospital.co.id}
+        - SSO_CLIENT_ID=${SSO_CLIENT_ID}
+        - SSO_CLIENT_SECRET=${SSO_CLIENT_SECRET}
+        - SSO_REDIRECT_URI=${SSO_REDIRECT_URI:-https://netman.baliroyalhospital.co.id/auth/callback}
     container_name: netman-app
     restart: unless-stopped
     ports:

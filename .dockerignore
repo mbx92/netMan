@@ -1,0 +1,54 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Nuxt build outputs
+.nuxt
+.output
+.data
+.nitro
+.cache
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+.fleet
+*.swp
+*.swo
+
+# Environment files (use .env.docker instead)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# Logs
+logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*.test.js
+*.spec.js
+__tests__
+
+# Documentation
+docs
+README.md
+*.md
+!prisma/*.md
+
+# Temp files
+guacamole-extracted
+guacamole.zip
+novnc-temp
+novnc.zip
+test-*.mjs

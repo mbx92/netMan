@@ -1,0 +1,37 @@
+# NetMan - Docker Compose Production Configuration
+# ==============================================================================
+# Usage: docker compose --env-file .env.docker up -d --build
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # NetMan Application
+  # ============================================================================
+  netman-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: netman-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-netMan}?schema=public
+    env_file:
+      - .env.docker
+    networks:
+      - postgres_default
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# ==============================================================================
+# Networks - Use existing PostgreSQL network
+# ==============================================================================
+networks:
+  postgres_default:
+    external: true

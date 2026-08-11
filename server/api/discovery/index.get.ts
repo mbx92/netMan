@@ -1,11 +1,10 @@
-import { discoveryJobs } from './index.post'
+import { discoveryJobs } from '../../utils/discovery-jobs'
 
 // GET /api/discovery - Get discovery job status and results
 export default defineEventHandler(async (event) => {
     const query = getQuery(event)
     const jobId = query.jobId as string
 
-    // If no jobId, return list of recent jobs
     if (!jobId) {
         const jobs = Array.from(discoveryJobs.values())
             .sort((a, b) => {
@@ -17,7 +16,7 @@ export default defineEventHandler(async (event) => {
             .map((job) => ({
                 id: job.id,
                 networks: job.networks,
-                network: job.networks.join(', '), // Backward compat
+                network: job.networks.join(', '),
                 status: job.status,
                 totalHosts: job.totalHosts,
                 scannedHosts: job.scannedHosts,
@@ -29,7 +28,6 @@ export default defineEventHandler(async (event) => {
         return { jobs }
     }
 
-    // Get specific job
     const job = discoveryJobs.get(jobId)
 
     if (!job) {
@@ -42,7 +40,7 @@ export default defineEventHandler(async (event) => {
     return {
         id: job.id,
         networks: job.networks,
-        network: job.networks.join(', '), // Backward compat
+        network: job.networks.join(', '),
         status: job.status,
         totalHosts: job.totalHosts,
         scannedHosts: job.scannedHosts,

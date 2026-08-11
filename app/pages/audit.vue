@@ -1,12 +1,12 @@
 <template>
   <div class="animate-fade-in">
     <div class="mb-6">
-      <h1 class="text-3xl font-bold">Audit Logs</h1>
-      <p class="text-base-content/60 mt-1">Track all system actions and changes</p>
+      <h1 class="type-headline">Audit Logs</h1>
+      <p class="type-body-sm text-base-content/60 mt-1">Track all system actions and changes</p>
     </div>
 
     <!-- Filters -->
-    <div class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-4 mb-6">
+    <div class="bg-base-100 border border-base-300 rounded-none p-4 mb-6">
       <div class="flex flex-wrap gap-4">
         <input 
           v-model="filters.actor" 
@@ -26,14 +26,14 @@
           Clear filters
         </button>
         <button class="btn btn-ghost btn-sm ml-auto" @click="loadLogs">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/></svg>
+          <RefreshCw class="w-4 h-4" :stroke-width="2" />
           Refresh
         </button>
       </div>
     </div>
 
     <!-- Logs Table -->
-    <div class="bg-base-100 rounded-xl shadow-lg border border-base-200 overflow-hidden">
+    <div class="bg-base-100 border border-base-300 rounded-none overflow-hidden">
       <div class="overflow-x-auto">
         <table class="table">
           <thead>
@@ -64,7 +64,7 @@
               </td>
               <td>
                 <div class="flex items-center gap-2">
-                  <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                  <div class="w-8 h-8 rounded-sm bg-primary/20 flex items-center justify-center">
                     <span class="text-xs font-semibold text-primary">{{ log.actor.slice(0, 2).toUpperCase() }}</span>
                   </div>
                   <span class="font-medium">{{ log.actor }}</span>
@@ -119,10 +119,10 @@
     </div>
 
     <!-- Details Modal -->
-    <dialog :class="['modal', showDetailsModal && 'modal-open']">
-      <div class="modal-box glass-modal">
-        <h3 class="font-bold text-lg mb-4">Log Details</h3>
-        <pre class="bg-base-200 p-4 rounded-lg overflow-auto text-sm">{{ JSON.stringify(selectedLog?.details, null, 2) }}</pre>
+    <dialog class="modal" :class="{ 'modal-open': showDetailsModal }" :open="showDetailsModal || undefined" @close="showDetailsModal = false">
+      <div class="modal-box glass-modal rounded-none">
+        <h3 class="type-card-title mb-4">Log Details</h3>
+        <pre class="bg-base-200 p-4 rounded-none overflow-auto text-sm">{{ JSON.stringify(selectedLog?.details, null, 2) }}</pre>
         <div class="modal-action">
           <button class="btn" @click="showDetailsModal = false">Close</button>
         </div>
@@ -135,6 +135,8 @@
 </template>
 
 <script setup lang="ts">
+import { RefreshCw } from '@lucide/vue'
+
 interface AuditLog {
   id: string
   actor: string
@@ -215,17 +217,11 @@ function formatAction(action: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
+  return formatAbsoluteTime(dateStr).slice(0, 10)
 }
 
 function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const stamp = formatAbsoluteTime(dateStr)
+  return stamp === '—' ? '—' : stamp.slice(11, 16)
 }
 </script>

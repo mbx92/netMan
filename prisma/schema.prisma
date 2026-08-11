@@ -280,3 +280,20 @@ model NAS {
 
   @@index([siteId])
 }
+
+// ============================================
+// LOCAL APP USERS (non-SSO)
+// ============================================
+
+model AppUser {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  roleName     String   @default("admin")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([email])
+}

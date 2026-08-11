@@ -1,12 +1,12 @@
 <template>
   <div class="animate-fade-in">
-    <!-- Page Header -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-3xl font-bold">Network Topology</h1>
-        <p class="text-base-content/60 mt-1">Visual overview of your network infrastructure</p>
+        <p class="page-kicker mb-2">Operations</p>
+        <h1 class="type-headline">Network Topology</h1>
+        <p class="type-body-sm text-base-content/60 mt-1">Visual overview of your network infrastructure</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <select v-model="selectedSiteId" class="select select-bordered select-sm w-auto" @change="loadTopology">
           <option value="">All Sites</option>
           <option v-for="site in sites" :key="site.id" :value="site.id">{{ site.name }}</option>
@@ -15,151 +15,172 @@
           <option value="">All Floors</option>
           <option v-for="floor in floors" :key="floor" :value="floor">{{ floor }}</option>
         </select>
-        <input 
-          v-model="locationSearch" 
-          type="text" 
-          placeholder="Location..." 
+        <input
+          v-model="locationSearch"
+          type="text"
+          placeholder="Location..."
           class="input input-bordered input-sm w-32"
           @input="debouncedSearch"
         />
-        <button class="btn btn-outline btn-sm" :disabled="loading" @click="loadTopology">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        <button class="btn btn-outline btn-sm gap-2" :disabled="loading" @click="loadTopology">
+          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': loading }" :stroke-width="2" />
           Refresh
+        </button>
+        <button class="btn btn-ghost btn-sm" :disabled="!flowNodes.length || !hasSettledOnce" @click="refit">
+          Fit view
         </button>
       </div>
     </div>
 
-    <!-- Stats -->
     <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-      <div class="bg-base-100 rounded-lg p-3 border border-base-200">
-        <div class="text-2xl font-bold">{{ stats.totalNodes }}</div>
-        <div class="text-xs text-base-content/60">Total Nodes</div>
-      </div>
-      <div class="bg-base-100 rounded-lg p-3 border border-base-200">
-        <div class="text-2xl font-bold text-primary">{{ stats.routers }}</div>
-        <div class="text-xs text-base-content/60">Routers</div>
-      </div>
-      <div class="bg-base-100 rounded-lg p-3 border border-base-200">
-        <div class="text-2xl font-bold text-info">{{ stats.switches }}</div>
-        <div class="text-xs text-base-content/60">Switches</div>
-      </div>
-      <div class="bg-base-100 rounded-lg p-3 border border-base-200">
-        <div class="text-2xl font-bold text-secondary">{{ stats.devices }}</div>
-        <div class="text-xs text-base-content/60">Devices</div>
-      </div>
-      <div class="bg-base-100 rounded-lg p-3 border border-base-200">
-        <div class="text-2xl font-bold text-success">{{ stats.online }}</div>
-        <div class="text-xs text-base-content/60">Online</div>
-      </div>
-      <div class="bg-base-100 rounded-lg p-3 border border-base-200">
-        <div class="text-2xl font-bold text-error">{{ stats.offline }}</div>
-        <div class="text-xs text-base-content/60">Offline</div>
+      <div v-for="card in statCards" :key="card.label" class="stat-card p-3">
+        <div class="text-2xl font-bold" :class="card.className">
+          <template v-if="initialLoading">
+            <span class="inline-block h-7 w-10 bg-base-200 animate-pulse" />
+          </template>
+          <template v-else>{{ card.value }}</template>
+        </div>
+        <div class="type-caption text-base-content/60">{{ card.label }}</div>
       </div>
     </div>
 
-    <!-- Topology Canvas -->
-    <div class="bg-base-100 rounded-xl shadow-lg border border-base-200 overflow-hidden">
-      <!-- Loading -->
-      <div v-if="loading" class="flex items-center justify-center h-[600px]">
-        <span class="loading loading-spinner loading-lg text-primary"></span>
-      </div>
-      
-      <!-- Empty State -->
-      <div v-else-if="nodes.length === 0" class="flex flex-col items-center justify-center h-[600px] text-center p-8">
-        <div class="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/>
-            <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="12" x2="5" y2="16"/><line x1="12" y1="12" x2="19" y2="16"/>
-          </svg>
+    <div class="bg-base-100 border border-base-300 rounded-none overflow-hidden relative">
+      <!-- First load skeleton -->
+      <div
+        v-if="initialLoading"
+        class="flex flex-col items-center justify-center h-[600px] gap-4 topology-skeleton"
+      >
+        <div class="topology-skeleton__tiers" aria-hidden="true">
+          <div class="topology-skeleton__row">
+            <span /><span />
+          </div>
+          <div class="topology-skeleton__row">
+            <span /><span /><span />
+          </div>
+          <div class="topology-skeleton__row">
+            <span /><span /><span /><span /><span />
+          </div>
         </div>
-        <h3 class="text-xl font-semibold mb-2">No Devices Found</h3>
-        <p class="text-base-content/60 max-w-md">Add devices in the Devices page or configure MikroTik routers to see your network topology.</p>
+        <p class="type-mono text-base-content/50">Mapping fabric…</p>
       </div>
 
-      <!-- Topology Graph -->
-      <div v-else class="relative">
-        <svg ref="svgRef" class="w-full h-[600px] bg-base-200/30 rounded-lg"></svg>
-        
-        <!-- Zoom controls -->
-        <div class="absolute top-4 right-4 flex flex-col gap-1">
-          <button class="btn btn-sm btn-square bg-base-100" @click="zoomIn">+</button>
-          <button class="btn btn-sm btn-square bg-base-100" @click="zoomOut">-</button>
-          <button class="btn btn-sm btn-square bg-base-100" @click="resetZoom">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><path d="M12 8v4l2 2"/></svg>
-          </button>
+      <div
+        v-else-if="!initialLoading && topologyNodes.length === 0"
+        class="flex flex-col items-center justify-center h-[600px] text-center p-8"
+      >
+        <div class="w-20 h-20 rounded-none bg-primary/10 border border-primary/20 flex items-center justify-center mb-4">
+          <Waypoints class="w-10 h-10 text-primary" :stroke-width="2" />
+        </div>
+        <h3 class="type-card-title mb-2">No Devices Found</h3>
+        <p class="type-body-sm text-base-content/60 max-w-md">
+          Add devices in the Devices page or configure MikroTik routers to see your network topology.
+        </p>
+      </div>
+
+      <ClientOnly v-else>
+        <div
+          class="h-[600px] topology-canvas"
+          :class="{ 'is-settling': !hasSettledOnce, 'is-refreshing': refreshing }"
+        >
+          <VueFlow
+            id="netman-topology"
+            v-model:nodes="flowNodes"
+            v-model:edges="flowEdges"
+            :node-types="nodeTypes"
+            :default-viewport="{ zoom: 0.9, x: 0, y: 0 }"
+            :min-zoom="0.15"
+            :max-zoom="2"
+            :nodes-draggable="true"
+            :nodes-connectable="false"
+            :elements-selectable="true"
+            :default-edge-options="{ type: 'smoothstep' }"
+            @node-click="onNodeClick"
+          >
+            <Background :gap="24" :size="1" :color="gridColor" />
+            <Controls :show-interactive="false" class="topology-controls" />
+            <MiniMap
+              class="topology-minimap"
+              :node-color="miniMapNodeColor"
+              :mask-color="minimapMask"
+            />
+          </VueFlow>
+
+          <div v-if="refreshing" class="topology-canvas__overlay">
+            <span class="loading loading-spinner loading-md text-primary" />
+          </div>
+        </div>
+        <template #fallback>
+          <div class="flex items-center justify-center h-[600px]">
+            <span class="loading loading-spinner loading-lg text-primary" />
+          </div>
+        </template>
+      </ClientOnly>
+    </div>
+
+    <div class="mt-4 bg-base-100 border border-base-300 rounded-none p-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 type-body-sm">
+        <div>
+          <div class="type-body-emphasis mb-2">Device Types</div>
+          <div class="flex flex-wrap gap-2">
+            <div
+              v-for="dt in deviceTypes"
+              :key="dt.code"
+              class="flex items-center gap-1"
+            >
+              <div
+                class="w-3 h-3 rounded-none"
+                :style="{ backgroundColor: dt.color || '#6b7280' }"
+              />
+              <span>{{ dt.name }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="type-body-emphasis mb-2">Connection Types</div>
+          <div class="flex flex-wrap gap-3">
+            <div class="flex items-center gap-1">
+              <svg class="w-6 h-2" aria-hidden="true"><line x1="0" y1="4" x2="24" y2="4" stroke="#525252" stroke-width="2"/></svg>
+              <span>Physical</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <svg class="w-6 h-2" aria-hidden="true"><line x1="0" y1="4" x2="24" y2="4" stroke="#0f62fe" stroke-width="2"/></svg>
+              <span>Uplink</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <svg class="w-6 h-2" aria-hidden="true"><line x1="0" y1="4" x2="24" y2="4" stroke="#525252" stroke-width="1.5" stroke-dasharray="4,4"/></svg>
+              <span>Virtual (VM)</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="type-body-emphasis mb-2">Status</div>
+          <div class="flex gap-3">
+            <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-full bg-success ring-2 ring-success/50" /> Online</div>
+            <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-full bg-error ring-2 ring-error/50" /> Offline</div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Legend (outside canvas) -->
-    <div class="mt-4 bg-base-100 rounded-xl shadow-lg border border-base-200 p-4">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          <!-- Device Types -->
-          <div>
-            <div class="font-semibold mb-2">Device Types</div>
-            <div class="flex flex-wrap gap-2">
-              <div 
-                v-for="dt in deviceTypes" 
-                :key="dt.code" 
-                class="flex items-center gap-1"
-              >
-                <div 
-                  class="w-3 h-3 rounded-full" 
-                  :style="{ backgroundColor: dt.color || '#6b7280' }"
-                ></div>
-                <span>{{ dt.name }}</span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Connection Types -->
-          <div>
-            <div class="font-semibold mb-2">Connection Types</div>
-            <div class="flex flex-wrap gap-3">
-              <div class="flex items-center gap-1">
-                <svg class="w-6 h-2"><line x1="0" y1="4" x2="24" y2="4" stroke="#4b5563" stroke-width="2"/></svg>
-                <span>Physical</span>
-              </div>
-              <div class="flex items-center gap-1">
-                <svg class="w-6 h-2"><line x1="0" y1="4" x2="24" y2="4" stroke="#3b82f6" stroke-width="2"/></svg>
-                <span>Uplink</span>
-              </div>
-              <div class="flex items-center gap-1">
-                <svg class="w-6 h-2"><line x1="0" y1="4" x2="24" y2="4" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,4"/></svg>
-                <span>Virtual (VM)</span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Status -->
-          <div>
-            <div class="font-semibold mb-2">Status</div>
-            <div class="flex gap-3">
-              <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-full bg-success ring-2 ring-success/50"></div> Online</div>
-              <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-full bg-error ring-2 ring-error/50"></div> Offline</div>
-            </div>
-          </div>
-        </div>
-    </div>
-
-    <!-- Selected Node Details -->
-    <dialog :class="['modal', selectedNode && 'modal-open']">
-      <div class="modal-box glass-modal">
+    <dialog class="modal" :class="{ 'modal-open': selectedNode }" :open="selectedNode || undefined" @close="selectedNode = null">
+      <div class="modal-box glass-modal rounded-none">
         <div class="flex items-center gap-3 mb-4">
-          <div :class="['w-12 h-12 rounded-full flex items-center justify-center', getNodeBgClass(selectedNode)]">
-            <svg v-if="selectedNode?.type === 'router'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="14"/><line x1="10" y1="10" x2="10" y2="14"/></svg>
-            <svg v-else-if="selectedNode?.type === 'switch'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="8" width="14" height="10" rx="1"/><line x1="8" y1="4" x2="8" y2="8"/><line x1="12" y1="4" x2="12" y2="8"/><line x1="16" y1="4" x2="16" y2="8"/></svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+          <div :class="['w-12 h-12 rounded-none flex items-center justify-center', getNodeBgClass(selectedNode)]">
+            <Router v-if="selectedNode?.type === 'router'" class="w-6 h-6" :stroke-width="2" />
+            <Cable v-else-if="selectedNode?.type === 'switch'" class="w-6 h-6" :stroke-width="2" />
+            <Monitor v-else class="w-6 h-6" :stroke-width="2" />
           </div>
           <div>
-            <h3 class="font-bold text-lg">{{ selectedNode?.name }}</h3>
+            <h3 class="type-card-title">{{ selectedNode?.name }}</h3>
             <span :class="['badge badge-sm', selectedNode?.status === 'online' ? 'badge-success' : selectedNode?.status === 'offline' ? 'badge-error' : 'badge-ghost']">
               {{ selectedNode?.status || 'Unknown' }}
             </span>
           </div>
         </div>
 
-        <div class="space-y-2 text-sm">
+        <div class="space-y-2 type-body-sm">
           <div class="flex justify-between"><span class="text-base-content/60">Type:</span><span class="capitalize">{{ selectedNode?.type }}</span></div>
           <div v-if="selectedNode?.ip" class="flex justify-between"><span class="text-base-content/60">IP:</span><span class="font-mono">{{ selectedNode.ip }}</span></div>
           <div v-if="selectedNode?.mac" class="flex justify-between"><span class="text-base-content/60">MAC:</span><span class="font-mono">{{ formatMac(selectedNode.mac) }}</span></div>
@@ -180,13 +201,30 @@
 </template>
 
 <script setup lang="ts">
-import * as d3 from 'd3'
+import { markRaw } from 'vue'
+import { Cable, Monitor, RefreshCw, Router, Waypoints } from '@lucide/vue'
+import {
+  VueFlow,
+  useVueFlow,
+  type Node,
+  type Edge,
+  type NodeMouseEvent,
+} from '@vue-flow/core'
+import { Background } from '@vue-flow/background'
+import { Controls } from '@vue-flow/controls'
+import { MiniMap } from '@vue-flow/minimap'
+import TopologyDeviceNode from '~/components/topology/TopologyDeviceNode.vue'
+
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import '@vue-flow/controls/dist/style.css'
+import '@vue-flow/minimap/dist/style.css'
 
 interface TopologyNode {
   id: string
   name: string
   type: 'router' | 'switch' | 'access_point' | 'server' | 'pc' | 'nas' | 'printer' | 'camera' | 'smart_tv' | 'vm' | 'unknown'
-  typeCode: string  // Original device type code from DB
+  typeCode: string
   ip?: string
   mac?: string
   siteId?: string
@@ -194,15 +232,11 @@ interface TopologyNode {
   status?: 'online' | 'offline' | 'unknown'
   ports?: number
   tier?: number
-  x?: number
-  y?: number
-  fx?: number | null
-  fy?: number | null
 }
 
 interface TopologyLink {
-  source: string | TopologyNode
-  target: string | TopologyNode
+  source: string
+  target: string
   label?: string
   linkType: 'physical' | 'virtual' | 'uplink'
 }
@@ -220,34 +254,211 @@ interface DeviceTypeInfo {
   topologyTier: number
 }
 
-// State
-const svgRef = ref<SVGSVGElement | null>(null)
+/** Visual size of TopologyDeviceNode (keep in sync with component CSS) */
+const NODE_W = 128
+const NODE_H = 96
+const H_GAP = 40
+const V_GAP = 110
+const ROW_PAD_X = 48
+const MAX_PER_ROW = 8
+
 const selectedSiteId = ref('')
 const selectedFloor = ref('')
 const locationSearch = ref('')
-const loading = ref(true)
-const nodes = ref<TopologyNode[]>([])
-const links = ref<TopologyLink[]>([])
+const initialLoading = ref(true)
+const refreshing = ref(false)
+const hasSettledOnce = ref(false)
+const topologyNodes = ref<TopologyNode[]>([])
+const topologyLinks = ref<TopologyLink[]>([])
 const sites = ref<Site[]>([])
 const floors = ref<string[]>([])
 const deviceTypes = ref<DeviceTypeInfo[]>([])
 const stats = ref({ totalNodes: 0, routers: 0, switches: 0, devices: 0, online: 0, offline: 0 })
 const selectedNode = ref<TopologyNode | null>(null)
 
-let simulation: d3.Simulation<TopologyNode, TopologyLink> | null = null
-let svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null
-let g: d3.Selection<SVGGElement, unknown, null, undefined> | null = null
-let zoom: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null
+const flowNodes = ref<Node[]>([])
+const flowEdges = ref<Edge[]>([])
 
-// Debounced search for location
+const nodeTypes = {
+  device: markRaw(TopologyDeviceNode),
+}
+
+const { fitView, onNodesInitialized } = useVueFlow({ id: 'netman-topology' })
+const { isDark } = useTheme()
+
+const loading = computed(() => initialLoading.value || refreshing.value)
+const gridColor = computed(() => (isDark.value ? '#393939' : '#e0e0e0'))
+const minimapMask = computed(() =>
+  isDark.value ? 'rgba(0, 0, 0, 0.45)' : 'rgba(22, 22, 22, 0.12)',
+)
+
+const statCards = computed(() => [
+  { label: 'Total Nodes', value: stats.value.totalNodes, className: '' },
+  { label: 'Routers', value: stats.value.routers, className: 'text-primary' },
+  { label: 'Switches', value: stats.value.switches, className: 'text-info' },
+  { label: 'Devices', value: stats.value.devices, className: 'text-secondary' },
+  { label: 'Online', value: stats.value.online, className: 'text-success' },
+  { label: 'Offline', value: stats.value.offline, className: 'text-error' },
+])
+
+onNodesInitialized(() => {
+  // Wait until measured dimensions exist, then frame — avoids first-paint jump
+  void settleViewport()
+})
+
+async function settleViewport() {
+  if (!flowNodes.value.length) {
+    hasSettledOnce.value = true
+    return
+  }
+  await nextTick()
+  await fitView({
+    padding: 0.28,
+    duration: hasSettledOnce.value ? 220 : 0,
+    maxZoom: 1.05,
+    minZoom: 0.2,
+  })
+  hasSettledOnce.value = true
+}
+
+function refit() {
+  void fitView({ padding: 0.28, duration: 220, maxZoom: 1.05 })
+}
+
 let searchTimeout: ReturnType<typeof setTimeout>
 function debouncedSearch() {
   clearTimeout(searchTimeout)
   searchTimeout = setTimeout(() => loadTopology(), 500)
 }
 
+function getNodeColor(node: TopologyNode): string {
+  const dt = deviceTypes.value.find(d => d.code === node.typeCode)
+  if (dt?.color) return dt.color
+  return '#6b7280'
+}
+
+function formatMac(mac: string | undefined): string {
+  if (!mac) return '-'
+  const clean = mac.replace(/[:\-]/g, '').toUpperCase()
+  return clean.match(/.{1,2}/g)?.join(':') || mac
+}
+
+function getNodeBgClass(node: TopologyNode | null): string {
+  if (!node) return 'bg-base-300'
+  switch (node.type) {
+    case 'router': return 'bg-primary text-primary-content'
+    case 'switch': return 'bg-info text-info-content'
+    case 'access_point': return 'bg-warning text-warning-content'
+    case 'server': return 'bg-success text-success-content'
+    case 'nas': return 'bg-accent text-accent-content'
+    case 'pc': return 'bg-secondary text-secondary-content'
+    default: return 'bg-base-300'
+  }
+}
+
+function edgeStyle(linkType: TopologyLink['linkType']) {
+  switch (linkType) {
+    case 'uplink':
+      return { stroke: '#0f62fe', strokeWidth: 2 }
+    case 'virtual':
+      return { stroke: '#525252', strokeWidth: 1.5, strokeDasharray: '5 5' }
+    default:
+      return { stroke: '#525252', strokeWidth: 2 }
+  }
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  if (items.length === 0) return []
+  const rows: T[][] = []
+  for (let i = 0; i < items.length; i += size) {
+    rows.push(items.slice(i, i + size))
+  }
+  return rows
+}
+
+function buildFlowGraph() {
+  const usedIds = new Set<string>()
+  const take = (list: TopologyNode[]) =>
+    list.filter((n) => {
+      if (usedIds.has(n.id)) return false
+      usedIds.add(n.id)
+      return true
+    })
+
+  const routers = take(topologyNodes.value.filter(n => n.tier === 0 || n.type === 'router'))
+  const switches = take(topologyNodes.value.filter(n => n.tier === 1 || n.type === 'switch' || n.type === 'access_point'))
+  const devices = take(topologyNodes.value.filter(n => !usedIds.has(n.id)))
+
+  const tiers = [
+    chunk(routers, MAX_PER_ROW),
+    chunk(switches, MAX_PER_ROW),
+    chunk(devices, MAX_PER_ROW),
+  ].filter(rows => rows.length > 0)
+
+  const maxCount = Math.max(
+    1,
+    ...tiers.flatMap(rows => rows.map(r => r.length)),
+  )
+  const contentWidth = ROW_PAD_X * 2 + maxCount * NODE_W + (maxCount - 1) * H_GAP
+
+  const placed: Node[] = []
+  let cursorY = 32
+
+  for (const rows of tiers) {
+    for (const row of rows) {
+      const rowWidth = row.length * NODE_W + Math.max(0, row.length - 1) * H_GAP
+      const startX = Math.max(ROW_PAD_X, (contentWidth - rowWidth) / 2)
+
+      row.forEach((node, i) => {
+        placed.push({
+          id: node.id,
+          type: 'device',
+          position: {
+            x: startX + i * (NODE_W + H_GAP),
+            y: cursorY,
+          },
+          data: {
+            name: node.name,
+            type: node.type,
+            typeCode: node.typeCode,
+            ip: node.ip,
+            mac: node.mac,
+            siteName: node.siteName,
+            status: node.status,
+            ports: node.ports,
+            color: getNodeColor(node),
+          },
+          draggable: true,
+        })
+      })
+
+      cursorY += NODE_H + V_GAP
+    }
+    // Extra gap between tier groups
+    cursorY += 12
+  }
+
+  flowNodes.value = placed
+  flowEdges.value = topologyLinks.value.map((link, index) => ({
+    id: `e-${link.source}-${link.target}-${index}`,
+    source: link.source,
+    target: link.target,
+    label: link.label,
+    type: 'smoothstep',
+    animated: link.linkType === 'uplink',
+    style: edgeStyle(link.linkType),
+    labelStyle: { fill: '#525252', fontSize: 10 },
+  } satisfies Edge))
+}
+
 async function loadTopology() {
-  loading.value = true
+  const isFirst = initialLoading.value || topologyNodes.value.length === 0
+  if (isFirst) {
+    initialLoading.value = true
+  } else {
+    refreshing.value = true
+  }
+
   try {
     const queryParams: Record<string, string> = {}
     if (selectedSiteId.value) queryParams.siteId = selectedSiteId.value
@@ -262,276 +473,133 @@ async function loadTopology() {
       floors: string[]
       deviceTypes: DeviceTypeInfo[]
     }>('/api/topology', { query: queryParams })
-    nodes.value = data.nodes
-    links.value = data.links
+
+    topologyNodes.value = data.nodes
+    topologyLinks.value = data.links
     stats.value = data.stats
     sites.value = data.sites
     floors.value = data.floors
     deviceTypes.value = data.deviceTypes
+    buildFlowGraph()
   } catch (error) {
     console.error('Failed to load topology:', error)
+    hasSettledOnce.value = true
   } finally {
-    loading.value = false
-    // After loading=false, SVG becomes visible. Wait for next tick then render
-    await nextTick()
-    if (nodes.value.length > 0) {
-      // Additional delay to ensure DOM is fully rendered
-      setTimeout(() => {
-        renderTopology()
-      }, 100)
-    }
+    initialLoading.value = false
+    refreshing.value = false
   }
 }
 
-// Lookup color from deviceTypes based on node's typeCode
-function getNodeColor(node: TopologyNode): string {
-  // Find matching deviceType by code
-  const dt = deviceTypes.value.find(d => d.code === node.typeCode)
-  if (dt?.color) return dt.color
-  
-  // Fallback to gray if not found
-  return '#6b7280'
+function onNodeClick({ node }: NodeMouseEvent) {
+  const match = topologyNodes.value.find(n => n.id === node.id)
+  selectedNode.value = match || null
 }
 
-function formatMac(mac: string | undefined): string {
-  if (!mac) return '-'
-  // Remove existing separators and format with colons
-  const clean = mac.replace(/[:\-]/g, '').toUpperCase()
-  return clean.match(/.{1,2}/g)?.join(':') || mac
-}
-
-function getNodeBgClass(node: TopologyNode | null): string {
-  if (!node) return 'bg-base-300'
-  switch (node.type) {
-    case 'router': return 'bg-primary text-primary-content'
-    case 'switch': return 'bg-info text-info-content'
-    case 'access_point': return 'bg-warning text-warning-content'
-    case 'server': return 'bg-success text-success-content'
-    case 'nas': return 'bg-accent text-accent-content'
-    case 'pc': return 'bg-secondary text-secondary-content'
-    case 'camera': return 'bg-rose-500 text-white'
-    case 'printer': return 'bg-cyan-500 text-white'
-    case 'smart_tv': return 'bg-purple-500 text-white'
-    default: return 'bg-base-300'
-  }
-}
-
-function renderTopology() {
-  if (!svgRef.value) {
-    console.error('[Topology] SVG ref not available')
-    return
-  }
-
-  // Clear previous
-  d3.select(svgRef.value).selectAll('*').remove()
-
-  // Get dimensions with fallback
-  let width = svgRef.value.clientWidth
-  let height = svgRef.value.clientHeight
-  
-  // Fallback if dimensions are 0
-  if (width === 0) width = 1200
-  if (height === 0) height = 600
-
-  console.log('[Topology] Rendering with dimensions:', width, 'x', height, 'Nodes:', nodes.value.length)
-
-  svg = d3.select(svgRef.value)
-    .attr('width', width)
-    .attr('height', height)
-  g = svg.append('g')
-
-  // Zoom behavior
-  zoom = d3.zoom<SVGSVGElement, unknown>()
-    .scaleExtent([0.1, 4])
-    .on('zoom', (event) => {
-      g!.attr('transform', event.transform)
-    })
-  svg.call(zoom)
-
-  // Group nodes by tier for hierarchical layout
-  // Tier 0 = Routers (top)
-  // Tier 1 = Switches (middle)  
-  // Tier 2 = End devices: Servers, PCs, APs, etc. (bottom)
-  const tier0 = nodes.value.filter(n => n.tier === 0 || n.type === 'router')
-  const tier1 = nodes.value.filter(n => n.tier === 1 || n.type === 'switch')
-  const tier2 = nodes.value.filter(n => n.tier === 2 || !['router', 'switch'].includes(n.type))
-
-  // Remove duplicates (a node should be in only one tier)
-  const usedIds = new Set<string>()
-  const filterTier = (tier: TopologyNode[]) => tier.filter(n => {
-    if (usedIds.has(n.id)) return false
-    usedIds.add(n.id)
-    return true
-  })
-  const routers = filterTier(tier0)
-  const switches = filterTier(tier1)
-  const devices = filterTier(tier2)
-
-  // Calculate positions - hierarchical layout
-  const tierHeight = height / 4
-  const offsetY = 60
-
-  // Position Tier 0 (Routers) at top
-  routers.forEach((node, i) => {
-    node.x = (width / (routers.length + 1)) * (i + 1)
-    node.y = offsetY + tierHeight * 0.5
-  })
-
-  // Position Tier 1 (Switches) in middle
-  switches.forEach((node, i) => {
-    node.x = (width / (switches.length + 1)) * (i + 1)
-    node.y = offsetY + tierHeight * 1.5
-  })
-
-  // Position Tier 2 (Devices including APs) at bottom
-  devices.forEach((node, i) => {
-    node.x = (width / (devices.length + 1)) * (i + 1)
-    node.y = offsetY + tierHeight * 2.5
-  })
-
-  // Draw links between connected devices (from port assignments via API)
-  const link = g.append('g')
-    .selectAll('line')
-    .data(links.value)
-    .join('line')
-    // Solid line for physical, dashed for virtual
-    .attr('stroke-dasharray', (d: any) => d.linkType === 'virtual' ? '5,5' : null)
-    // Different colors: physical=gray, virtual=purple, uplink=blue
-    .attr('stroke', (d: any) => {
-      switch (d.linkType) {
-        case 'virtual': return '#8b5cf6'  // purple for VM connections
-        case 'uplink': return '#3b82f6'   // blue for uplinks
-        default: return '#4b5563'          // gray for physical
-      }
-    })
-    .attr('stroke-width', (d: any) => d.linkType === 'virtual' ? 1.5 : 2)
-    .attr('x1', (d: any) => {
-      const source = nodes.value.find(n => n.id === d.source || n.id === d.source?.id)
-      return source?.x || 0
-    })
-    .attr('y1', (d: any) => {
-      const source = nodes.value.find(n => n.id === d.source || n.id === d.source?.id)
-      return source?.y || 0
-    })
-    .attr('x2', (d: any) => {
-      const target = nodes.value.find(n => n.id === d.target || n.id === d.target?.id)
-      return target?.x || 0
-    })
-    .attr('y2', (d: any) => {
-      const target = nodes.value.find(n => n.id === d.target || n.id === d.target?.id)
-      return target?.y || 0
-    })
-
-  // Create node groups
-  const allNodes = [...routers, ...switches, ...devices]
-  const node = g.append('g')
-    .selectAll('g')
-    .data(allNodes)
-    .join('g')
-    .attr('cursor', 'grab')
-    .attr('transform', d => `translate(${d.x},${d.y})`)
-    .call(d3.drag<SVGGElement, TopologyNode>()
-      .on('start', function() {
-        d3.select(this).attr('cursor', 'grabbing')
-      })
-      .on('drag', function(event, d) {
-        d.x = event.x
-        d.y = event.y
-        d3.select(this).attr('transform', `translate(${d.x},${d.y})`)
-        // Update links
-        link.attr('x1', (ld: any) => {
-          const source = allNodes.find(n => n.id === ld.source || n.id === ld.source?.id)
-          return source?.x || 0
-        })
-        .attr('y1', (ld: any) => {
-          const source = allNodes.find(n => n.id === ld.source || n.id === ld.source?.id)
-          return source?.y || 0
-        })
-        .attr('x2', (ld: any) => {
-          const target = allNodes.find(n => n.id === ld.target || n.id === ld.target?.id)
-          return target?.x || 0
-        })
-        .attr('y2', (ld: any) => {
-          const target = allNodes.find(n => n.id === ld.target || n.id === ld.target?.id)
-          return target?.y || 0
-        })
-      })
-      .on('end', function() {
-        d3.select(this).attr('cursor', 'grab')
-      })
-    )
-    .on('click', (_event, d) => {
-      selectedNode.value = d
-    })
-
-  // Node circles
-  node.append('circle')
-    .attr('r', 28)
-    .attr('fill', d => getNodeColor(d))
-    .attr('stroke', d => d.status === 'online' ? '#22c55e' : d.status === 'offline' ? '#ef4444' : '#4b5563')
-    .attr('stroke-width', 3)
-
-  // Node icons using SVG paths (Tabler-style)
-  node.append('path')
-    .attr('d', d => {
-      switch (d.type) {
-        case 'router': 
-          // Router icon - similar to tabler router
-          return 'M-10,-5 L10,-5 L10,5 L-10,5 Z M-7,-2 L-7,2 M-4,-2 L-4,2 M-1,-2 L-1,2 M2,-2 L2,2 M5,-2 L5,2'
-        case 'switch':
-          // Switch/ethernet icon
-          return 'M-10,-6 L10,-6 L10,6 L-10,6 Z M-7,6 L-7,10 M-3,6 L-3,10 M1,6 L1,10 M5,6 L5,10 M7,6 L7,10'
-        case 'access_point':
-          // Wifi/AP icon
-          return 'M-3,4 A6,6 0 0,1 3,4 M-6,1 A9,9 0 0,1 6,1 M-9,-2 A12,12 0 0,1 9,-2 M0,7 L0,10'
-        case 'server':
-          // Server icon
-          return 'M-8,-10 L8,-10 L8,-4 L-8,-4 Z M-8,-3 L8,-3 L8,3 L-8,3 Z M-8,4 L8,4 L8,10 L-8,10 Z M-5,-7 L-5,-7'
-        case 'pc':
-          // Desktop/PC icon
-          return 'M-8,-8 L8,-8 L8,4 L-8,4 Z M-4,4 L-4,8 L4,8 L4,4 M-6,8 L6,8'
-        default:
-          // Generic device icon
-          return 'M-8,-8 L8,-8 L8,8 L-8,8 Z'
-      }
-    })
-    .attr('fill', 'none')
-    .attr('stroke', '#ffffff')
-    .attr('stroke-width', 2)
-    .attr('stroke-linecap', 'round')
-    .attr('stroke-linejoin', 'round')
-
-  // Node labels below
-  node.append('text')
-    .text(d => d.name.length > 14 ? d.name.slice(0, 14) + '...' : d.name)
-    .attr('text-anchor', 'middle')
-    .attr('dy', 48)
-    .attr('font-size', 11)
-    .attr('fill', '#e5e7eb')
-    .attr('font-weight', '500')
-
-  // Type label
-  node.append('text')
-    .text(d => d.type.replace('_', ' ').toUpperCase())
-    .attr('text-anchor', 'middle')
-    .attr('dy', 62)
-    .attr('font-size', 8)
-    .attr('fill', '#9ca3af')
-}
-
-function zoomIn() {
-  if (svg && zoom) svg.transition().call(zoom.scaleBy, 1.3)
-}
-
-function zoomOut() {
-  if (svg && zoom) svg.transition().call(zoom.scaleBy, 0.7)
-}
-
-function resetZoom() {
-  if (svg && zoom) svg.transition().call(zoom.transform, d3.zoomIdentity)
+function miniMapNodeColor(node: Node) {
+  return (node.data as { color?: string })?.color || '#6b7280'
 }
 
 onMounted(() => {
   loadTopology()
 })
 </script>
+
+<style scoped>
+.topology-canvas {
+  position: relative;
+  transition: opacity 0.18s ease;
+}
+
+.topology-canvas.is-settling {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.topology-canvas.is-refreshing {
+  pointer-events: none;
+}
+
+.topology-canvas__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--color-base-100) 55%, transparent);
+}
+
+.topology-canvas :deep(.vue-flow) {
+  background: color-mix(in oklab, var(--color-base-200) 40%, transparent);
+}
+
+.topology-canvas :deep(.vue-flow__controls) {
+  border: 1px solid var(--nm-hairline, #e0e0e0);
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.topology-canvas :deep(.vue-flow__controls-button) {
+  border-radius: 0;
+  border-bottom: 1px solid var(--nm-hairline, #e0e0e0);
+  background: var(--nm-canvas, #ffffff);
+  width: 28px;
+  height: 28px;
+}
+
+.topology-canvas :deep(.vue-flow__minimap) {
+  border: 1px solid var(--nm-hairline, #e0e0e0);
+  border-radius: 0;
+  background: var(--nm-canvas, #ffffff);
+}
+
+.topology-canvas :deep(.vue-flow__edge-path) {
+  stroke-linecap: square;
+}
+
+.topology-canvas :deep(.vue-flow__node) {
+  border-radius: 0;
+}
+
+.topology-skeleton {
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--nm-primary) 4%, transparent), transparent 40%),
+    color-mix(in oklab, var(--color-base-200) 40%, transparent);
+}
+
+.topology-skeleton__tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 2.25rem;
+  width: min(28rem, 80%);
+}
+
+.topology-skeleton__row {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+.topology-skeleton__row span {
+  display: block;
+  width: 3rem;
+  height: 3rem;
+  background: var(--color-base-200);
+  border: 1px solid var(--nm-hairline, #e0e0e0);
+  animation: topology-pulse 1.2s ease-in-out infinite;
+}
+
+.topology-skeleton__row:nth-child(2) span {
+  animation-delay: 0.1s;
+}
+
+.topology-skeleton__row:nth-child(3) span {
+  animation-delay: 0.2s;
+}
+
+@keyframes topology-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+</style>

@@ -1,13 +1,13 @@
 <template>
   <div class="animate-fade-in">
     <div class="mb-6">
-      <h1 class="text-3xl font-bold">Network Discovery</h1>
-      <p class="text-base-content/60 mt-1">Scan your network to discover devices automatically</p>
+      <h1 class="type-headline">Network Discovery</h1>
+      <p class="type-body-sm text-base-content/60 mt-1">Scan your network to discover devices automatically</p>
     </div>
 
     <!-- Scan Configuration Card -->
-    <div class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6 mb-6">
-      <h2 class="text-lg font-semibold mb-4">Start Discovery Scan</h2>
+    <div class="bg-base-100 border border-base-300 rounded-none p-6 mb-6">
+      <h2 class="type-card-title mb-4">Start Discovery Scan</h2>
       
       <div class="form-control">
         <label class="label">
@@ -28,13 +28,8 @@
           class="btn btn-primary w-full gap-2 mt-2"
           :disabled="!network || isScanning"
         >
-          <svg v-if="isScanning" class="w-5 h-5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
+          <Loader2 v-if="isScanning" class="w-5 h-5 animate-spin" :stroke-width="2" />
+          <Search v-else class="w-5 h-5" :stroke-width="2" />
           {{ isScanning ? 'Scanning...' : 'Start Scan' }}
         </button>
       </div>
@@ -64,10 +59,13 @@
       </div>
     </div>
 
-    <!-- Results Section -->
-    <div v-if="discoveredDevices.length > 0" class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6">
+    <!-- Results Section (live during scan + after complete) -->
+    <div v-if="discoveredDevices.length > 0 || (isScanning && currentJob)" class="bg-base-100 border border-base-300 rounded-none p-6">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold">Discovered Devices ({{ discoveredDevices.length }})</h2>
+        <h2 class="type-card-title">
+          Discovered Devices ({{ discoveredDevices.length }})
+          <span v-if="isScanning" class="text-sm font-normal text-base-content/50 ml-2">updating…</span>
+        </h2>
         <div class="flex gap-2">
           <button @click="selectAll" class="btn btn-ghost btn-sm">
             {{ selectedDevices.length === discoveredDevices.length ? 'Deselect All' : 'Select All' }}
@@ -77,9 +75,7 @@
             class="btn btn-success btn-sm gap-1"
             :disabled="selectedDevices.length === 0 || isImporting"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
+            <Upload class="w-4 h-4" :stroke-width="2" />
             Import Selected ({{ selectedDevices.length }})
           </button>
         </div>
@@ -149,15 +145,16 @@
               <td>
                 <div class="flex flex-wrap gap-1">
                   <span 
-                    v-for="port in device.openPorts.slice(0, 5)" 
+                    v-for="port in (device.openPorts || []).slice(0, 5)" 
                     :key="port"
                     class="badge badge-ghost badge-xs"
                   >
                     {{ port }}
                   </span>
-                  <span v-if="device.openPorts.length > 5" class="badge badge-ghost badge-xs">
-                    +{{ device.openPorts.length - 5 }}
+                  <span v-if="(device.openPorts || []).length > 5" class="badge badge-ghost badge-xs">
+                    +{{ (device.openPorts || []).length - 5 }}
                   </span>
+                  <span v-if="!(device.openPorts || []).length" class="text-base-content/40">-</span>
                 </div>
               </td>
               <td>
@@ -172,32 +169,35 @@
 
       <!-- Empty state -->
       <div v-if="filteredDevices.length === 0" class="text-center py-8 text-base-content/60">
-        No devices match your filter criteria
+        <template v-if="isScanning && discoveredDevices.length === 0">
+          Waiting for hosts to respond…
+        </template>
+        <template v-else>
+          No devices match your filter criteria
+        </template>
       </div>
     </div>
 
     <!-- Empty State - No Results Yet -->
-    <div v-else-if="!currentJob && !isScanning" class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-8">
+    <div v-else-if="!currentJob && !isScanning" class="bg-base-100 border border-base-300 rounded-none p-8">
       <div class="flex flex-col items-center justify-center text-center">
-        <div class="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
-          </svg>
+        <div class="w-20 h-20 rounded-none bg-primary/20 flex items-center justify-center mb-4">
+          <Compass class="w-10 h-10 text-primary" :stroke-width="2" />
         </div>
-        <h3 class="text-xl font-semibold mb-2">Ready to Discover</h3>
+        <h3 class="type-card-title mb-2">Ready to Discover</h3>
         <p class="text-base-content/60 max-w-md mb-6">
           Enter a network range above and click "Start Scan" to automatically discover devices on your network.
         </p>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl">
-          <div class="bg-base-200/50 rounded-lg p-4 text-left">
+          <div class="bg-base-200/50 rounded-none p-4 text-left">
             <div class="font-semibold mb-1">🔍 Ping Sweep</div>
             <p class="text-sm text-base-content/60">Checks which IPs are alive</p>
           </div>
-          <div class="bg-base-200/50 rounded-lg p-4 text-left">
+          <div class="bg-base-200/50 rounded-none p-4 text-left">
             <div class="font-semibold mb-1">🔌 Port Scan</div>
             <p class="text-sm text-base-content/60">Identifies device services</p>
           </div>
-          <div class="bg-base-200/50 rounded-lg p-4 text-left">
+          <div class="bg-base-200/50 rounded-none p-4 text-left">
             <div class="font-semibold mb-1">📋 Auto Import</div>
             <p class="text-sm text-base-content/60">Add to device registry</p>
           </div>
@@ -216,6 +216,7 @@
 </template>
 
 <script setup lang="ts">
+import { Compass, Loader2, Search, Upload } from '@lucide/vue'
 import { ref, computed, onUnmounted } from 'vue'
 
 interface DiscoveredDevice {
@@ -305,6 +306,14 @@ async function pollJobStatus() {
   try {
     const status = await $fetch<JobStatus>(`/api/discovery?jobId=${currentJob.value.id}`)
     currentJob.value = status
+
+    // Update table live as hosts are found (not only after COMPLETED)
+    if (Array.isArray(status.results)) {
+      discoveredDevices.value = status.results.map(d => ({
+        ...d,
+        openPorts: d.openPorts || [],
+      }))
+    }
     
     if (status.status === 'COMPLETED' || status.status === 'FAILED') {
       isScanning.value = false
@@ -312,13 +321,38 @@ async function pollJobStatus() {
         clearInterval(pollInterval)
         pollInterval = null
       }
-      
-      if (status.results) {
-        discoveredDevices.value = status.results
+      // One late refresh for background MikroTik MAC/hostname enrichment
+      if (status.status === 'COMPLETED') {
+        setTimeout(async () => {
+          try {
+            const refreshed = await $fetch<JobStatus>(`/api/discovery?jobId=${status.id}`)
+            if (Array.isArray(refreshed.results)) {
+              discoveredDevices.value = refreshed.results.map(d => ({
+                ...d,
+                openPorts: d.openPorts || [],
+              }))
+            }
+          } catch {
+            /* ignore */
+          }
+        }, 5000)
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
+    const statusCode = (error as { statusCode?: number; status?: number })?.statusCode
+      ?? (error as { statusCode?: number; status?: number })?.status
     console.error('Failed to poll status:', error)
+    // Job lost (e.g. server HMR) — stop spinning forever
+    if (statusCode === 404) {
+      isScanning.value = false
+      if (pollInterval) {
+        clearInterval(pollInterval)
+        pollInterval = null
+      }
+      if (currentJob.value) {
+        currentJob.value = { ...currentJob.value, status: 'FAILED' }
+      }
+    }
   }
 }
 

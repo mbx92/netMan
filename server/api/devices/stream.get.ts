@@ -1,4 +1,4 @@
-import prisma from '../../utils/prisma'
+import prisma, { withPrismaRetry } from '../../utils/prisma'
 import { pingHost } from '../../utils/discovery'
 
 interface DeviceStatus {
@@ -37,17 +37,19 @@ export default defineEventHandler((event) => {
 
         try {
             // Get all devices with IP addresses
-            const devices = await prisma.device.findMany({
-                where: {
-                    ip: { not: null },
-                },
-                select: {
-                    id: true,
-                    ip: true,
-                    status: true,
-                    lastSeen: true,
-                },
-            })
+            const devices = await withPrismaRetry(() =>
+                prisma.device.findMany({
+                    where: {
+                        ip: { not: null },
+                    },
+                    select: {
+                        id: true,
+                        ip: true,
+                        status: true,
+                        lastSeen: true,
+                    },
+                }),
+            )
 
             // Ping all devices in parallel (with concurrency limit)
             const batchSize = 10
@@ -124,14 +126,14 @@ export default defineEventHandler((event) => {
     // Start sending data
     sendDeviceStatus()
 
-    // Set up interval for continuous pinging (every 15 seconds)
+    // Set up interval for continuous pinging (every 30 seconds)
     intervalId = setInterval(() => {
         if (!isConnected) {
             if (intervalId) clearInterval(intervalId)
             return
         }
         sendDeviceStatus()
-    }, 15000)
+    }, 30000)
 
     // Keep connection alive with heartbeat
     heartbeatId = setInterval(() => {

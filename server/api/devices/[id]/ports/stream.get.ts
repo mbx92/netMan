@@ -1,4 +1,4 @@
-import prisma from '../../../../utils/prisma'
+import prisma, { withPrismaRetry } from '../../../../utils/prisma'
 import { pingHost } from '../../../../utils/discovery'
 
 // GET /api/devices/[id]/ports/stream - SSE endpoint for real-time port status
@@ -39,25 +39,27 @@ export default defineEventHandler((event) => {
 
         try {
             // Get device with ports
-            const device = await prisma.device.findUnique({
-                where: { id },
-                include: {
-                    ports: {
-                        include: {
-                            connectedDevice: {
-                                select: {
-                                    id: true,
-                                    name: true,
-                                    ip: true,
-                                    type: true,
-                                    status: true,
+            const device = await withPrismaRetry(() =>
+                prisma.device.findUnique({
+                    where: { id },
+                    include: {
+                        ports: {
+                            include: {
+                                connectedDevice: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        ip: true,
+                                        typeCode: true,
+                                        status: true,
+                                    },
                                 },
                             },
+                            orderBy: { portNumber: 'asc' },
                         },
-                        orderBy: { portNumber: 'asc' },
                     },
-                },
-            })
+                }),
+            )
 
             if (!device) {
                 response.write(`event: error\ndata: ${JSON.stringify({ message: 'Device not found' })}\n\n`)
@@ -115,14 +117,14 @@ export default defineEventHandler((event) => {
     // Start sending data
     sendPortStatus()
 
-    // Set up interval for continuous pinging (every 10 seconds)
+    // Set up interval for continuous pinging (every 20 seconds)
     intervalId = setInterval(() => {
         if (!isConnected) {
             if (intervalId) clearInterval(intervalId)
             return
         }
         sendPortStatus()
-    }, 10000)
+    }, 20000)
 
     // Keep connection alive with heartbeat
     heartbeatId = setInterval(() => {

@@ -5,6 +5,15 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
 
+  app: {
+    head: {
+      htmlAttrs: {
+        // Default; overridden by theme plugin from cookie
+        "data-theme": "carbon",
+      },
+    },
+  },
+
   devServer: {
     port: 3001,
   },
@@ -24,6 +33,7 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    authSecret: process.env.AUTH_SECRET || "netman-dev-secret-change-me",
     // Public keys (available on client-side)
     // Note: clientSecret is public because SSO requires it in POST body for token exchange
     public: {

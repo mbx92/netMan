@@ -3,7 +3,7 @@
     <!-- Header -->
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
-        <h3 class="text-lg font-semibold">Network Ports</h3>
+        <h3 class="type-card-title">Network Ports</h3>
         <!-- Real-time indicator -->
         <span v-if="isLive" class="flex items-center gap-1 text-xs text-success">
           <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
@@ -24,7 +24,7 @@
     </div>
 
     <!-- Port Grid -->
-    <div class="port-grid bg-base-200 rounded-lg p-4">
+    <div class="port-grid bg-base-200 rounded-none p-4">
       <div class="grid grid-cols-8 gap-2">
         <div 
           v-for="port in ports" 
@@ -35,31 +35,14 @@
           <!-- Port Icon -->
           <div 
             :class="[
-              'port-icon flex flex-col items-center justify-center p-2 rounded-lg cursor-pointer transition-all',
-              'hover:bg-base-100 hover:shadow-md',
+              'port-icon flex flex-col items-center justify-center p-2 rounded-none cursor-pointer transition-all',
+              'hover:bg-base-100 hover:border-base-300',
               selectedPort?.id === port.id ? 'ring-2 ring-primary' : '',
               getPortBgClass(port),
             ]"
           >
             <!-- Network/Ethernet Port Icon -->
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              class="w-6 h-6"
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              stroke-width="2"
-            >
-              <!-- RJ45 Port shape -->
-              <rect x="5" y="8" width="14" height="10" rx="1"/>
-              <rect x="7" y="10" width="10" height="6" rx="0.5"/>
-              <!-- Connector pins -->
-              <line x1="8" y1="4" x2="8" y2="8"/>
-              <line x1="10" y1="4" x2="10" y2="8"/>
-              <line x1="12" y1="4" x2="12" y2="8"/>
-              <line x1="14" y1="4" x2="14" y2="8"/>
-              <line x1="16" y1="4" x2="16" y2="8"/>
-            </svg>
+            <EthernetPort class="w-6 h-6" :stroke-width="2" />
             <!-- Port Number -->
             <span class="text-xs font-bold mt-1">{{ port.portNumber }}</span>
           </div>
@@ -76,7 +59,7 @@
     </div>
 
     <!-- Selected Port Details -->
-    <div v-if="selectedPort" class="mt-4 p-4 bg-base-100 rounded-lg border border-base-300">
+    <div v-if="selectedPort" class="mt-4 p-4 bg-base-100 rounded-none border border-base-300">
       <div class="flex justify-between items-start">
         <div>
           <h4 class="font-semibold">Port {{ selectedPort.portNumber }} ({{ selectedPort.portName }})</h4>
@@ -156,8 +139,8 @@
     </div>
 
     <!-- Assigned Devices Card (separate from main grid) -->
-    <div v-if="assignedPorts.length > 0" class="mt-6 bg-base-100 rounded-xl shadow-lg border border-base-200 p-6">
-      <h4 class="font-semibold mb-4 text-lg">Connected Devices ({{ assignedPorts.length }})</h4>
+    <div v-if="assignedPorts.length > 0" class="mt-6 bg-base-100 border border-base-300 rounded-none p-6">
+      <h4 class="type-card-title mb-4">Connected Devices ({{ assignedPorts.length }})</h4>
       <div class="overflow-x-auto">
         <table class="table table-sm">
           <thead>
@@ -215,6 +198,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { EthernetPort } from '@lucide/vue'
 
 interface Port {
   id: string

@@ -4,26 +4,26 @@
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
       <div>
         <div class="flex items-center gap-3">
-          <h1 class="text-3xl font-bold">Devices</h1>
+          <h1 class="type-headline">Devices</h1>
           <!-- Real-time indicator -->
           <span v-if="sseConnected" class="flex items-center gap-1 text-xs text-success">
             <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
             Real-time
           </span>
         </div>
-        <p class="text-base-content/60 mt-1">
+        <p class="type-body-sm text-base-content/60 mt-1">
           Manage all infrastructure devices
           <span v-if="lastUpdate" class="text-xs ml-2">• Last update: {{ formatTimeAgo(lastUpdate) }}</span>
         </p>
       </div>
-      <button class="btn btn-primary" @click="showAddModal = true">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <NuxtLink to="/devices/create" class="btn btn-primary gap-2">
+        <Plus class="w-4 h-4" :stroke-width="2" />
         Add Device
-      </button>
+      </NuxtLink>
     </div>
 
     <!-- Filters -->
-    <div class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-4 mb-6">
+    <div class="bg-base-100 border border-base-300 rounded-none p-4 mb-6">
       <div class="flex flex-wrap gap-4">
         <div class="form-control w-full md:w-64">
           <input 
@@ -52,7 +52,7 @@
     </div>
 
     <!-- Device Table -->
-    <div class="bg-base-100 rounded-xl shadow-lg border border-base-200 overflow-hidden">
+    <div class="bg-base-100 border border-base-300 rounded-none overflow-hidden">
       <div class="overflow-x-auto">
         <table class="table table-zebra">
           <thead>
@@ -117,13 +117,13 @@
                     data-tip="Wake on LAN"
                     @click="sendWoL(device)"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                    <Power class="w-4 h-4" :stroke-width="2" />
                   </button>
                   <NuxtLink :to="`/devices/${device.id}`" class="btn btn-ghost btn-xs">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <Eye class="w-4 h-4" :stroke-width="2" />
                   </NuxtLink>
                   <button class="btn btn-ghost btn-xs text-error" @click="confirmDelete(device)">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    <Trash2 class="w-4 h-4" :stroke-width="2" />
                   </button>
                 </div>
               </td>
@@ -146,97 +146,10 @@
       </div>
     </div>
 
-    <!-- Add Device Modal -->
-    <dialog :class="['modal', showAddModal && 'modal-open']">
-      <div class="modal-box max-w-lg glass-modal">
-        <h3 class="font-bold text-lg mb-4">Add New Device</h3>
-        <form @submit.prevent="addDevice">
-          <div class="space-y-4">
-            <div class="form-control">
-              <label class="label"><span class="label-text">Name *</span></label>
-              <input v-model="newDevice.name" type="text" class="input input-bordered w-full" required />
-            </div>
-            <div class="form-control">
-              <label class="label"><span class="label-text">Type *</span></label>
-              <select v-model="newDevice.typeCode" class="select select-bordered w-full" required>
-                <option v-for="dt in deviceTypes" :key="dt.code" :value="dt.code">{{ dt.name }}</option>
-              </select>
-            </div>
-            <div class="form-control">
-              <label class="label"><span class="label-text">IP Address</span></label>
-              <div class="flex gap-2">
-                <input v-model="newDevice.ip" type="text" class="input input-bordered flex-1" placeholder="192.168.1.100" />
-                <button 
-                  type="button" 
-                  class="btn btn-outline btn-primary"
-                  :disabled="!newDevice.ip || lookingUpMac"
-                  @click="lookupMac"
-                >
-                  <span v-if="lookingUpMac" class="loading loading-spinner loading-sm"></span>
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                  Lookup MAC
-                </button>
-              </div>
-              <label v-if="macLookupMessage" class="label">
-                <span :class="['label-text-alt', macLookupSuccess ? 'text-success' : 'text-warning']">{{ macLookupMessage }}</span>
-              </label>
-            </div>
-            <div class="form-control">
-              <label class="label"><span class="label-text">MAC Address</span></label>
-              <input v-model="newDevice.mac" type="text" class="input input-bordered w-full" placeholder="AA:BB:CC:DD:EE:FF" />            
-            </div>
-            <div class="form-control">
-              <label class="label"><span class="label-text">Site</span></label>
-              <select v-model="newDevice.siteId" class="select select-bordered w-full">
-                <option value="">No Site</option>
-                <option v-for="site in sites" :key="site.id" :value="site.id">{{ site.name }}</option>
-              </select>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="form-control">
-                <label class="label"><span class="label-text">Floor</span></label>
-                <input v-model="newDevice.floor" type="text" class="input input-bordered w-full" placeholder="e.g., 1, GF, B1" />
-              </div>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Location</span></label>
-                <input v-model="newDevice.location" type="text" class="input input-bordered w-full" placeholder="e.g., Server Room" />
-              </div>
-            </div>
-            <div class="form-control">
-              <label class="cursor-pointer label justify-start gap-3">
-                <input v-model="newDevice.wakeable" type="checkbox" class="checkbox checkbox-primary" />
-                <span class="label-text">Supports Wake-on-LAN</span>
-              </label>
-            </div>
-            <div v-if="newDevice.typeCode?.includes('SWITCH')" class="form-control">
-              <label class="cursor-pointer label justify-start gap-3">
-                <input v-model="newDevice.isManaged" type="checkbox" class="checkbox checkbox-info" />
-                <span class="label-text">Managed (supports SNMP/ping)</span>
-              </label>
-            </div>
-            <div class="form-control">
-              <label class="label"><span class="label-text">Notes</span></label>
-              <textarea v-model="newDevice.notes" class="textarea textarea-bordered w-full" rows="2"></textarea>
-            </div>
-          </div>
-          <div class="modal-action">
-            <button type="button" class="btn btn-ghost" @click="showAddModal = false">Cancel</button>
-            <button type="submit" class="btn btn-primary" :disabled="addingDevice">
-              <span v-if="addingDevice" class="loading loading-spinner loading-sm"></span>
-              Add Device
-            </button>
-          </div>
-        </form>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showAddModal = false">close</button>
-      </form>
-    </dialog>
-
     <!-- Delete Confirmation Modal -->
-    <dialog :class="['modal', showDeleteModal && 'modal-open']">
-      <div class="modal-box glass-modal">
-        <h3 class="font-bold text-lg">Delete Device</h3>
+    <dialog class="modal" :class="{ 'modal-open': showDeleteModal }" :open="showDeleteModal || undefined" @close="showDeleteModal = false">
+      <div class="modal-box glass-modal rounded-none">
+        <h3 class="type-card-title">Delete Device</h3>
         <p class="py-4">
           Are you sure you want to delete <strong>{{ deviceToDelete?.name }}</strong>? 
           This action cannot be undone.
@@ -255,16 +168,16 @@
     </dialog>
 
     <!-- Feedback Modal -->
-    <dialog :class="['modal', showFeedbackModal && 'modal-open']">
-      <div class="modal-box glass-modal">
+    <dialog class="modal" :class="{ 'modal-open': showFeedbackModal }" :open="showFeedbackModal || undefined" @close="showFeedbackModal = false">
+      <div class="modal-box glass-modal rounded-none">
         <div class="flex items-start gap-3">
-          <div :class="['w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
-            <svg v-if="feedbackType === 'success'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            <svg v-else-if="feedbackType === 'error'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div :class="['w-10 h-10 rounded-none flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
+            <CheckCircle2 v-if="feedbackType === 'success'" class="w-6 h-6" :stroke-width="2" />
+            <XCircle v-else-if="feedbackType === 'error'" class="w-6 h-6" :stroke-width="2" />
+            <AlertCircle v-else class="w-6 h-6" :stroke-width="2" />
           </div>
           <div>
-            <h3 class="font-bold text-lg">{{ feedbackTitle }}</h3>
+            <h3 class="type-card-title">{{ feedbackTitle }}</h3>
             <p class="py-2 text-base-content/80">{{ feedbackMessage }}</p>
           </div>
         </div>
@@ -280,6 +193,8 @@
 </template>
 
 <script setup lang="ts">
+import { AlertCircle, CheckCircle2, Eye, Plus, Power, Trash2, XCircle } from '@lucide/vue'
+
 interface Device {
   id: string
   name: string
@@ -320,10 +235,6 @@ const { data: deviceData, pending, refresh: loadDevices } = await useFetch('/api
 
 const devices = computed(() => deviceData.value?.devices as Device[] || [])
 
-// Fetch sites for dropdown
-interface Site { id: string; name: string }
-const { data: sitesData } = await useFetch('/api/sites')
-const sites = computed(() => sitesData.value?.sites as Site[] || [])
 const totalDevices = computed(() => deviceData.value?.total || 0)
 
 // Fetch device types for dropdowns
@@ -424,25 +335,6 @@ function clearFilters() {
   loadDevices()
 }
 
-// Add device modal
-const showAddModal = ref(false)
-const addingDevice = ref(false)
-const lookingUpMac = ref(false)
-const macLookupMessage = ref('')
-const macLookupSuccess = ref(false)
-const newDevice = reactive({
-  name: '',
-  typeCode: 'PC_WINDOWS',
-  ip: '',
-  mac: '',
-  siteId: '',
-  floor: '',
-  location: '',
-  wakeable: false,
-  isManaged: true,
-  notes: '',
-})
-
 // Feedback modal (replaces browser alerts)
 const showFeedbackModal = ref(false)
 const feedbackType = ref<'success' | 'error' | 'warning'>('success')
@@ -454,75 +346,6 @@ function showFeedback(type: 'success' | 'error' | 'warning', title: string, mess
   feedbackTitle.value = title
   feedbackMessage.value = message
   showFeedbackModal.value = true
-}
-
-// MAC address lookup
-async function lookupMac() {
-  if (!newDevice.ip) return
-  
-  lookingUpMac.value = true
-  macLookupMessage.value = ''
-  macLookupSuccess.value = false
-  
-  try {
-    const result = await $fetch<{
-      success: boolean
-      mac: string | null
-      macFormatted?: string
-      online: boolean
-      message: string
-    }>('/api/discovery/mac', {
-      method: 'POST',
-      body: { ip: newDevice.ip },
-    })
-    
-    if (result.success && result.macFormatted) {
-      newDevice.mac = result.macFormatted
-      macLookupMessage.value = `✓ MAC found: ${result.macFormatted}`
-      macLookupSuccess.value = true
-    } else {
-      macLookupMessage.value = result.message
-      macLookupSuccess.value = false
-    }
-  } catch (error: unknown) {
-    const err = error as { data?: { statusMessage?: string } }
-    macLookupMessage.value = err.data?.statusMessage || 'Failed to lookup MAC address'
-    macLookupSuccess.value = false
-  } finally {
-    lookingUpMac.value = false
-  }
-}
-
-async function addDevice() {
-  addingDevice.value = true
-  try {
-    await $fetch('/api/devices', {
-      method: 'POST',
-      body: newDevice,
-    })
-    showAddModal.value = false
-    // Reset form
-    Object.assign(newDevice, {
-      name: '',
-      typeCode: 'PC_WINDOWS',
-      ip: '',
-      mac: '',
-      siteId: '',
-      floor: '',
-      location: '',
-      wakeable: false,
-      isManaged: true,
-      notes: '',
-    })
-    macLookupMessage.value = ''
-    macLookupSuccess.value = false
-    loadDevices()
-  } catch (error: unknown) {
-    const err = error as { data?: { statusMessage?: string } }
-    showFeedback('error', 'Failed to Add Device', err.data?.statusMessage || 'An error occurred while adding the device')
-  } finally {
-    addingDevice.value = false
-  }
 }
 
 // Delete device modal
@@ -613,18 +436,5 @@ function formatMac(mac: string | null): string {
   return clean.match(/.{1,2}/g)?.join(':') || mac
 }
 
-function formatTimeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'Never'
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  return `${diffDays}d ago`
-}
+const { format: formatTimeAgo } = useFormatTimeAgo()
 </script>

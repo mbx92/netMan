@@ -3,24 +3,24 @@
     <!-- Page Header -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-3xl font-bold">IP Address Management</h1>
-        <p class="text-base-content/60 mt-1">Manage IP ranges and allocations per site</p>
+        <h1 class="type-headline">IP Address Management</h1>
+        <p class="type-body-sm text-base-content/60 mt-1">Manage IP ranges and allocations per site</p>
       </div>
       <div class="flex gap-2">
         <button class="btn btn-outline" :disabled="syncing" @click="syncFromMikroTik">
           <span v-if="syncing" class="loading loading-spinner loading-sm"></span>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <RefreshCw v-else class="w-4 h-4" :stroke-width="2" />
           Sync MikroTik
         </button>
-        <button class="btn btn-primary" @click="openAddModal">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <NuxtLink to="/ipam/ranges/create" class="btn btn-primary">
+          <Plus class="w-4 h-4" :stroke-width="2" />
           Add Range
-        </button>
+        </NuxtLink>
       </div>
     </div>
 
     <!-- Site Filter -->
-    <div class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-4 mb-6">
+    <div class="bg-base-100 border border-base-300 rounded-none p-4 mb-6">
       <div class="flex flex-wrap gap-4 items-center">
         <div class="form-control w-full md:w-64">
           <select v-model="selectedSiteId" class="select select-bordered w-full" @change="loadRanges">
@@ -42,14 +42,14 @@
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="ranges.length === 0" class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-8">
+      <div v-else-if="ranges.length === 0" class="bg-base-100 border border-base-300 rounded-none p-8">
         <div class="flex flex-col items-center justify-center text-center">
-          <div class="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <div class="w-16 h-16 rounded-none bg-primary/20 flex items-center justify-center mb-4">
+            <LayoutGrid class="w-8 h-8 text-primary" :stroke-width="2" />
           </div>
-          <h3 class="text-xl font-semibold mb-2">No IP Ranges</h3>
+          <h3 class="type-card-title mb-2">No IP Ranges</h3>
           <p class="text-base-content/60 mb-4">Add an IP range to start managing your network addresses.</p>
-          <button class="btn btn-primary" @click="openAddModal">Add IP Range</button>
+          <NuxtLink to="/ipam/ranges/create" class="btn btn-primary">Add IP Range</NuxtLink>
         </div>
       </div>
 
@@ -58,13 +58,13 @@
         <div 
           v-for="range in ranges" 
           :key="range.id" 
-          class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6 hover:border-primary/50 transition-colors cursor-pointer"
+          class="bg-base-100 border border-base-300 rounded-none p-6 hover:border-primary/50 transition-colors cursor-pointer"
           @click="viewRange(range)"
         >
           <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div class="flex-1">
               <div class="flex items-center gap-3 mb-2">
-                <h3 class="text-lg font-semibold">{{ range.name }}</h3>
+                <h3 class="type-card-title">{{ range.name }}</h3>
                 <span v-if="range.site" class="badge badge-outline badge-sm">{{ range.site.name }}</span>
                 <span v-if="range.vlan" class="badge badge-ghost badge-sm">VLAN {{ range.vlan }}</span>
               </div>
@@ -97,11 +97,11 @@
                 ></progress>
               </div>
               <div class="flex gap-1" @click.stop>
-                <button class="btn btn-ghost btn-sm" @click="editRange(range)">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </button>
+                <NuxtLink :to="`/ipam/ranges/${range.id}/edit`" class="btn btn-ghost btn-sm">
+                  <Pencil class="w-4 h-4" :stroke-width="2" />
+                </NuxtLink>
                 <button class="btn btn-ghost btn-sm text-error" @click="confirmDelete(range)">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <Trash2 class="w-4 h-4" :stroke-width="2" />
                 </button>
               </div>
             </div>
@@ -110,60 +110,10 @@
       </div>
     </div>
 
-    <!-- Add/Edit Range Modal -->
-    <dialog :class="['modal', showRangeModal && 'modal-open']">
-      <div class="modal-box glass-modal">
-        <h3 class="font-bold text-lg mb-4">{{ editingRange ? 'Edit' : 'Add' }} IP Range</h3>
-        <form @submit.prevent="saveRange">
-          <div class="space-y-4">
-            <div class="form-control">
-              <label class="label"><span class="label-text">Name *</span></label>
-              <input v-model="rangeForm.name" type="text" class="input input-bordered w-full" placeholder="e.g., Office Network" required />
-            </div>
-            <div class="form-control">
-              <label class="label"><span class="label-text">Network (CIDR) *</span></label>
-              <input v-model="rangeForm.network" type="text" class="input input-bordered w-full font-mono" placeholder="e.g., 192.168.1.0/24" required />
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="form-control">
-                <label class="label"><span class="label-text">Gateway</span></label>
-                <input v-model="rangeForm.gateway" type="text" class="input input-bordered w-full font-mono" placeholder="e.g., 192.168.1.1" />
-              </div>
-              <div class="form-control">
-                <label class="label"><span class="label-text">VLAN</span></label>
-                <input v-model="rangeForm.vlan" type="text" class="input input-bordered w-full" placeholder="e.g., 100" />
-              </div>
-            </div>
-            <div class="form-control">
-              <label class="label"><span class="label-text">Site</span></label>
-              <select v-model="rangeForm.siteId" class="select select-bordered w-full">
-                <option value="">No Site</option>
-                <option v-for="site in sites" :key="site.id" :value="site.id">{{ site.name }}</option>
-              </select>
-            </div>
-            <div class="form-control">
-              <label class="label"><span class="label-text">Description</span></label>
-              <textarea v-model="rangeForm.description" class="textarea textarea-bordered w-full" rows="2"></textarea>
-            </div>
-          </div>
-          <div class="modal-action">
-            <button type="button" class="btn btn-ghost" @click="showRangeModal = false">Cancel</button>
-            <button type="submit" class="btn btn-primary" :disabled="saving">
-              <span v-if="saving" class="loading loading-spinner loading-sm"></span>
-              {{ editingRange ? 'Update' : 'Create' }}
-            </button>
-          </div>
-        </form>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showRangeModal = false">close</button>
-      </form>
-    </dialog>
-
     <!-- Delete Confirmation Modal -->
-    <dialog :class="['modal', showDeleteModal && 'modal-open']">
-      <div class="modal-box glass-modal">
-        <h3 class="font-bold text-lg">Delete IP Range</h3>
+    <dialog class="modal" :class="{ 'modal-open': showDeleteModal }" :open="showDeleteModal || undefined" @close="showDeleteModal = false">
+      <div class="modal-box glass-modal rounded-none">
+        <h3 class="type-card-title">Delete IP Range</h3>
         <p class="py-4">
           Are you sure you want to delete <strong>{{ rangeToDelete?.name }}</strong>?
           This will also delete all {{ rangeToDelete?.usedIps || 0 }} IP allocations.
@@ -182,11 +132,11 @@
     </dialog>
 
     <!-- Range Detail Modal -->
-    <dialog :class="['modal', showDetailModal && 'modal-open']">
-      <div class="modal-box max-w-4xl glass-modal">
+    <dialog class="modal" :class="{ 'modal-open': showDetailModal }" :open="showDetailModal || undefined" @close="showDetailModal = false">
+      <div class="modal-box max-w-4xl glass-modal rounded-none">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h3 class="font-bold text-lg">{{ selectedRange?.name }}</h3>
+            <h3 class="type-card-title">{{ selectedRange?.name }}</h3>
             <div class="text-sm text-base-content/60 font-mono">{{ selectedRange?.network }}</div>
           </div>
           <button class="btn btn-ghost btn-sm btn-circle" @click="showDetailModal = false">✕</button>
@@ -194,22 +144,22 @@
 
         <!-- Stats -->
         <div class="grid grid-cols-3 gap-4 mb-6">
-          <div class="bg-base-200 rounded-lg p-4 text-center">
+          <div class="bg-base-200 rounded-none p-4 text-center">
             <div class="text-2xl font-bold">{{ rangeStats.total }}</div>
             <div class="text-sm text-base-content/60">Total IPs</div>
           </div>
-          <div class="bg-success/20 rounded-lg p-4 text-center">
+          <div class="bg-success/20 rounded-none p-4 text-center">
             <div class="text-2xl font-bold text-success">{{ rangeStats.free }}</div>
             <div class="text-sm text-base-content/60">Free</div>
           </div>
-          <div class="bg-primary/20 rounded-lg p-4 text-center">
+          <div class="bg-primary/20 rounded-none p-4 text-center">
             <div class="text-2xl font-bold text-primary">{{ rangeStats.used }}</div>
             <div class="text-sm text-base-content/60">Allocated</div>
           </div>
         </div>
 
         <!-- Add Allocation Form -->
-        <div class="bg-base-200 rounded-lg p-4 mb-4">
+        <div class="bg-base-200 rounded-none p-4 mb-4">
           <div class="flex gap-2">
             <input v-model="newAllocation.ip" type="text" class="input input-bordered input-sm flex-1 font-mono" placeholder="IP Address" />
             <input v-model="newAllocation.hostname" type="text" class="input input-bordered input-sm flex-1" placeholder="Hostname" />
@@ -235,12 +185,12 @@
             <div 
               v-for="ip in ipGrid" 
               :key="ip.ip"
-              class="aspect-square rounded text-xs flex items-center justify-center cursor-pointer transition-colors relative"
+              class="aspect-square rounded-none text-xs flex items-center justify-center cursor-pointer transition-colors relative"
               :class="getIpClass(ip)"
               :title="getIpTitle(ip)"
               @click="handleIpClick(ip)"
             >
-              <svg v-if="ip.device" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 absolute top-0.5 right-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="8" width="14" height="10" rx="1"/><rect x="7" y="10" width="10" height="6" rx="0.5"/><line x1="8" y1="4" x2="8" y2="8"/><line x1="10" y1="4" x2="10" y2="8"/><line x1="12" y1="4" x2="12" y2="8"/><line x1="14" y1="4" x2="14" y2="8"/><line x1="16" y1="4" x2="16" y2="8"/></svg>
+              <EthernetPort v-if="ip.device" class="w-3 h-3 absolute top-0.5 right-0.5" :stroke-width="2" />
               {{ ip.ip.split('.')[3] }}
             </div>
           </div>
@@ -248,12 +198,12 @@
 
         <!-- Legend -->
         <div class="flex flex-wrap gap-4 mt-4 text-xs">
-          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded bg-base-300"></div> Free</div>
-          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded bg-secondary"></div> <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="8" width="14" height="10" rx="1"/><rect x="7" y="10" width="10" height="6" rx="0.5"/><line x1="8" y1="4" x2="8" y2="8"/><line x1="10" y1="4" x2="10" y2="8"/><line x1="12" y1="4" x2="12" y2="8"/><line x1="14" y1="4" x2="14" y2="8"/><line x1="16" y1="4" x2="16" y2="8"/></svg> Device</div>
-          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded bg-primary"></div> Static</div>
-          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded bg-info"></div> DHCP</div>
-          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded bg-warning"></div> Reserved</div>
-          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded bg-success"></div> Gateway</div>
+          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-none bg-base-300"></div> Free</div>
+          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-none bg-secondary"></div> <EthernetPort class="w-3 h-3" :stroke-width="2" /> Device</div>
+          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-none bg-primary"></div> Static</div>
+          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-none bg-info"></div> DHCP</div>
+          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-none bg-warning"></div> Reserved</div>
+          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-none bg-success"></div> Gateway</div>
         </div>
       </div>
       <form method="dialog" class="modal-backdrop">
@@ -262,16 +212,16 @@
     </dialog>
 
     <!-- Feedback Modal -->
-    <dialog :class="['modal', showFeedbackModal && 'modal-open']">
-      <div class="modal-box glass-modal">
+    <dialog class="modal" :class="{ 'modal-open': showFeedbackModal }" :open="showFeedbackModal || undefined" @close="showFeedbackModal = false">
+      <div class="modal-box glass-modal rounded-none">
         <div class="flex items-start gap-3">
-          <div :class="['w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
-            <svg v-if="feedbackType === 'success'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            <svg v-else-if="feedbackType === 'error'" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div :class="['w-10 h-10 rounded-none flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
+            <CheckCircle2 v-if="feedbackType === 'success'" class="w-6 h-6" :stroke-width="2" />
+            <XCircle v-else-if="feedbackType === 'error'" class="w-6 h-6" :stroke-width="2" />
+            <AlertCircle v-else class="w-6 h-6" :stroke-width="2" />
           </div>
           <div>
-            <h3 class="font-bold text-lg">{{ feedbackTitle }}</h3>
+            <h3 class="type-card-title">{{ feedbackTitle }}</h3>
             <p class="py-2 text-base-content/80">{{ feedbackMessage }}</p>
           </div>
         </div>
@@ -285,9 +235,9 @@
     </dialog>
 
     <!-- Deallocate Confirmation Modal -->
-    <dialog :class="['modal', showDeallocateModal && 'modal-open']">
-      <div class="modal-box glass-modal">
-        <h3 class="font-bold text-lg">Deallocate IP</h3>
+    <dialog class="modal" :class="{ 'modal-open': showDeallocateModal }" :open="showDeallocateModal || undefined" @close="showDeallocateModal = false">
+      <div class="modal-box glass-modal rounded-none">
+        <h3 class="type-card-title">Deallocate IP</h3>
         <p class="py-4">
           Hapus alokasi IP <strong class="font-mono">{{ ipToDeallocate?.ip }}</strong>?
           <br/>
@@ -309,9 +259,9 @@
     </dialog>
 
     <!-- Sync Preview Modal -->
-    <dialog :class="['modal', showSyncPreviewModal && 'modal-open']">
-      <div class="modal-box max-w-2xl glass-modal">
-        <h3 class="font-bold text-lg mb-4">Sync Preview</h3>
+    <dialog class="modal" :class="{ 'modal-open': showSyncPreviewModal }" :open="showSyncPreviewModal || undefined" @close="showSyncPreviewModal = false">
+      <div class="modal-box max-w-2xl glass-modal rounded-none">
+        <h3 class="type-card-title mb-4">Sync Preview</h3>
         
         <div v-if="syncPreviewLoading" class="flex items-center justify-center py-8">
           <span class="loading loading-spinner loading-lg text-primary"></span>
@@ -320,22 +270,22 @@
         <div v-else-if="syncPreviewData">
           <!-- Stats -->
           <div class="grid grid-cols-3 gap-4 mb-4">
-            <div class="bg-base-200 rounded-lg p-3 text-center">
-              <div class="text-xl font-bold">{{ syncPreviewData.stats?.arpEntriesWithMac || 0 }}</div>
+            <div class="bg-base-200 rounded-none p-3 text-center">
+              <div class="type-card-title">{{ syncPreviewData.stats?.arpEntriesWithMac || 0 }}</div>
               <div class="text-xs text-base-content/60">ARP entries</div>
             </div>
-            <div class="bg-success/20 rounded-lg p-3 text-center">
-              <div class="text-xl font-bold text-success">{{ syncPreviewData.stats?.toAdd || 0 }}</div>
+            <div class="bg-success/20 rounded-none p-3 text-center">
+              <div class="type-card-title text-success">{{ syncPreviewData.stats?.toAdd || 0 }}</div>
               <div class="text-xs text-base-content/60">To Add</div>
             </div>
-            <div class="bg-info/20 rounded-lg p-3 text-center">
-              <div class="text-xl font-bold text-info">{{ syncPreviewData.stats?.toUpdate || 0 }}</div>
+            <div class="bg-info/20 rounded-none p-3 text-center">
+              <div class="type-card-title text-info">{{ syncPreviewData.stats?.toUpdate || 0 }}</div>
               <div class="text-xs text-base-content/60">To Update</div>
             </div>
           </div>
           
           <!-- Changes list -->
-          <div v-if="syncPreviewData.changes?.length" class="max-h-60 overflow-y-auto bg-base-200 rounded-lg p-2 mb-4">
+          <div v-if="syncPreviewData.changes?.length" class="max-h-60 overflow-y-auto bg-base-200 rounded-none p-2 mb-4">
             <div v-for="change in syncPreviewData.changes" :key="change.ip" class="flex items-center justify-between py-1 px-2 text-sm">
               <div class="flex items-center gap-2">
                 <span :class="['badge badge-sm', change.type === 'add' ? 'badge-success' : 'badge-info']">
@@ -352,7 +302,7 @@
           </div>
           
           <!-- Warning -->
-          <div class="bg-warning/10 border border-warning/30 rounded-lg p-3 text-sm mb-4">
+          <div class="bg-warning/10 border border-warning/30 rounded-none p-3 text-sm mb-4">
             <strong>⚠️ Catatan:</strong> Sync hanya menambah & update, tidak menghapus allocation yang sudah ada.
           </div>
         </div>
@@ -377,6 +327,8 @@
 </template>
 
 <script setup lang="ts">
+import { AlertCircle, CheckCircle2, EthernetPort, LayoutGrid, Pencil, Plus, RefreshCw, Trash2, XCircle } from '@lucide/vue'
+
 interface Site {
   id: string
   name: string
@@ -424,71 +376,6 @@ const { data: rangesData, pending, refresh: loadRanges } = await useFetch('/api/
   query: computed(() => selectedSiteId.value ? { siteId: selectedSiteId.value } : {})
 })
 const ranges = computed(() => rangesData.value?.ranges as IPRange[] || [])
-
-// Range modal
-const showRangeModal = ref(false)
-const saving = ref(false)
-const editingRange = ref<IPRange | null>(null)
-const rangeForm = reactive({
-  name: '',
-  network: '',
-  gateway: '',
-  vlan: '',
-  siteId: '',
-  description: '',
-})
-
-function openAddModal() {
-  editingRange.value = null
-  Object.assign(rangeForm, {
-    name: '',
-    network: '',
-    gateway: '',
-    vlan: '',
-    siteId: selectedSiteId.value,
-    description: '',
-  })
-  showRangeModal.value = true
-}
-
-function editRange(range: IPRange) {
-  editingRange.value = range
-  Object.assign(rangeForm, {
-    name: range.name,
-    network: range.network,
-    gateway: range.gateway || '',
-    vlan: range.vlan || '',
-    siteId: range.siteId || '',
-    description: range.description || '',
-  })
-  showRangeModal.value = true
-}
-
-async function saveRange() {
-  saving.value = true
-  try {
-    const url = editingRange.value 
-      ? `/api/ipam/ranges/${editingRange.value.id}`
-      : '/api/ipam/ranges'
-    const method = editingRange.value ? 'PUT' : 'POST'
-
-    await $fetch(url, {
-      method,
-      body: {
-        ...rangeForm,
-        siteId: rangeForm.siteId || null,
-      }
-    })
-    showRangeModal.value = false
-    loadRanges()
-    showFeedback('success', 'Success', `IP range ${editingRange.value ? 'updated' : 'created'} successfully`)
-  } catch (error: unknown) {
-    const err = error as { data?: { statusMessage?: string } }
-    showFeedback('error', 'Error', err.data?.statusMessage || 'Failed to save range')
-  } finally {
-    saving.value = false
-  }
-}
 
 // Delete modal
 const showDeleteModal = ref(false)

@@ -1,18 +1,20 @@
-import prisma from '../../utils/prisma'
+import prisma, { withPrismaRetry } from '../../utils/prisma'
 
 // GET /api/sites - List all sites
 export default defineEventHandler(async () => {
-    const sites = await prisma.site.findMany({
-        include: {
-            _count: {
-                select: {
-                    devices: true,
-                    mikrotikDevices: true,
+    const sites = await withPrismaRetry(() =>
+        prisma.site.findMany({
+            include: {
+                _count: {
+                    select: {
+                        devices: true,
+                        mikrotikDevices: true,
+                    },
                 },
             },
-        },
-        orderBy: { name: 'asc' },
-    })
+            orderBy: { name: 'asc' },
+        }),
+    )
 
     return {
         sites: sites.map(site => ({
@@ -23,3 +25,4 @@ export default defineEventHandler(async () => {
         total: sites.length,
     }
 })
+

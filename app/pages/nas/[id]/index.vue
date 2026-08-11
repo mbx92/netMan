@@ -2,16 +2,16 @@
   <div class="animate-fade-in max-w-4xl mx-auto">
     <div class="mb-6 flex items-center justify-between">
       <NuxtLink to="/nas" class="btn btn-ghost btn-sm">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <ArrowLeft class="w-4 h-4" :stroke-width="2" />
         Back to NAS List
       </NuxtLink>
       <div class="flex gap-2">
         <NuxtLink :to="`/nas/${id}/edit`" class="btn btn-primary btn-sm">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <Pencil class="w-4 h-4" :stroke-width="2" />
           Edit
         </NuxtLink>
         <button class="btn btn-error btn-sm" @click="confirmDelete">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <Trash2 class="w-4 h-4" :stroke-width="2" />
           Delete
         </button>
       </div>
@@ -23,10 +23,10 @@
 
     <div v-else-if="device" class="space-y-6">
       <!-- Header Card -->
-      <div class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6">
+      <div class="bg-base-100 border border-base-300 rounded-none p-6">
         <div class="flex items-start justify-between">
           <div>
-            <h1 class="text-3xl font-bold">{{ device.name }}</h1>
+            <h1 class="type-headline">{{ device.name }}</h1>
             <div class="flex items-center gap-3 mt-2">
               <span v-if="device.type" class="badge badge-lg">{{ device.type }}</span>
               <span :class="['badge badge-lg', device.isActive ? 'badge-success' : 'badge-ghost']">
@@ -38,18 +38,18 @@
       </div>
 
       <!-- Storage Info Card -->
-      <div v-if="device.totalCapacityGB" class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6">
-        <h2 class="text-xl font-bold mb-4">Storage Information</h2>
+      <div v-if="device.totalCapacityGB" class="bg-base-100 border border-base-300 rounded-none p-6">
+        <h2 class="type-card-title mb-4">Storage Information</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div class="text-center p-4 bg-base-200/50 rounded-lg">
+          <div class="text-center p-4 bg-base-200/50 rounded-none">
             <div class="text-3xl font-bold text-primary">{{ device.totalCapacityGB }}</div>
             <div class="text-sm text-base-content/60">Total GB</div>
           </div>
-          <div class="text-center p-4 bg-base-200/50 rounded-lg">
+          <div class="text-center p-4 bg-base-200/50 rounded-none">
             <div class="text-3xl font-bold text-warning">{{ device.usedCapacityGB || 0 }}</div>
             <div class="text-sm text-base-content/60">Used GB</div>
           </div>
-          <div class="text-center p-4 bg-base-200/50 rounded-lg">
+          <div class="text-center p-4 bg-base-200/50 rounded-none">
             <div class="text-3xl font-bold text-success">{{ freeCapacity }}</div>
             <div class="text-sm text-base-content/60">Free GB</div>
           </div>
@@ -69,8 +69,8 @@
       </div>
 
       <!-- Details Card -->
-      <div class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6">
-        <h2 class="text-xl font-bold mb-4">Device Details</h2>
+      <div class="bg-base-100 border border-base-300 rounded-none p-6">
+        <h2 class="type-card-title mb-4">Device Details</h2>
         <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div v-if="device.location">
             <dt class="text-sm text-base-content/60">Location</dt>
@@ -105,9 +105,9 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <dialog :class="['modal', showDeleteModal && 'modal-open']">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg">Delete NAS Device</h3>
+    <dialog class="modal" :class="{ 'modal-open': showDeleteModal }" :open="showDeleteModal || undefined" @close="showDeleteModal = false">
+      <div class="modal-box glass-modal rounded-none">
+        <h3 class="type-card-title">Delete NAS Device</h3>
         <p class="py-4">
           Are you sure you want to delete <strong>{{ device?.name }}</strong>?
         </p>
@@ -124,6 +124,8 @@
 </template>
 
 <script setup lang="ts">
+import { ArrowLeft, Pencil, Trash2 } from '@lucide/vue'
+
 const route = useRoute()
 const id = route.params.id as string
 
@@ -172,8 +174,5 @@ const progressColor = computed(() => {
   return 'progress-success'
 })
 
-// Helpers
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString()
-}
+const formatDate = formatAbsoluteTime
 </script>

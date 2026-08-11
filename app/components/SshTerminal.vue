@@ -4,13 +4,11 @@
     <div v-if="!connected" class="flex-1 flex items-center justify-center p-6">
       <div class="w-full max-w-md space-y-6">
         <div class="text-center">
-          <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-success/20 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-            </svg>
+          <div class="w-16 h-16 mx-auto mb-4 rounded-none bg-success/20 flex items-center justify-center">
+            <TerminalIcon class="w-8 h-8 text-success" :stroke-width="2" />
           </div>
-          <h3 class="text-xl font-semibold">SSH Terminal</h3>
-          <p class="text-base-content/60 text-sm mt-1">Connect to {{ deviceName || 'device' }} via SSH</p>
+          <h3 class="type-card-title">SSH Terminal</h3>
+          <p class="type-body-sm text-base-content/60 mt-1">Connect to {{ deviceName || 'device' }} via SSH</p>
         </div>
 
         <form @submit.prevent="connect" class="space-y-4">
@@ -55,9 +53,7 @@
           </div>
           
           <div v-if="error" class="alert alert-error text-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-            </svg>
+            <XCircle class="w-5 h-5" :stroke-width="2" />
             <span>{{ error }}</span>
           </div>
 
@@ -67,9 +63,7 @@
             :disabled="connecting || !host || !username || !password"
           >
             <span v-if="connecting" class="loading loading-spinner loading-sm"></span>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-            </svg>
+            <TerminalIcon v-else class="w-4 h-4" :stroke-width="2" />
             {{ connecting ? 'Connecting...' : 'Connect' }}
           </button>
         </form>
@@ -85,9 +79,7 @@
           <span class="text-sm font-mono">{{ username }}@{{ host }}:{{ port }}</span>
         </div>
         <button class="btn btn-ghost btn-sm text-error" @click="disconnect">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
-          </svg>
+          <Power class="w-4 h-4" :stroke-width="2" />
           Disconnect
         </button>
       </div>
@@ -99,6 +91,7 @@
 </template>
 
 <script setup lang="ts">
+import { Power, Terminal as TerminalIcon, XCircle } from '@lucide/vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'

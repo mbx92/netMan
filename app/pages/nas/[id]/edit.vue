@@ -2,7 +2,7 @@
   <div class="animate-fade-in max-w-3xl mx-auto">
     <div class="mb-6">
       <NuxtLink to="/nas" class="btn btn-ghost btn-sm">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <ArrowLeft class="w-4 h-4" :stroke-width="2" />
         Back to NAS List
       </NuxtLink>
     </div>
@@ -11,8 +11,8 @@
       <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
 
-    <div v-else-if="device" class="bg-base-100 rounded-xl shadow-lg border border-base-200 p-6">
-      <h1 class="text-2xl font-bold mb-6">Edit NAS Device</h1>
+    <div v-else-if="device" class="bg-base-100 border border-base-300 rounded-none p-6">
+      <h1 class="type-card-title mb-6">Edit NAS Device</h1>
 
       <form @submit.prevent="saveDevice">
         <div class="space-y-4">
@@ -101,6 +101,8 @@
 </template>
 
 <script setup lang="ts">
+import { ArrowLeft } from '@lucide/vue'
+
 interface Site {
   id: string
   name: string

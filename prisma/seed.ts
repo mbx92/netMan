@@ -1,4 +1,5 @@
 import { PrismaClient, DeviceStatus, PortStatus } from '@prisma/client'
+import { hashPassword } from '../server/utils/password'
 
 const prisma = new PrismaClient()
 
@@ -20,6 +21,27 @@ const deviceTypes = [
 
 async function main() {
     console.log('🌱 Seeding database...')
+
+    // Local admin user (non-SSO)
+    console.log('👤 Seeding local admin user...')
+    const passwordHash = await hashPassword('admin123')
+    await prisma.appUser.upsert({
+        where: { email: 'admin@netman.local' },
+        update: {
+            name: 'Local Admin',
+            passwordHash,
+            roleName: 'admin',
+            isActive: true,
+        },
+        create: {
+            email: 'admin@netman.local',
+            name: 'Local Admin',
+            passwordHash,
+            roleName: 'admin',
+            isActive: true,
+        },
+    })
+    console.log('✅ Local admin: admin@netman.local / admin123')
 
     // Seed Device Types first
     console.log('📦 Seeding device types...')

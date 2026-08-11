@@ -1,3 +1,5 @@
+export type AuthProvider = 'sso' | 'local'
+
 export interface User {
   id: string
   email: string
@@ -8,12 +10,13 @@ export interface User {
   avatarUrl?: string
   roleId?: string
   roleName?: string
+  provider?: AuthProvider
 }
 
 export interface AuthTokens {
   accessToken: string
   refreshToken: string
-  idToken: string
+  idToken?: string
   expiresAt: number
 }
 

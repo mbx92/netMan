@@ -1,35 +1,19 @@
-import prisma from '../../utils/prisma'
+import prisma, { withPrismaRetry } from '../../utils/prisma'
 import { scanNetwork, parseCIDR, enrichWithMikroTikData, type DiscoveredDevice } from '../../utils/discovery'
-
-// In-memory job storage (for simplicity - could use Redis in production)
-const discoveryJobs = new Map<string, {
-    id: string
-    networks: string[]
-    status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
-    totalHosts: number
-    scannedHosts: number
-    foundHosts: number
-    results: DiscoveredDevice[]
-    subnetProgress: { [network: string]: { scanned: number; total: number; found: number } }
-    startedAt?: Date
-    completedAt?: Date
-    error?: string
-}>()
+import { discoveryJobs, type DiscoveryJob } from '../../utils/discovery-jobs'
 
 interface StartDiscoveryBody {
-    network?: string      // Single network (backward compat)
-    networks?: string[]   // Multiple networks
+    network?: string
+    networks?: string[]
     options?: {
         timeout?: number
         concurrency?: number
     }
 }
 
-// Helper: Normalize and validate network input
 function normalizeNetwork(network: string): string {
     let normalized = network.trim()
 
-    // Auto-convert single IP to /32 CIDR
     if (!normalized.includes('/')) {
         const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
         if (!ipRegex.test(normalized)) {
@@ -38,7 +22,6 @@ function normalizeNetwork(network: string): string {
         normalized = `${normalized}/32`
     }
 
-    // Validate CIDR format
     const cidrRegex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/
     if (!cidrRegex.test(normalized)) {
         throw new Error(`Invalid CIDR format: ${normalized}`)
@@ -47,17 +30,31 @@ function normalizeNetwork(network: string): string {
     return normalized
 }
 
+async function safeAudit(data: {
+    actor: string
+    action: string
+    target: string
+    details: Record<string, unknown>
+    result: string
+}) {
+    try {
+        await withPrismaRetry(() =>
+            prisma.auditLog.create({ data }),
+        )
+    } catch (error) {
+        console.error('[Discovery] Audit log failed (non-fatal):', error)
+    }
+}
+
 // POST /api/discovery - Start a new discovery scan (supports multi-subnet)
 export default defineEventHandler(async (event) => {
     const body = await readBody<StartDiscoveryBody>(event)
 
-    // Parse networks from input (support both single and multiple)
     let networksInput: string[] = []
 
     if (body.networks && Array.isArray(body.networks)) {
         networksInput = body.networks
     } else if (body.network) {
-        // Support comma-separated or newline-separated
         networksInput = body.network
             .split(/[,\n]/)
             .map(n => n.trim())
@@ -71,7 +68,6 @@ export default defineEventHandler(async (event) => {
         })
     }
 
-    // Normalize and validate all networks
     const networks: string[] = []
     for (const net of networksInput) {
         try {
@@ -86,9 +82,8 @@ export default defineEventHandler(async (event) => {
 
     console.log(`[Discovery] Received ${networks.length} network(s) to scan:`, networks)
 
-    // Calculate total hosts
     let totalHosts = 0
-    const subnetProgress: { [network: string]: { scanned: number; total: number; found: number } } = {}
+    const subnetProgress: DiscoveryJob['subnetProgress'] = {}
 
     for (const net of networks) {
         const { total } = parseCIDR(net)
@@ -96,7 +91,6 @@ export default defineEventHandler(async (event) => {
         subnetProgress[net] = { scanned: 0, total, found: 0 }
     }
 
-    // Limit total scan size
     if (totalHosts > 2048) {
         throw createError({
             statusCode: 400,
@@ -104,37 +98,30 @@ export default defineEventHandler(async (event) => {
         })
     }
 
-    // Generate job ID
     const jobId = crypto.randomUUID()
 
-    // Create job entry
-    const job = {
+    const job: DiscoveryJob = {
         id: jobId,
         networks,
-        status: 'PENDING' as const,
+        status: 'PENDING',
         totalHosts,
         scannedHosts: 0,
         foundHosts: 0,
-        results: [] as DiscoveredDevice[],
+        results: [],
         subnetProgress,
-        startedAt: undefined as Date | undefined,
-        completedAt: undefined as Date | undefined,
     }
 
     discoveryJobs.set(jobId, job)
 
-    // Log the action
-    await prisma.auditLog.create({
-        data: {
-            actor: 'system',
-            action: 'START_DISCOVERY',
-            target: networks.join(', '),
-            details: { jobId, networks, totalHosts },
-            result: 'started',
-        },
+    await safeAudit({
+        actor: 'system',
+        action: 'START_DISCOVERY',
+        target: networks.join(', '),
+        details: { jobId, networks, totalHosts },
+        result: 'started',
     })
 
-    // Start scan in background
+    // Start scan in background (do not await)
     setTimeout(async () => {
         const currentJob = discoveryJobs.get(jobId)
         if (!currentJob) return
@@ -147,73 +134,90 @@ export default defineEventHandler(async (event) => {
 
             const allResults: DiscoveredDevice[] = []
 
-            // Scan all networks (can be parallelized, but sequential for stability)
             for (const network of networks) {
                 console.log(`[Discovery] Scanning subnet: ${network}`)
 
                 const results = await scanNetwork(network, {
-                    onProgress: (scanned, total, found) => {
+                    onProgress: (scanned, total, found, devices) => {
                         currentJob.subnetProgress[network] = { scanned, total, found }
-                        // Update total progress
                         let totalScanned = 0
-                        let totalFound = 0
                         for (const progress of Object.values(currentJob.subnetProgress)) {
                             totalScanned += progress.scanned
-                            totalFound += progress.found
                         }
                         currentJob.scannedHosts = totalScanned
-                        currentJob.foundHosts = totalFound
+                        // Merge prior subnets + live devices from current subnet
+                        currentJob.results = [...allResults, ...devices]
+                        currentJob.foundHosts = currentJob.results.length
                     },
                 })
 
                 console.log(`[Discovery] Subnet ${network} complete. Found ${results.length} devices`)
                 allResults.push(...results)
+                currentJob.results = [...allResults]
+                currentJob.foundHosts = allResults.length
             }
 
             console.log('[Discovery] All subnets scanned. Total devices:', allResults.length)
 
-            // Enrich with MikroTik data (ARP/DHCP) for cross-VLAN info
-            console.log('[Discovery] Starting MikroTik enrichment...')
-            const enrichedResults = await enrichWithMikroTikData(allResults)
-
-            // Log summary
-            console.log('\n========== DISCOVERY RESULTS ==========')
-            console.log('Networks scanned:', networks.length)
-            console.log('Total devices found:', enrichedResults.length)
-            console.log('Fields available:', enrichedResults.length > 0 ? Object.keys(enrichedResults[0]) : [])
-            console.log('========================================\n')
-
-            currentJob.results = enrichedResults
-            currentJob.foundHosts = enrichedResults.length
+            // Complete immediately with scan results so the UI never waits on MikroTik
+            currentJob.results = [...allResults]
+            currentJob.foundHosts = allResults.length
             currentJob.scannedHosts = totalHosts
             currentJob.status = 'COMPLETED'
             currentJob.completedAt = new Date()
 
-            // Update audit log
-            await prisma.auditLog.create({
-                data: {
-                    actor: 'system',
-                    action: 'COMPLETE_DISCOVERY',
-                    target: networks.join(', '),
-                    details: { jobId, foundHosts: enrichedResults.length },
-                    result: 'success',
-                },
+            console.log('\n========== DISCOVERY RESULTS ==========')
+            console.log('Networks scanned:', networks.length)
+            console.log('Total devices found:', allResults.length)
+            console.log('Fields available:', allResults.length > 0 ? Object.keys(allResults[0]) : [])
+            console.log('========================================\n')
+
+            await safeAudit({
+                actor: 'system',
+                action: 'COMPLETE_DISCOVERY',
+                target: networks.join(', '),
+                details: { jobId, foundHosts: allResults.length },
+                result: 'success',
             })
+
+            // Enrich MAC/hostname in background; refresh results if job still present
+            void (async () => {
+                try {
+                    console.log('[Discovery] Starting MikroTik enrichment (background)...')
+                    const enriched = await Promise.race([
+                        enrichWithMikroTikData(allResults),
+                        new Promise<DiscoveredDevice[]>((resolve) =>
+                            setTimeout(() => {
+                                console.warn('[Discovery] MikroTik enrichment timed out')
+                                resolve(allResults)
+                            }, 20000),
+                        ),
+                    ])
+                    const job = discoveryJobs.get(jobId)
+                    if (job) {
+                        job.results = enriched
+                        job.foundHosts = enriched.length
+                        console.log('[Discovery] Background enrichment applied for', enriched.length, 'devices')
+                    }
+                } catch (enrichError) {
+                    console.error('[Discovery] Enrichment error:', enrichError)
+                }
+            })()
         } catch (error) {
             console.error('[Discovery] Scan failed:', error)
 
             currentJob.status = 'FAILED'
             currentJob.error = error instanceof Error ? error.message : 'Unknown error'
             currentJob.completedAt = new Date()
+            // Keep any partial results for the UI
+            currentJob.foundHosts = currentJob.results.length
 
-            await prisma.auditLog.create({
-                data: {
-                    actor: 'system',
-                    action: 'FAIL_DISCOVERY',
-                    target: networks.join(', '),
-                    details: { jobId, error: currentJob.error },
-                    result: 'failed',
-                },
+            await safeAudit({
+                actor: 'system',
+                action: 'FAIL_DISCOVERY',
+                target: networks.join(', '),
+                details: { jobId, error: currentJob.error },
+                result: 'failed',
             })
         }
     }, 0)
@@ -226,6 +230,3 @@ export default defineEventHandler(async (event) => {
         subnetProgress,
     }
 })
-
-// Export job storage for other handlers
-export { discoveryJobs }

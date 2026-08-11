@@ -1,0 +1,27 @@
+---
+description: NetMan UI must follow DESIGN-ibm.md (Carbon) as the single source of truth
+alwaysApply: true
+---
+
+# Design system SSOT
+
+Canonical design document: [`DESIGN-ibm.md`](DESIGN-ibm.md).
+
+All UI work (CSS tokens, DaisyUI themes, layouts, pages, components) must follow that file. Front-matter tokens are the contract; do not invent parallel palettes or type scales.
+
+## Hard rules
+
+- **One accent:** IBM Blue `#0f62fe` for primary CTAs, links, focus underlines, and rare CTA banners only.
+- **Flat geometry:** `rounded-none` (0px) on buttons, cards, inputs, modals, and containers. No pill CTAs.
+- **No drop shadows** on product chrome; hierarchy via 1px hairline (`#e0e0e0`) and surface change (`canvas` ↔ `surface-1`).
+- **Typography:** IBM Plex Sans. Display (42px+) weight **300**; body weight **400** with `letter-spacing: 0.16px`. Do not bold display headlines.
+- **Eyebrows / labels:** sentence case, not all-caps tracked.
+- **Themes:** `carbon` (light) is default; `carbon_dark` is the secondary inverse palette. Map colors through CSS/DaisyUI tokens — do not hardcode new hex brand colors in Vue templates.
+- **Implementation:** Nuxt + Tailwind v4 only (no DaisyUI). Tokens and thin Carbon component utilities live in `app/assets/css/main.css` and must stay aligned with `DESIGN-ibm.md`.
+- **Product chrome:** NetMan may use an infra/ops layer on top of Carbon — grid mesh backgrounds, IBM Plex Mono for IPs/metrics, left accent rails, utility bar — without adding a second brand color or rounded chrome.
+
+## When changing UI
+
+1. Prefer existing utility classes (`.stat-card`, `.type-*`, `.sidebar-link`, DaisyUI `btn`/`input` with Carbon overrides).
+2. After token edits, update `DESIGN-ibm.md` and CSS together so they do not drift.
+3. Do not reintroduce glassmorphism, multi-layer shadows, or a second brand color.

@@ -5,8 +5,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const authStore = useAuthStore()
   const { ensureValidToken } = useAuth()
 
-  // Restore auth from localStorage on first load
-  if (!authStore.isAuthenticated && !authStore.user) {
+  // Restore only if still empty (plugin also restores post-mount)
+  if (!authStore.user) {
     authStore.restoreAuth()
   }
 

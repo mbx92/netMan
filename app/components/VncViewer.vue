@@ -4,13 +4,11 @@
     <div v-if="!connected" class="flex-1 flex items-center justify-center p-6">
       <div class="w-full max-w-md space-y-6">
         <div class="text-center">
-          <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-info/20 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-            </svg>
+          <div class="w-16 h-16 mx-auto mb-4 rounded-none bg-info/20 flex items-center justify-center">
+            <Monitor class="w-8 h-8 text-info" :stroke-width="2" />
           </div>
-          <h3 class="text-xl font-semibold">VNC Remote Desktop</h3>
-          <p class="text-base-content/60 text-sm mt-1">Connect to {{ deviceName || 'device' }} via VNC</p>
+          <h3 class="type-card-title">VNC Remote Desktop</h3>
+          <p class="type-body-sm text-base-content/60 mt-1">Connect to {{ deviceName || 'device' }} via VNC</p>
         </div>
 
         <form @submit.prevent="connect" class="space-y-4">
@@ -46,9 +44,7 @@
           </div>
           
           <div v-if="error" class="alert alert-error text-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-            </svg>
+            <XCircle class="w-5 h-5" :stroke-width="2" />
             <span>{{ error }}</span>
           </div>
 
@@ -58,9 +54,7 @@
             :disabled="connecting || !host"
           >
             <span v-if="connecting" class="loading loading-spinner loading-sm"></span>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-            </svg>
+            <Monitor v-else class="w-4 h-4" :stroke-width="2" />
             {{ connecting ? 'Connecting...' : 'Connect' }}
           </button>
           <button 
@@ -69,11 +63,7 @@
             :disabled="!host"
             @click="openInNewWindow"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
+            <ExternalLink class="w-4 h-4" :stroke-width="2" />
             Open VNC Viewer
           </button>
         </form>
@@ -94,14 +84,10 @@
             @click="toggleFullscreen"
             title="Fullscreen"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-            </svg>
+            <Maximize class="w-4 h-4" :stroke-width="2" />
           </button>
           <button class="btn btn-ghost btn-sm text-error" @click="disconnect">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
-            </svg>
+            <Power class="w-4 h-4" :stroke-width="2" />
             Disconnect
           </button>
         </div>
@@ -123,6 +109,8 @@
 </template>
 
 <script setup lang="ts">
+import { ExternalLink, Maximize, Monitor, Power, XCircle } from '@lucide/vue'
+
 const props = defineProps<{
   deviceId: string
   deviceName?: string

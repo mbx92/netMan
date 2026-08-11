@@ -1,179 +1,262 @@
 <template>
-  <div class="min-h-screen bg-base-200">
-    <!-- Top Navigation -->
-    <header class="navbar bg-base-100 border-b border-base-300 sticky top-0 z-50">
-      <div class="flex-none lg:hidden">
-        <label for="drawer-toggle" class="btn btn-square btn-ghost">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-6 h-6 stroke-current">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-          </svg>
-        </label>
-      </div>
-      <div class="flex-1 px-4">
-        <NuxtLink to="/" class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary-content" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
-          </div>
-          <span class="text-xl font-bold">NetMan</span>
-        </NuxtLink>
-      </div>
-      <div class="flex-none gap-2">
-        <!-- Theme Toggle -->
-        <label class="swap swap-rotate btn btn-ghost btn-circle">
-          <input type="checkbox" class="theme-controller" value="netman_light" />
-          <svg class="swap-on fill-current w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.64,17l-.71.71a1,1,0,0,0,0,1.41,1,1,0,0,0,1.41,0l.71-.71A1,1,0,0,0,5.64,17ZM5,12a1,1,0,0,0-1-1H3a1,1,0,0,0,0,2H4A1,1,0,0,0,5,12Zm7-7a1,1,0,0,0,1-1V3a1,1,0,0,0-2,0V4A1,1,0,0,0,12,5ZM5.64,7.05a1,1,0,0,0,.7.29,1,1,0,0,0,.71-.29,1,1,0,0,0,0-1.41l-.71-.71A1,1,0,0,0,4.93,6.34Zm12,.29a1,1,0,0,0,.7-.29l.71-.71a1,1,0,1,0-1.41-1.41L17,5.64a1,1,0,0,0,0,1.41A1,1,0,0,0,17.66,7.34ZM21,11H20a1,1,0,0,0,0,2h1a1,1,0,0,0,0-2Zm-9,8a1,1,0,0,0-1,1v1a1,1,0,0,0,2,0V20A1,1,0,0,0,12,19ZM18.36,17A1,1,0,0,0,17,18.36l.71.71a1,1,0,0,0,1.41,0,1,1,0,0,0,0-1.41ZM12,6.5A5.5,5.5,0,1,0,17.5,12,5.51,5.51,0,0,0,12,6.5Zm0,9A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"/></svg>
-          <svg class="swap-off fill-current w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"/></svg>
-        </label>
-        <!-- User Menu -->
+  <div class="min-h-screen infra-shell flex flex-col">
+    <!-- Sticky chrome: utility + top nav stay pinned together -->
+    <div class="sticky top-0 z-50 shrink-0">
+      <div class="utility-bar hidden md:flex">
+        <span class="ops-chip ops-chip--live">FABRIC ONLINE</span>
+        <span class="text-base-content/40">|</span>
+        <span>NetMan · Infrastructure control</span>
         <ClientOnly>
-          <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
-              <div v-if="user?.avatarUrl" class="w-9 rounded-full">
-                <img :src="user.avatarUrl" :alt="user.name" />
-              </div>
-              <div v-else class="w-9 rounded-full bg-primary text-primary-content flex items-center justify-center">
-                <span class="text-sm font-semibold">{{ userInitials }}</span>
-              </div>
-            </div>
-            <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 border border-base-300 rounded-box w-56 mt-3">
-              <!-- User Info -->
-              <li class="menu-title px-4 py-2">
-                <div class="flex flex-col gap-1">
-                  <span class="font-semibold text-base-content">{{ user?.name || 'User' }}</span>
-                  <span class="text-xs text-base-content/60">{{ user?.email || '' }}</span>
-                  <span v-if="user?.department" class="text-xs text-base-content/50">{{ user.department }}</span>
-                </div>
-              </li>
-              <div class="divider my-0"></div>
-              <li><NuxtLink to="/profile">Profile</NuxtLink></li>
-              <li><NuxtLink to="/settings">Settings</NuxtLink></li>
-              <div class="divider my-0"></div>
-              <li>
-                <button @click="handleLogout" class="text-error">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                  Logout
-                </button>
-              </li>
-            </ul>
-          </div>
+          <span class="ml-auto type-mono text-base-content/50">{{ clockLabel }}</span>
           <template #fallback>
-            <div class="btn btn-ghost btn-circle avatar">
-              <div class="w-9 rounded-full bg-base-300 animate-pulse"></div>
-            </div>
+            <span class="ml-auto type-mono text-base-content/50 tabular-nums">----/--/-- --:--:--</span>
           </template>
         </ClientOnly>
       </div>
-    </header>
 
-    <div class="drawer lg:drawer-open">
-      <input id="drawer-toggle" type="checkbox" class="drawer-toggle" />
-      
-      <!-- Sidebar -->
-      <div class="drawer-side z-40">
-        <label for="drawer-toggle" class="drawer-overlay"></label>
-        <aside class="menu bg-base-100 w-64 min-h-full border-r border-base-300 p-4">
-          <nav class="space-y-2">
-            <NuxtLink to="/" class="sidebar-link py-2" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-              Dashboard
-            </NuxtLink>
-            <NuxtLink to="/devices" class="sidebar-link py-2" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-              Devices
-            </NuxtLink>
-            <NuxtLink to="/topology" class="sidebar-link py-2" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-              Network Topology
-            </NuxtLink>
-            <NuxtLink to="/ipam" class="sidebar-link py-2" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-              IPAM
-            </NuxtLink>
-            <NuxtLink to="/discovery" class="sidebar-link py-2" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-              Discovery
+      <header class="top-nav flex items-center px-2 gap-1">
+        <button
+          type="button"
+          class="btn btn-ghost btn-square btn-sm lg:hidden"
+          aria-label="Open menu"
+          @click="mobileOpen = true"
+        >
+          <Menu class="w-5 h-5" :stroke-width="2" />
+        </button>
+
+        <NuxtLink to="/" class="flex items-center gap-3 px-2 flex-1 min-w-0">
+          <div class="nav-brand-mark w-8 h-8 flex items-center justify-center shrink-0">
+            <Network class="w-5 h-5 text-primary-content" :stroke-width="2" />
+          </div>
+          <div class="min-w-0 leading-tight">
+            <div class="type-body-emphasis truncate">NetMan</div>
+            <div class="type-mono text-base-content/50 truncate hidden sm:block">Network operations</div>
+          </div>
+        </NuxtLink>
+
+        <button
+          type="button"
+          class="btn btn-ghost btn-square btn-sm"
+          :aria-label="isDark ? 'Switch to light theme' : 'Switch to dark theme'"
+          @click="toggleTheme"
+        >
+          <Sun v-if="isDark" class="w-5 h-5" :stroke-width="2" />
+          <Moon v-else class="w-5 h-5" :stroke-width="2" />
+        </button>
+
+        <ClientOnly>
+          <UiAppDropdown align="end">
+            <template #trigger>
+              <button type="button" class="btn btn-ghost btn-square btn-sm avatar" aria-haspopup="menu">
+                <div v-if="user?.avatarUrl" class="w-8 h-8 rounded-sm overflow-hidden">
+                  <img :src="user.avatarUrl" :alt="user.name" class="w-full h-full object-cover" />
+                </div>
+                <div v-else class="w-8 h-8 rounded-sm bg-primary text-primary-content flex items-center justify-center">
+                  <span class="type-caption font-semibold">{{ userInitials }}</span>
+                </div>
+              </button>
+            </template>
+            <template #default="{ close }">
+              <ul class="menu w-56">
+                <li class="menu-title">
+                  <div class="flex flex-col gap-1 normal-case">
+                    <span class="type-body-emphasis text-base-content">{{ user?.name || 'User' }}</span>
+                    <span class="type-mono text-base-content/60">{{ user?.email || '' }}</span>
+                  </div>
+                </li>
+                <li class="border-t border-base-300">
+                  <NuxtLink to="/profile" @click="close()">Profile</NuxtLink>
+                </li>
+                <li>
+                  <NuxtLink to="/settings" @click="close()">Settings</NuxtLink>
+                </li>
+                <li class="border-t border-base-300">
+                  <button type="button" class="text-error" @click="close(); handleLogout()">
+                    Logout
+                  </button>
+                </li>
+              </ul>
+            </template>
+          </UiAppDropdown>
+          <template #fallback>
+            <div class="btn btn-ghost btn-square btn-sm">
+              <div class="w-8 h-8 rounded-sm bg-base-300 animate-pulse"></div>
+            </div>
+          </template>
+        </ClientOnly>
+      </header>
+    </div>
+
+    <div class="flex flex-1 min-h-0">
+      <div
+        v-if="mobileOpen"
+        class="fixed inset-0 z-40 bg-ink/40 lg:hidden"
+        @click="mobileOpen = false"
+      />
+
+      <!-- Fixed viewport-height rail: stays pinned while main scrolls -->
+      <aside
+        class="sidebar-rail fixed z-40 left-0 top-12 md:top-[76px] h-[calc(100vh-48px)] md:h-[calc(100vh-76px)] bg-base-100 border-r border-base-300 flex flex-col transition-[width,transform] duration-200 ease-out lg:translate-x-0"
+        :class="[
+          sidebarCollapsed ? 'is-collapsed' : '',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+        ]"
+      >
+        <div class="flex flex-col h-full min-h-0">
+          <nav class="flex-1 py-2 overflow-y-auto overflow-x-hidden min-h-0">
+            <div class="sidebar-section">Operations</div>
+            <NuxtLink
+              v-for="item in opsLinks"
+              :key="item.to"
+              :to="item.to"
+              class="sidebar-link"
+              :class="tipClass"
+              active-class="active"
+              :data-tip="tip(item.label)"
+              @click="mobileOpen = false"
+            >
+              <component :is="item.icon" class="w-5 h-5 shrink-0" :stroke-width="2" />
+              <span class="sidebar-link-label truncate">{{ item.label }}</span>
             </NuxtLink>
 
-            <div class="divider text-xs text-base-content/50">Configuration</div>
-            
-            <NuxtLink to="/sites" class="sidebar-link" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><rect x="9" y="12" width="6" height="10"/></svg>
-              Sites
-            </NuxtLink>
-            <NuxtLink to="/settings/mikrotik" class="sidebar-link" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
-              MikroTik
-            </NuxtLink>
-            <NuxtLink to="/nas" class="sidebar-link" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-              NAS Storage
-            </NuxtLink>
-            <NuxtLink to="/settings/device-types" class="sidebar-link" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5z"/><path d="M14 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V5z"/><path d="M4 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4z"/><path d="M14 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-4z"/></svg>
-              Device Types
+            <div class="sidebar-section">Configuration</div>
+            <NuxtLink
+              v-for="item in configLinks"
+              :key="item.to"
+              :to="item.to"
+              class="sidebar-link"
+              :class="tipClass"
+              active-class="active"
+              :data-tip="tip(item.label)"
+              @click="mobileOpen = false"
+            >
+              <component :is="item.icon" class="w-5 h-5 shrink-0" :stroke-width="2" />
+              <span class="sidebar-link-label truncate">{{ item.label }}</span>
             </NuxtLink>
 
-            <div class="divider text-xs text-base-content/50">Monitoring</div>
-            
-            <NuxtLink to="/audit" class="sidebar-link" active-class="active">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-              Audit Logs
+            <div class="sidebar-section">Observability</div>
+            <NuxtLink
+              v-for="item in observeLinks"
+              :key="item.to"
+              :to="item.to"
+              class="sidebar-link"
+              :class="tipClass"
+              active-class="active"
+              :data-tip="tip(item.label)"
+              @click="mobileOpen = false"
+            >
+              <component :is="item.icon" class="w-5 h-5 shrink-0" :stroke-width="2" />
+              <span class="sidebar-link-label truncate">{{ item.label }}</span>
             </NuxtLink>
           </nav>
-          
-          <!-- System Status -->
-          <div class="mt-auto pt-6">
-            <div class="rounded-lg bg-base-200 p-3">
-              <div class="text-xs font-medium text-base-content/70 mb-2">System Status</div>
+
+          <div class="p-3 border-t border-base-300 shrink-0">
+            <div class="sidebar-footer-panel infra-panel p-3 mb-2">
+              <div class="type-mono text-base-content/50 mb-2">CONTROL PLANE</div>
               <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full bg-success pulse-dot"></div>
-                <span class="text-sm">All systems operational</span>
+                <span class="ops-chip ops-chip--live">HEALTHY</span>
               </div>
             </div>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm sidebar-collapse-btn hidden lg:inline-flex justify-center gap-2"
+              :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+              :aria-expanded="!sidebarCollapsed"
+              @click="toggleSidebarCollapsed"
+            >
+              <PanelLeftOpen v-if="sidebarCollapsed" class="w-5 h-5 shrink-0" :stroke-width="2" />
+              <PanelLeftClose v-else class="w-5 h-5 shrink-0" :stroke-width="2" />
+              <span class="sidebar-link-label">{{ sidebarCollapsed ? 'Expand' : 'Collapse' }}</span>
+            </button>
           </div>
-        </aside>
-      </div>
+        </div>
+      </aside>
 
-      <!-- Main Content -->
-      <main class="drawer-content p-6">
+      <!-- Spacer reserves layout width for the fixed rail -->
+      <div
+        class="hidden lg:block shrink-0 transition-[width] duration-200 ease-out"
+        :class="sidebarCollapsed ? 'w-[4.5rem]' : 'w-64'"
+        aria-hidden="true"
+      />
+
+      <main class="flex-1 p-6 max-w-[1584px] w-full infra-main min-w-0">
         <slot />
       </main>
     </div>
 
-    <!-- Logout Confirmation Modal -->
-    <dialog ref="logoutModal" class="modal modal-bottom sm:modal-middle">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg">Konfirmasi Logout</h3>
-        <p class="py-4">Apakah Anda yakin ingin logout?</p>
+    <dialog ref="logoutModal" class="modal">
+      <div class="modal-box glass-modal">
+        <h3 class="type-card-title">Konfirmasi logout</h3>
+        <p class="py-4 type-body">Apakah Anda yakin ingin logout?</p>
         <div class="modal-action">
-          <button @click="closeLogoutModal" class="btn btn-ghost">Batal</button>
-          <button @click="confirmLogout" class="btn btn-error">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            Logout
-          </button>
+          <button type="button" class="btn btn-ghost" @click="closeLogoutModal">Batal</button>
+          <button type="button" class="btn btn-error" @click="confirmLogout">Logout</button>
         </div>
       </div>
       <form method="dialog" class="modal-backdrop">
-        <button>close</button>
+        <button type="submit">close</button>
       </form>
     </dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-const { user, logout } = useAuth()
+import {
+  Menu,
+  Network,
+  Sun,
+  Moon,
+  LayoutDashboard,
+  Monitor,
+  Waypoints,
+  Grid2x2,
+  Radar,
+  Building2,
+  Router,
+  Database,
+  Boxes,
+  ScrollText,
+  PanelLeftOpen,
+  PanelLeftClose,
+} from '@lucide/vue'
 
+const { user, logout } = useAuth()
+const { isDark, toggleTheme } = useTheme()
+
+const SIDEBAR_KEY = 'netman.sidebar.collapsed'
+
+const mobileOpen = ref(false)
+const sidebarCookie = useCookie<string>(SIDEBAR_KEY, {
+  sameSite: 'lax',
+  default: () => '0',
+})
+const sidebarCollapsed = computed({
+  get: () => sidebarCookie.value === '1',
+  set: (value: boolean) => {
+    sidebarCookie.value = value ? '1' : '0'
+    if (import.meta.client) {
+      localStorage.setItem(SIDEBAR_KEY, value ? '1' : '0')
+    }
+  },
+})
 const logoutModal = ref<HTMLDialogElement | null>(null)
+const now = ref<Date | null>(null)
+
+const tipClass = computed(() => (sidebarCollapsed.value ? 'tooltip tooltip-right' : ''))
+const tip = (label: string) => (sidebarCollapsed.value ? label : undefined)
+
+const clockLabel = computed(() => {
+  if (!now.value) return '----/--/-- --:--:--'
+  return now.value.toLocaleString('en-GB', {
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).replace(',', '')
+})
 
 const userInitials = computed(() => {
   if (!user.value?.name) return 'U'
@@ -183,6 +266,29 @@ const userInitials = computed(() => {
   }
   return names[0].substring(0, 2).toUpperCase()
 })
+
+const opsLinks = [
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/devices', label: 'Devices', icon: Monitor },
+  { to: '/topology', label: 'Topology', icon: Waypoints },
+  { to: '/ipam', label: 'IPAM', icon: Grid2x2 },
+  { to: '/discovery', label: 'Discovery', icon: Radar },
+]
+
+const configLinks = [
+  { to: '/sites', label: 'Sites', icon: Building2 },
+  { to: '/settings/mikrotik', label: 'MikroTik', icon: Router },
+  { to: '/nas', label: 'NAS Storage', icon: Database },
+  { to: '/settings/device-types', label: 'Device Types', icon: Boxes },
+]
+
+const observeLinks = [
+  { to: '/audit', label: 'Audit Logs', icon: ScrollText },
+]
+
+const toggleSidebarCollapsed = () => {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
 
 const handleLogout = () => {
   logoutModal.value?.showModal()
@@ -196,5 +302,21 @@ const confirmLogout = async () => {
   logoutModal.value?.close()
   await logout()
 }
-</script>
 
+let timer: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  const legacy = localStorage.getItem(SIDEBAR_KEY)
+  if (legacy === '1' && sidebarCookie.value !== '1') {
+    sidebarCollapsed.value = true
+  } else {
+    localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed.value ? '1' : '0')
+  }
+  now.value = new Date()
+  timer = setInterval(() => {
+    now.value = new Date()
+  }, 1000)
+})
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+})
+</script>

@@ -772,7 +772,7 @@ export async function scanNetwork(
     cidr: string,
     options: {
         concurrency?: number
-        onProgress?: (scanned: number, total: number, found: number) => void
+        onProgress?: (scanned: number, total: number, found: number, devices: DiscoveredDevice[]) => void
     } = {}
 ): Promise<DiscoveredDevice[]> {
     console.log('[Discovery] scanNetwork called with CIDR:', cidr)
@@ -815,7 +815,7 @@ export async function scanNetwork(
         }
 
         if (onProgress) {
-            onProgress(scanned, total, discovered.length)
+            onProgress(scanned, total, discovered.length, discovered)
         }
     }
 

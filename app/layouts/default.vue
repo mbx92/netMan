@@ -184,17 +184,24 @@
       </main>
     </div>
 
-    <dialog ref="logoutModal" class="modal">
-      <div class="modal-box glass-modal">
+    <dialog
+      class="modal"
+      :class="{ 'modal-open': showLogoutModal }"
+      :open="showLogoutModal || undefined"
+      @close="showLogoutModal = false"
+    >
+      <div class="modal-box glass-modal rounded-none">
         <h3 class="type-card-title">Konfirmasi logout</h3>
-        <p class="py-4 type-body">Apakah Anda yakin ingin logout?</p>
+        <p class="py-4 type-body text-base-content/70">
+          Apakah Anda yakin ingin logout?
+        </p>
         <div class="modal-action">
-          <button type="button" class="btn btn-ghost" @click="closeLogoutModal">Batal</button>
+          <button type="button" class="btn btn-ghost" @click="showLogoutModal = false">Batal</button>
           <button type="button" class="btn btn-error" @click="confirmLogout">Logout</button>
         </div>
       </div>
       <form method="dialog" class="modal-backdrop">
-        <button type="submit">close</button>
+        <button type="submit" @click="showLogoutModal = false">close</button>
       </form>
     </dialog>
   </div>
@@ -239,7 +246,7 @@ const sidebarCollapsed = computed({
     }
   },
 })
-const logoutModal = ref<HTMLDialogElement | null>(null)
+const showLogoutModal = ref(false)
 const now = ref<Date | null>(null)
 
 const tipClass = computed(() => (sidebarCollapsed.value ? 'tooltip tooltip-right' : ''))
@@ -291,15 +298,11 @@ const toggleSidebarCollapsed = () => {
 }
 
 const handleLogout = () => {
-  logoutModal.value?.showModal()
-}
-
-const closeLogoutModal = () => {
-  logoutModal.value?.close()
+  showLogoutModal.value = true
 }
 
 const confirmLogout = async () => {
-  logoutModal.value?.close()
+  showLogoutModal.value = false
   await logout()
 }
 

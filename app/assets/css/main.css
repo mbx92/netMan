@@ -540,16 +540,19 @@
     border: none;
     padding: 0;
     margin: 0;
-    max-width: none;
-    max-height: none;
-    width: 100%;
-    height: 100%;
     background: transparent;
     color: inherit;
+    /* Override UA fit-content so children with w-full don't collapse */
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
   }
   .modal {
     @apply fixed inset-0 z-[120] items-center justify-center p-4;
-    background: rgba(22, 22, 22, 0.5);
+    background: rgba(141, 141, 141, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
   dialog.modal:not([open]):not(.modal-open),
   div.modal:not(.modal-open) {
@@ -560,13 +563,18 @@
     display: flex !important;
   }
   .modal::backdrop {
-    background: rgba(22, 22, 22, 0.5);
+    background: rgba(141, 141, 141, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
   .modal-box {
     @apply relative z-[1] w-full max-w-lg bg-base-100 border border-base-300 p-6 text-base-content;
     border-radius: 0;
     max-height: calc(100vh - 2rem);
     overflow: auto;
+    flex-shrink: 0;
+    /* Prevent native <dialog> fit-content shrink (one-char-wide strip) */
+    min-width: min(20rem, calc(100vw - 2rem));
   }
   .modal-action {
     @apply flex justify-end gap-2 mt-6;

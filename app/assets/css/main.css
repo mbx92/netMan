@@ -781,6 +781,7 @@
 /* Collapsed rail — icon-only nav (desktop); mobile drawer always full width */
 .sidebar-rail {
   width: 16rem; /* w-64 */
+  /* No width transition - instant snap prevents content shift */
 }
 .sidebar-rail .sidebar-link.tooltip {
   display: flex;
@@ -864,8 +865,9 @@
 }
 
 .infra-main {
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--nm-canvas) 88%, transparent), var(--nm-canvas));
+  /* Opaque canvas — must fully cover infra-shell mesh when the rail resizes */
+  background-color: var(--nm-canvas);
+  min-height: 100%;
 }
 
 .infra-panel {

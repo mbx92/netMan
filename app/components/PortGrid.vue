@@ -1,59 +1,68 @@
 <template>
   <div class="port-grid-container">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
       <div class="flex items-center gap-3">
         <h3 class="type-card-title">Network Ports</h3>
-        <!-- Real-time indicator -->
         <span v-if="isLive" class="flex items-center gap-1 text-xs text-success">
           <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
           Real-time
         </span>
       </div>
-      <div class="flex gap-2">
-        <span class="flex items-center gap-1 text-xs">
-          <span class="w-3 h-3 rounded-full bg-success"></span> Online
+      <div class="flex gap-3 text-[10px] text-ink-subtle flex-wrap">
+        <span class="inline-flex items-center gap-1">
+          <span class="w-2 h-2 bg-success"></span> Online
         </span>
-        <span class="flex items-center gap-1 text-xs">
-          <span class="w-3 h-3 rounded-full bg-error"></span> Offline
+        <span class="inline-flex items-center gap-1">
+          <span class="w-2 h-2 bg-error"></span> Offline
         </span>
-        <span class="flex items-center gap-1 text-xs">
-          <span class="w-3 h-3 rounded-full bg-base-300"></span> Unassigned
+        <span class="inline-flex items-center gap-1">
+          <span class="w-2 h-2 bg-base-300"></span> Unassigned
+        </span>
+        <span class="inline-flex items-center gap-1">
+          <span class="w-3 h-2 border border-primary bg-transparent"></span> SFP
+        </span>
+        <span class="inline-flex items-center gap-1">
+          <span class="w-3 h-2 border border-ink-subtle bg-transparent"></span> Ethernet
         </span>
       </div>
     </div>
 
-    <!-- Port Grid -->
-    <div class="port-grid bg-base-200 rounded-none p-4">
-      <div class="grid grid-cols-8 gap-2">
-        <div 
-          v-for="port in ports" 
-          :key="port.id"
-          class="port-item relative"
-          @click="selectPort(port)"
-        >
-          <!-- Port Icon -->
-          <div 
-            :class="[
-              'port-icon flex flex-col items-center justify-center p-2 rounded-none cursor-pointer transition-all',
-              'hover:bg-base-100 hover:border-base-300',
-              selectedPort?.id === port.id ? 'ring-2 ring-primary' : '',
-              getPortBgClass(port),
-            ]"
-          >
-            <!-- Network/Ethernet Port Icon -->
-            <EthernetPort class="w-6 h-6" :stroke-width="2" />
-            <!-- Port Number -->
-            <span class="text-xs font-bold mt-1">{{ port.portNumber }}</span>
+    <div v-if="ports.length" class="space-y-5">
+      <!-- Ethernet -->
+      <div v-if="ethernetPorts.length">
+        <p class="text-sm font-medium mb-2">Ethernet ({{ ethernetPorts.length }})</p>
+        <div class="border border-base-300 rounded-none p-4 md:p-5 bg-[var(--nm-inverse-surface)]">
+          <div class="flex flex-wrap justify-start gap-3 md:gap-4">
+            <PortBay
+              v-for="port in ethernetPorts"
+              :key="port.id"
+              kind="ethernet"
+              :label="port.portNumber ?? port.portName"
+              :status="portLinkStatus(port)"
+              :caption="port.connectedDevice?.name"
+              :selected="selectedPort?.id === port.id"
+              @select="selectPort(port)"
+            />
           </div>
-          
-          <!-- Status Indicator -->
-          <div 
-            :class="[
-              'absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-base-200',
-              getStatusClass(port),
-            ]"
-          ></div>
+        </div>
+      </div>
+
+      <!-- SFP -->
+      <div v-if="sfpPorts.length">
+        <p class="text-sm font-medium mb-2">SFP / SFP+ ({{ sfpPorts.length }})</p>
+        <div class="border border-base-300 rounded-none p-4 md:p-5 bg-[var(--nm-inverse-surface)]">
+          <div class="flex flex-wrap justify-start gap-3 md:gap-4">
+            <PortBay
+              v-for="port in sfpPorts"
+              :key="port.id"
+              kind="sfp"
+              :label="port.portNumber ?? port.portName"
+              :status="portLinkStatus(port)"
+              :caption="port.connectedDevice?.name"
+              :selected="selectedPort?.id === port.id"
+              @select="selectPort(port)"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -63,6 +72,7 @@
       <div class="flex justify-between items-start">
         <div>
           <h4 class="font-semibold">Port {{ selectedPort.portNumber }} ({{ selectedPort.portName }})</h4>
+          <p class="text-xs text-ink-muted mt-0.5 capitalize">{{ detectKind(selectedPort) }}</p>
           <p v-if="selectedPort.description" class="text-sm opacity-60">
             {{ selectedPort.description }}
           </p>
@@ -70,17 +80,16 @@
             VLAN: {{ selectedPort.vlan }}
           </div>
         </div>
-        <button 
+        <button
           class="btn btn-sm btn-ghost"
           @click="selectedPort = null"
-        >✕</button>
+        ><X class="w-4 h-4" :stroke-width="2" /></button>
       </div>
 
-      <!-- Connected Device -->
       <div class="mt-3">
         <label class="text-sm font-medium">Connected Device:</label>
         <div v-if="selectedPort.connectedDevice" class="flex items-center gap-2 mt-1">
-          <span 
+          <span
             :class="[
               'w-2 h-2 rounded-full',
               selectedPort.pingStatus === 'online' ? 'bg-success' : 'bg-error',
@@ -88,36 +97,36 @@
           ></span>
           <span>{{ selectedPort.connectedDevice.name }}</span>
           <span class="text-sm opacity-60">({{ selectedPort.connectedDevice.ip }})</span>
-          <button 
+          <button
             class="btn btn-xs btn-ghost text-error"
             @click="unassignPort(selectedPort)"
           >
             Remove
           </button>
         </div>
-        <div v-else class="mt-2">
-          <select 
-            v-model="assignDeviceId" 
-            class="select select-sm select-bordered w-full max-w-xs"
+        <div v-else class="mt-2 space-y-2">
+          <select
+            v-model="assignDeviceId"
+            class="select select-bordered w-full min-w-0"
           >
             <option value="">Select a device...</option>
-            <option 
-              v-for="device in availableDevices" 
-              :key="device.id" 
+            <option
+              v-for="device in availableDevices"
+              :key="device.id"
               :value="device.id"
             >
               {{ device.name }} ({{ device.ip }})
             </option>
           </select>
-          <div class="flex gap-2 mt-2">
-            <button 
+          <div class="flex flex-wrap gap-2">
+            <button
               class="btn btn-sm btn-primary"
               :disabled="!assignDeviceId"
               @click="assignPort(selectedPort)"
             >
               Assign Device
             </button>
-            <button 
+            <button
               class="btn btn-sm btn-error btn-outline"
               @click="deletePort(selectedPort)"
             >
@@ -128,9 +137,8 @@
       </div>
     </div>
 
-    <!-- Actions Bar -->
     <div v-if="ports.length > 0" class="mt-4 flex gap-2">
-      <button 
+      <button
         class="btn btn-sm btn-outline"
         @click="$emit('add-ports')"
       >
@@ -138,7 +146,6 @@
       </button>
     </div>
 
-    <!-- Assigned Devices Card (separate from main grid) -->
     <div v-if="assignedPorts.length > 0" class="mt-6 bg-base-100 border border-base-300 rounded-none p-6">
       <h4 class="type-card-title mb-4">Connected Devices ({{ assignedPorts.length }})</h4>
       <div class="overflow-x-auto">
@@ -155,7 +162,7 @@
             <tr v-for="port in assignedPorts" :key="port.id" class="hover:bg-base-200/30">
               <td class="font-mono">{{ port.portName }}</td>
               <td>
-                <NuxtLink 
+                <NuxtLink
                   v-if="port.connectedDevice?.id"
                   :to="`/devices/${port.connectedDevice.id}`"
                   class="font-medium text-primary hover:underline"
@@ -166,10 +173,10 @@
               </td>
               <td class="font-mono text-sm">{{ port.connectedDevice?.ip || '-' }}</td>
               <td>
-                <span 
+                <span
                   :class="[
                     'badge badge-sm',
-                    port.pingStatus === 'online' ? 'badge-success' : 
+                    port.pingStatus === 'online' ? 'badge-success' :
                     port.pingStatus === 'offline' ? 'badge-error' : 'badge-warning'
                   ]"
                 >
@@ -182,11 +189,10 @@
       </div>
     </div>
 
-    <!-- Empty State -->
     <div v-if="ports.length === 0" class="text-center py-8 opacity-60">
       <p>No ports configured for this device.</p>
-      <button 
-        v-if="isNetworkDevice" 
+      <button
+        v-if="isNetworkDevice"
         class="btn btn-sm btn-primary mt-2"
         @click="$emit('add-ports')"
       >
@@ -197,8 +203,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { EthernetPort } from '@lucide/vue'
+import { X } from '@lucide/vue'
+import PortBay from '~/components/ports/PortBay.vue'
 
 interface Port {
   id: string
@@ -243,28 +249,39 @@ const emit = defineEmits<{
 const selectedPort = ref<Port | null>(null)
 const assignDeviceId = ref('')
 
-// Computed: ports that have devices assigned
-const assignedPorts = computed(() => 
-  props.ports.filter(port => port.connectedDevice)
+const assignedPorts = computed(() =>
+  props.ports.filter(port => port.connectedDevice),
 )
+
+function detectKind(port: Port): 'ethernet' | 'sfp' {
+  const name = `${port.portName || ''} ${port.description || ''}`.toLowerCase()
+  if (/sfp|qsfp|fiber|optic/.test(name)) return 'sfp'
+  return 'ethernet'
+}
+
+const ethernetPorts = computed(() =>
+  [...props.ports.filter(p => detectKind(p) === 'ethernet')]
+    .sort((a, b) => (a.portNumber || 0) - (b.portNumber || 0)),
+)
+
+const sfpPorts = computed(() =>
+  [...props.ports.filter(p => detectKind(p) === 'sfp')]
+    .sort((a, b) => (a.portNumber || 0) - (b.portNumber || 0)),
+)
+
+function portLinkStatus(port: Port): 'up' | 'down' | 'disabled' {
+  if (String(port.status).toUpperCase() === 'DISABLED') return 'disabled'
+  if (port.connectedDevice) {
+    if (port.pingStatus === 'online') return 'up'
+    if (port.pingStatus === 'offline') return 'down'
+  }
+  if (String(port.status).toUpperCase() === 'UP') return 'up'
+  return 'down'
+}
 
 function selectPort(port: Port) {
   selectedPort.value = port
   assignDeviceId.value = ''
-}
-
-function getStatusClass(port: Port): string {
-  if (!port.connectedDevice) return 'bg-base-300'
-  if (port.pingStatus === 'online') return 'bg-success'
-  if (port.pingStatus === 'offline') return 'bg-error'
-  return 'bg-warning'
-}
-
-function getPortBgClass(port: Port): string {
-  if (!port.connectedDevice) return 'bg-base-300 opacity-60'
-  if (port.pingStatus === 'online') return 'bg-success opacity-30'
-  if (port.pingStatus === 'offline') return 'bg-error opacity-30'
-  return 'bg-warning opacity-30'
 }
 
 function assignPort(port: Port) {
@@ -279,29 +296,15 @@ function unassignPort(port: Port) {
   selectedPort.value = null
 }
 
-function deletePort(port: Port) {
-  if (confirm(`Delete port ${port.portName}? This cannot be undone.`)) {
-    emit('delete-port', port.id)
-    selectedPort.value = null
-  }
+async function deletePort(port: Port) {
+  const ok = await confirmDialog({
+    title: 'Delete Port',
+    message: `Delete port ${port.portName}? This cannot be undone.`,
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  })
+  if (!ok) return
+  emit('delete-port', port.id)
+  selectedPort.value = null
 }
 </script>
-
-<style scoped>
-.port-grid-container {
-  @apply w-full;
-}
-
-.port-icon svg {
-  @apply opacity-90;
-}
-
-.port-icon span {
-  @apply opacity-90;
-}
-
-.port-item:hover .port-icon svg,
-.port-item:hover .port-icon span {
-  @apply opacity-100;
-}
-</style>

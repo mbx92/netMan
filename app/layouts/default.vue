@@ -96,7 +96,7 @@
 
       <!-- Fixed viewport-height rail: stays pinned while main scrolls -->
       <aside
-        class="sidebar-rail fixed z-40 left-0 top-12 md:top-[76px] h-[calc(100vh-48px)] md:h-[calc(100vh-76px)] bg-base-100 border-r border-base-300 flex flex-col transition-[width,transform] duration-200 ease-out lg:translate-x-0"
+        class="sidebar-rail fixed z-40 left-0 top-12 md:top-[76px] h-[calc(100vh-48px)] md:h-[calc(100vh-76px)] bg-base-100 border-r border-base-300 flex flex-col transition-transform duration-200 ease-out lg:translate-x-0"
         :class="[
           sidebarCollapsed ? 'is-collapsed' : '',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
@@ -174,14 +174,17 @@
 
       <!-- Spacer reserves layout width for the fixed rail -->
       <div
-        class="hidden lg:block shrink-0 transition-[width] duration-200 ease-out"
+        class="hidden lg:block shrink-0"
         :class="sidebarCollapsed ? 'w-[4.5rem]' : 'w-64'"
         aria-hidden="true"
       />
 
-      <main class="flex-1 p-6 max-w-[1584px] w-full infra-main min-w-0">
-        <slot />
-      </main>
+      <!-- Full remaining column stays opaque so shell mesh never shows through -->
+      <div class="flex-1 min-w-0 infra-main">
+        <main class="p-6 w-full">
+          <slot />
+        </main>
+      </div>
     </div>
 
     <dialog

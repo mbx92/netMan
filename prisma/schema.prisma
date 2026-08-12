@@ -241,6 +241,7 @@ model MikrotikDevice {
   apiVersion String    @default("v6") // "v6" (API protocol) or "v7" (REST API)
   isActive   Boolean   @default(true)
   lastSync   DateTime?
+  lastSnapshot Json? // Last captured ports/interfaces snapshot
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
@@ -259,11 +260,18 @@ model MikrotikDevice {
 model NAS {
   id        String  @id @default(uuid())
   name      String
-  type      String? // "QNAP", "Synology", "TrueNAS", etc.
+  type      String? // Vendor: "QNAP", "Synology", "TrueNAS", etc.
+  model     String? // Hardware model for chassis SVG: "RS1221+", "TS-873A", etc.
   location  String?
   ipAddress String?
 
-  // Storage info (manual input)
+  // NAS API credentials for live data capture
+  username       String?
+  password       String? // Stored encrypted or plaintext (never returned to frontend)
+  lastCapturedAt DateTime?
+  lastSnapshot   Json? // Last successful capture (volumes, disks, notes)
+
+  // Storage info (captured from device or manual input)
   totalCapacityGB Float?
   usedCapacityGB  Float?
   bayCount        Int? // Number of drive bays

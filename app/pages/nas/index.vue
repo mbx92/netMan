@@ -21,7 +21,8 @@
           <thead>
             <tr class="bg-base-200/50">
               <th>Name</th>
-              <th>Type</th>
+              <th>Vendor</th>
+              <th>Model</th>
               <th>Location</th>
               <th>Storage</th>
               <th>Utilization</th>
@@ -32,12 +33,12 @@
           </thead>
           <tbody>
             <tr v-if="pending" class="h-32">
-              <td colspan="8" class="text-center">
+              <td colspan="9" class="text-center">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
               </td>
             </tr>
             <tr v-else-if="!devices?.length" class="h-32">
-              <td colspan="8" class="text-center text-base-content/60">
+              <td colspan="9" class="text-center text-base-content/60">
                 No NAS devices found. Click "Add NAS" to create one.
               </td>
             </tr>
@@ -49,6 +50,10 @@
               </td>
               <td>
                 <span v-if="device.type" class="badge badge-sm badge-ghost">{{ device.type }}</span>
+                <span v-else class="text-base-content/40">-</span>
+              </td>
+              <td>
+                <span v-if="device.model" class="font-mono text-sm">{{ device.model }}</span>
                 <span v-else class="text-base-content/40">-</span>
               </td>
               <td>{{ device.location || '-' }}</td>
@@ -125,6 +130,7 @@ interface NASDevice {
   id: string
   name: string
   type: string | null
+  model: string | null
   location: string | null
   ipAddress: string | null
   totalCapacityGB: number | null

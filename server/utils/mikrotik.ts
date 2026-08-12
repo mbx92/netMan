@@ -44,7 +44,7 @@ export interface IMikroTikClient {
         model?: string
         version?: string
         portCount: number
-        interfaces: { name: string; type: string; mac?: string; running?: boolean }[]
+        interfaces: { name: string; type: string; mac?: string; running?: boolean; disabled?: boolean }[]
         bridges: { name: string; mac?: string }[]
         vlans: { name: string; vlanId: number; interface?: string }[]
     }>

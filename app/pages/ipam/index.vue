@@ -139,7 +139,7 @@
             <h3 class="type-card-title">{{ selectedRange?.name }}</h3>
             <div class="text-sm text-base-content/60 font-mono">{{ selectedRange?.network }}</div>
           </div>
-          <button class="btn btn-ghost btn-sm btn-circle" @click="showDetailModal = false">✕</button>
+          <button class="btn btn-ghost btn-sm btn-circle" @click="showDetailModal = false"><X class="w-4 h-4" :stroke-width="2" /></button>
         </div>
 
         <!-- Stats -->
@@ -160,17 +160,17 @@
 
         <!-- Add Allocation Form -->
         <div class="bg-base-200 rounded-none p-4 mb-4">
-          <div class="flex gap-2">
-            <input v-model="newAllocation.ip" type="text" class="input input-bordered input-sm flex-1 font-mono" placeholder="IP Address" />
-            <input v-model="newAllocation.hostname" type="text" class="input input-bordered input-sm flex-1" placeholder="Hostname" />
-            <input v-model="newAllocation.mac" type="text" class="input input-bordered input-sm flex-1 font-mono" placeholder="MAC" />
-            <select v-model="newAllocation.type" class="select select-bordered select-sm">
+          <div class="flex gap-2 items-end">
+            <input v-model="newAllocation.ip" type="text" class="input input-bordered flex-1 font-mono" placeholder="IP Address" />
+            <input v-model="newAllocation.hostname" type="text" class="input input-bordered flex-1" placeholder="Hostname" />
+            <input v-model="newAllocation.mac" type="text" class="input input-bordered flex-1 font-mono" placeholder="MAC" />
+            <select v-model="newAllocation.type" class="select select-bordered w-24 shrink-0">
               <option value="STATIC">Static</option>
               <option value="RESERVED">Reserved</option>
               <option value="DHCP">DHCP</option>
             </select>
-            <button class="btn btn-primary btn-sm" :disabled="addingAllocation" @click="addAllocation">
-              <span v-if="addingAllocation" class="loading loading-spinner loading-xs"></span>
+            <button class="btn btn-primary" :disabled="addingAllocation" @click="addAllocation">
+              <span v-if="addingAllocation" class="loading loading-spinner loading-sm"></span>
               Add
             </button>
           </div>
@@ -213,7 +213,7 @@
 
     <!-- Feedback Modal -->
     <dialog class="modal" :class="{ 'modal-open': showFeedbackModal }" :open="showFeedbackModal || undefined" @close="showFeedbackModal = false">
-      <div class="modal-box glass-modal rounded-none">
+      <div class="modal-box glass-modal rounded-none !max-w-[514px]">
         <div class="flex items-start gap-3">
           <div :class="['w-10 h-10 rounded-none flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
             <CheckCircle2 v-if="feedbackType === 'success'" class="w-6 h-6" :stroke-width="2" />
@@ -303,7 +303,7 @@
           
           <!-- Warning -->
           <div class="bg-warning/10 border border-warning/30 rounded-none p-3 text-sm mb-4">
-            <strong>⚠️ Catatan:</strong> Sync hanya menambah & update, tidak menghapus allocation yang sudah ada.
+            <strong><AlertTriangle class="w-4 h-4 inline-block mr-1 align-text-bottom" :stroke-width="2" />Catatan:</strong> Sync hanya menambah & update, tidak menghapus allocation yang sudah ada.
           </div>
         </div>
         
@@ -327,7 +327,7 @@
 </template>
 
 <script setup lang="ts">
-import { AlertCircle, CheckCircle2, EthernetPort, LayoutGrid, Pencil, Plus, RefreshCw, Trash2, XCircle } from '@lucide/vue'
+import { AlertCircle, AlertTriangle, CheckCircle2, EthernetPort, LayoutGrid, Pencil, Plus, RefreshCw, Trash2, X, XCircle } from '@lucide/vue'
 
 interface Site {
   id: string

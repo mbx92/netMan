@@ -3,6 +3,7 @@ import prisma from '../../utils/prisma'
 interface UpdateNASBody {
     name?: string
     type?: string
+    model?: string | null
     location?: string
     ipAddress?: string
     totalCapacityGB?: number
@@ -11,6 +12,8 @@ interface UpdateNASBody {
     notes?: string
     siteId?: string
     isActive?: boolean
+    username?: string
+    password?: string
 }
 
 // PUT /api/nas/:id - Update NAS device
@@ -55,14 +58,19 @@ export default defineEventHandler(async (event) => {
         data: {
             name: body.name,
             type: body.type,
+            model: body.model,
             location: body.location,
             ipAddress: body.ipAddress,
             totalCapacityGB: body.totalCapacityGB,
             usedCapacityGB: body.usedCapacityGB,
-            bayCount: body.bayCount,
+            ...(body.bayCount !== undefined
+                ? { bayCount: Number(body.bayCount) > 0 ? Number(body.bayCount) : null }
+                : {}),
             notes: body.notes,
             siteId: body.siteId,
             isActive: body.isActive,
+            username: body.username,
+            ...(body.password !== undefined ? { password: body.password } : {}),
         },
         include: {
             site: {
@@ -84,5 +92,7 @@ export default defineEventHandler(async (event) => {
         },
     })
 
-    return device
+    // Strip password from response
+    const { password, ...deviceSafe } = device
+    return deviceSafe
 })

@@ -22,28 +22,51 @@
             <input v-model="form.name" type="text" class="input input-bordered" required />
           </div>
 
-          <!-- Type & Location -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Vendor -->
+          <div class="form-control">
+            <label class="label"><span class="label-text">Vendor</span></label>
+            <select v-model="form.type" class="select select-bordered" @change="onVendorChange">
+              <option value="">Select vendor...</option>
+              <option value="QNAP">QNAP</option>
+              <option value="Synology">Synology</option>
+              <option value="TrueNAS">TrueNAS</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <!-- Model (chassis SVG) -->
+          <div class="form-control">
+            <label class="label"><span class="label-text">Model</span></label>
+            <select v-model="form.model" class="select select-bordered">
+              <option value="">Auto-detect on capture</option>
+              <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.label }}</option>
+            </select>
+            <p class="text-xs text-base-content/50 mt-1">
+              Pilih model untuk chassis SVG (RS1221+ / TS-873A). Bisa dikosongkan — capture dari API akan mengisi otomatis.
+            </p>
+          </div>
+
+          <!-- Location -->
+          <div class="form-control">
+            <label class="label"><span class="label-text">Location</span></label>
+            <input v-model="form.location" type="text" class="input input-bordered" />
+          </div>
+
+          <!-- IP Address & Credentials -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div class="form-control">
-              <label class="label"><span class="label-text">Type</span></label>
-              <select v-model="form.type" class="select select-bordered">
-                <option value="">Select type...</option>
-                <option value="QNAP">QNAP</option>
-                <option value="Synology">Synology</option>
-                <option value="TrueNAS">TrueNAS</option>
-                <option value="Other">Other</option>
-              </select>
+              <label class="label"><span class="label-text">IP Address</span></label>
+              <input v-model="form.ipAddress" type="text" class="input input-bordered" />
             </div>
             <div class="form-control">
-              <label class="label"><span class="label-text">Location</span></label>
-              <input v-model="form.location" type="text" class="input input-bordered" />
+              <label class="label"><span class="label-text">API Username</span></label>
+              <input v-model="form.username" type="text" class="input input-bordered" placeholder="admin" />
             </div>
           </div>
 
-          <!-- IP Address -->
           <div class="form-control">
-            <label class="label"><span class="label-text">IP Address</span></label>
-            <input v-model="form.ipAddress" type="text" class="input input-bordered" />
+            <label class="label"><span class="label-text">API Password</span></label>
+            <input v-model="form.password" type="password" class="input input-bordered" placeholder="Leave blank to keep current" />
           </div>
 
           <!-- Storage Capacity -->
@@ -102,6 +125,7 @@
 
 <script setup lang="ts">
 import { ArrowLeft } from '@lucide/vue'
+import { modelsForVendor, resolveNasModel } from '~/utils/nas-models'
 
 interface Site {
   id: string
@@ -122,8 +146,11 @@ const sites = computed(() => siteData.value?.sites as Site[] || [])
 const form = reactive({
   name: device.value?.name || '',
   type: device.value?.type || '',
+  model: device.value?.model || '',
   location: device.value?.location || '',
   ipAddress: device.value?.ipAddress || '',
+  username: device.value?.username || '',
+  password: '',
   totalCapacityGB: device.value?.totalCapacityGB || undefined,
   usedCapacityGB: device.value?.usedCapacityGB || undefined,
   bayCount: device.value?.bayCount || undefined,
@@ -132,13 +159,31 @@ const form = reactive({
   isActive: device.value?.isActive !== false,
 })
 
+const modelOptions = computed(() => modelsForVendor(form.type || null))
+
+function onVendorChange() {
+  if (form.model && !modelOptions.value.some(m => m.id === form.model)) {
+    form.model = ''
+  }
+}
+
+watch(() => form.model, (id) => {
+  const known = resolveNasModel(id)
+  if (known) {
+    if (!form.type) form.type = known.vendor
+    if (!form.bayCount) form.bayCount = known.bayCount
+  }
+})
+
 // Watch for device data changes
 watch(device, (newDevice) => {
   if (newDevice) {
     form.name = newDevice.name
     form.type = newDevice.type || ''
+    form.model = newDevice.model || ''
     form.location = newDevice.location || ''
     form.ipAddress = newDevice.ipAddress || ''
+    form.username = newDevice.username || ''
     form.totalCapacityGB = newDevice.totalCapacityGB || undefined
     form.usedCapacityGB = newDevice.usedCapacityGB || undefined
     form.bayCount = newDevice.bayCount || undefined
@@ -153,12 +198,26 @@ const saving = ref(false)
 async function saveDevice() {
   saving.value = true
   try {
+    const body: Record<string, unknown> = {
+      name: form.name,
+      type: form.type,
+      model: form.model || null,
+      location: form.location,
+      ipAddress: form.ipAddress,
+      username: form.username || undefined,
+      totalCapacityGB: form.totalCapacityGB,
+      usedCapacityGB: form.usedCapacityGB,
+      bayCount: form.bayCount,
+      notes: form.notes,
+      siteId: form.siteId || undefined,
+      isActive: form.isActive,
+    }
+    // Only send password when user typed a new one
+    if (form.password) body.password = form.password
+
     await $fetch(`/api/nas/${id}`, {
       method: 'PUT',
-      body: {
-        ...form,
-        siteId: form.siteId || undefined,
-      },
+      body,
     })
     await navigateTo('/nas')
   } catch (error) {

@@ -30,5 +30,10 @@ export default defineEventHandler(async (event) => {
         })
     }
 
-    return device
+    // Strip password from response
+    const { password, ...deviceSafe } = device
+    return {
+        ...deviceSafe,
+        hasCredentials: !!(device.username && password),
+    }
 })

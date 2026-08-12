@@ -147,8 +147,9 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
+    <!-- Delete Device Modal -->
     <dialog class="modal" :class="{ 'modal-open': showDeleteModal }" :open="showDeleteModal || undefined" @close="showDeleteModal = false">
-      <div class="modal-box glass-modal rounded-none">
+      <div class="modal-box glass-modal rounded-none !max-w-[516px]">
         <h3 class="type-card-title">Delete Device</h3>
         <p class="py-4">
           Are you sure you want to delete <strong>{{ deviceToDelete?.name }}</strong>? 

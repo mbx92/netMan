@@ -87,13 +87,13 @@
             v-model:nodes="flowNodes"
             v-model:edges="flowEdges"
             :node-types="nodeTypes"
+            :edge-types="edgeTypes"
             :default-viewport="{ zoom: 0.9, x: 0, y: 0 }"
             :min-zoom="0.15"
             :max-zoom="2"
             :nodes-draggable="true"
             :nodes-connectable="false"
             :elements-selectable="true"
-            :default-edge-options="{ type: 'smoothstep' }"
             @node-click="onNodeClick"
           >
             <Background :gap="24" :size="1" :color="gridColor" />
@@ -169,7 +169,7 @@
         <div class="flex items-center gap-3 mb-4">
           <div :class="['w-12 h-12 rounded-none flex items-center justify-center', getNodeBgClass(selectedNode)]">
             <Router v-if="selectedNode?.type === 'router'" class="w-6 h-6" :stroke-width="2" />
-            <Cable v-else-if="selectedNode?.type === 'switch'" class="w-6 h-6" :stroke-width="2" />
+            <EthernetPort v-else-if="selectedNode?.type === 'switch'" class="w-6 h-6" :stroke-width="2" />
             <Monitor v-else class="w-6 h-6" :stroke-width="2" />
           </div>
           <div>
@@ -202,7 +202,7 @@
 
 <script setup lang="ts">
 import { markRaw } from 'vue'
-import { Cable, Monitor, RefreshCw, Router, Waypoints } from '@lucide/vue'
+import { EthernetPort, Monitor, RefreshCw, Router, Waypoints } from '@lucide/vue'
 import {
   VueFlow,
   useVueFlow,
@@ -214,6 +214,8 @@ import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import TopologyDeviceNode from '~/components/topology/TopologyDeviceNode.vue'
+import TopologyEdge from '~/components/topology/TopologyEdge.vue'
+import dagre from 'dagre'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -257,10 +259,6 @@ interface DeviceTypeInfo {
 /** Visual size of TopologyDeviceNode (keep in sync with component CSS) */
 const NODE_W = 128
 const NODE_H = 96
-const H_GAP = 40
-const V_GAP = 110
-const ROW_PAD_X = 48
-const MAX_PER_ROW = 8
 
 const selectedSiteId = ref('')
 const selectedFloor = ref('')
@@ -283,7 +281,11 @@ const nodeTypes = {
   device: markRaw(TopologyDeviceNode),
 }
 
-const { fitView, onNodesInitialized } = useVueFlow({ id: 'netman-topology' })
+const edgeTypes = {
+  topology: markRaw(TopologyEdge),
+}
+
+const { fitView, onNodesInitialized } = useVueFlow('netman-topology')
 const { isDark } = useTheme()
 
 const loading = computed(() => initialLoading.value || refreshing.value)
@@ -367,88 +369,204 @@ function edgeStyle(linkType: TopologyLink['linkType']) {
   }
 }
 
-function chunk<T>(items: T[], size: number): T[][] {
-  if (items.length === 0) return []
-  const rows: T[][] = []
-  for (let i = 0; i < items.length; i += size) {
-    rows.push(items.slice(i, i + size))
+/**
+ * Normalize edge direction for hierarchical TB layout:
+ * always lower tier (router) → higher tier (endpoint).
+ */
+function normalizeEdgeForLayout(
+  edge: { source: string; target: string },
+  tierById: Map<string, number>,
+) {
+  const sourceTier = tierById.get(edge.source) ?? 2
+  const targetTier = tierById.get(edge.target) ?? 2
+  if (sourceTier > targetTier) {
+    return { source: edge.target, target: edge.source }
   }
-  return rows
+  return { source: edge.source, target: edge.target }
+}
+
+/**
+ * Build a dagre layout for the graph.
+ * Edges are normalized by tier so ranks stay hierarchical (TB).
+ */
+function layoutWithDagre(nodes: TopologyNode[], edges: { source: string; target: string }[]) {
+  const tierById = new Map(nodes.map(n => [n.id, n.tier ?? 2]))
+  const g = new dagre.graphlib.Graph()
+  g.setGraph({
+    rankdir: 'TB',
+    nodesep: 90,
+    ranksep: 150,
+    edgesep: 40,
+    marginx: 48,
+    marginy: 48,
+  })
+  g.setDefaultEdgeLabel(() => ({}))
+
+  for (const node of nodes) {
+    g.setNode(node.id, { width: NODE_W, height: NODE_H })
+  }
+
+  const seenLayoutEdges = new Set<string>()
+  for (const edge of edges) {
+    const directed = normalizeEdgeForLayout(edge, tierById)
+    const key = `${directed.source}|${directed.target}`
+    if (seenLayoutEdges.has(key)) continue
+    seenLayoutEdges.add(key)
+    g.setEdge(directed.source, directed.target)
+  }
+
+  dagre.layout(g)
+
+  const positions = new Map<string, { x: number; y: number }>()
+  for (const node of nodes) {
+    const n = g.node(node.id)
+    if (n) {
+      positions.set(node.id, { x: n.x - NODE_W / 2, y: n.y - NODE_H / 2 })
+    }
+  }
+  return positions
+}
+
+/**
+ * Fan-out smooth-step offsets so sibling edges leaving/entering the same
+ * node spread horizontally by peer X order (reduces stacking without multi-handles).
+ */
+function computeSiblingFanoutOffsets(
+  edges: { source: string; target: string }[],
+  positions: Map<string, { x: number; y: number }>,
+) {
+  const OFFSET_STEP = 24
+  const centerX = (id: string) => (positions.get(id)?.x ?? 0) + NODE_W / 2
+
+  const outBySource = new Map<string, number[]>()
+  const inByTarget = new Map<string, number[]>()
+
+  edges.forEach((e, i) => {
+    if (!outBySource.has(e.source)) outBySource.set(e.source, [])
+    outBySource.get(e.source)!.push(i)
+    if (!inByTarget.has(e.target)) inByTarget.set(e.target, [])
+    inByTarget.get(e.target)!.push(i)
+  })
+
+  const outRank = new Map<number, number>()
+  const inRank = new Map<number, number>()
+
+  for (const [source, indices] of outBySource) {
+    const sorted = [...indices].sort((a, b) => {
+      const ax = centerX(edges[a].target)
+      const bx = centerX(edges[b].target)
+      return ax - bx || a - b
+    })
+    const n = sorted.length
+    sorted.forEach((edgeIdx, rank) => {
+      outRank.set(edgeIdx, (rank - (n - 1) / 2) * OFFSET_STEP)
+    })
+  }
+
+  for (const [target, indices] of inByTarget) {
+    const sorted = [...indices].sort((a, b) => {
+      const ax = centerX(edges[a].source)
+      const bx = centerX(edges[b].source)
+      return ax - bx || a - b
+    })
+    const n = sorted.length
+    sorted.forEach((edgeIdx, rank) => {
+      inRank.set(edgeIdx, (rank - (n - 1) / 2) * OFFSET_STEP)
+    })
+  }
+
+  const offsets = new Map<number, number>()
+  edges.forEach((_, i) => {
+    // Prefer outgoing fan-out; blend with incoming when both sides are busy
+    const out = outRank.get(i) ?? 0
+    const inn = inRank.get(i) ?? 0
+    offsets.set(i, Math.abs(out) >= Math.abs(inn) ? out : inn)
+  })
+
+  // Extra separation for true parallel duplicates (same source→target)
+  const pairKey = (s: string, t: string) => `${s}→${t}`
+  const pairGroups = new Map<string, number[]>()
+  edges.forEach((e, i) => {
+    const key = pairKey(e.source, e.target)
+    if (!pairGroups.has(key)) pairGroups.set(key, [])
+    pairGroups.get(key)!.push(i)
+  })
+  for (const indices of pairGroups.values()) {
+    if (indices.length < 2) continue
+    const n = indices.length
+    indices.forEach((edgeIdx, rank) => {
+      const base = offsets.get(edgeIdx) ?? 0
+      offsets.set(edgeIdx, base + (rank - (n - 1) / 2) * (OFFSET_STEP / 2))
+    })
+  }
+
+  return offsets
 }
 
 function buildFlowGraph() {
-  const usedIds = new Set<string>()
-  const take = (list: TopologyNode[]) =>
-    list.filter((n) => {
-      if (usedIds.has(n.id)) return false
-      usedIds.add(n.id)
-      return true
-    })
+  const nodes = topologyNodes.value
+  const links = topologyLinks.value
+  const tierById = new Map(nodes.map(n => [n.id, n.tier ?? 2]))
 
-  const routers = take(topologyNodes.value.filter(n => n.tier === 0 || n.type === 'router'))
-  const switches = take(topologyNodes.value.filter(n => n.tier === 1 || n.type === 'switch' || n.type === 'access_point'))
-  const devices = take(topologyNodes.value.filter(n => !usedIds.has(n.id)))
+  // Deduplicate links (same source+target+type)
+  const seen = new Set<string>()
+  const uniqueLinks = links.filter(l => {
+    const key = `${l.source}|${l.target}|${l.linkType}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 
-  const tiers = [
-    chunk(routers, MAX_PER_ROW),
-    chunk(switches, MAX_PER_ROW),
-    chunk(devices, MAX_PER_ROW),
-  ].filter(rows => rows.length > 0)
-
-  const maxCount = Math.max(
-    1,
-    ...tiers.flatMap(rows => rows.map(r => r.length)),
-  )
-  const contentWidth = ROW_PAD_X * 2 + maxCount * NODE_W + (maxCount - 1) * H_GAP
-
-  const placed: Node[] = []
-  let cursorY = 32
-
-  for (const rows of tiers) {
-    for (const row of rows) {
-      const rowWidth = row.length * NODE_W + Math.max(0, row.length - 1) * H_GAP
-      const startX = Math.max(ROW_PAD_X, (contentWidth - rowWidth) / 2)
-
-      row.forEach((node, i) => {
-        placed.push({
-          id: node.id,
-          type: 'device',
-          position: {
-            x: startX + i * (NODE_W + H_GAP),
-            y: cursorY,
-          },
-          data: {
-            name: node.name,
-            type: node.type,
-            typeCode: node.typeCode,
-            ip: node.ip,
-            mac: node.mac,
-            siteName: node.siteName,
-            status: node.status,
-            ports: node.ports,
-            color: getNodeColor(node),
-          },
-          draggable: true,
-        })
-      })
-
-      cursorY += NODE_H + V_GAP
+  // Display edges follow hierarchy (lower tier → higher) so handles attach cleanly TB
+  const displayLinks = uniqueLinks.map(link => {
+    const directed = normalizeEdgeForLayout(link, tierById)
+    return {
+      ...link,
+      source: directed.source,
+      target: directed.target,
     }
-    // Extra gap between tier groups
-    cursorY += 12
-  }
+  })
 
-  flowNodes.value = placed
-  flowEdges.value = topologyLinks.value.map((link, index) => ({
-    id: `e-${link.source}-${link.target}-${index}`,
-    source: link.source,
-    target: link.target,
-    label: link.label,
-    type: 'smoothstep',
-    animated: link.linkType === 'uplink',
-    style: edgeStyle(link.linkType),
-    labelStyle: { fill: '#525252', fontSize: 10 },
-  } satisfies Edge))
+  const positions = layoutWithDagre(nodes, displayLinks)
+  const edgeOffsets = computeSiblingFanoutOffsets(displayLinks, positions)
+
+  flowNodes.value = nodes.map(node => {
+    const pos = positions.get(node.id) ?? { x: 0, y: 0 }
+    return {
+      id: node.id,
+      type: 'device',
+      position: pos,
+      data: {
+        name: node.name,
+        type: node.type,
+        typeCode: node.typeCode,
+        ip: node.ip,
+        mac: node.mac,
+        siteName: node.siteName,
+        status: node.status,
+        ports: node.ports,
+        color: getNodeColor(node),
+      },
+      draggable: true,
+    }
+  })
+
+  flowEdges.value = displayLinks.map((link, index) => {
+    const offset = edgeOffsets.get(index) ?? 0
+    return {
+      id: `e-${link.source}-${link.target}-${index}`,
+      source: link.source,
+      target: link.target,
+      label: link.label,
+      type: 'topology',
+      animated: link.linkType === 'uplink',
+      style: edgeStyle(link.linkType),
+      data: {
+        offset,
+        linkType: link.linkType,
+      },
+    } satisfies Edge
+  })
 }
 
 async function loadTopology() {

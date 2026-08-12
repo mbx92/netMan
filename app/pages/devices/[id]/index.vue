@@ -155,6 +155,23 @@
               @refresh="fetchPorts"
             />
           </div>
+
+          <!-- Server front panel (HPE-style SVG) -->
+          <div v-else-if="isServerDevice" class="bg-base-100 border border-base-300 rounded-none p-6">
+            <h2 class="type-card-title mb-4">Server Chassis</h2>
+            <ServerChassis
+              :model="serverModelLabel"
+              :bay-count="8"
+              :columns="8"
+              :bays="serverBays"
+              :power="device.status === 'ONLINE' || device.status === 'online'"
+              :health="serverHealth"
+              :uid="serverUid"
+              :nic-count="4"
+              :nic-active="serverNicActive"
+              @toggle-uid="serverUid = !serverUid"
+            />
+          </div>
           
           <!-- Legacy Port Table (if not using PortGrid) -->
           <div v-else-if="device.ports?.length" class="bg-base-100 border border-base-300 rounded-none p-6">
@@ -346,6 +363,8 @@ import {
   X,
   XCircle,
 } from '@lucide/vue'
+import ServerChassis from '~/components/server/ServerChassis.vue'
+import type { ServerBay } from '~/components/server/ServerChassis.vue'
 
 definePageMeta({
   // Detail view is client-heavy (SSE ports, remote consoles); skip SSR to prevent hydration drift
@@ -458,6 +477,40 @@ const portPrefix = ref('eth')
 const isNetworkDevice = computed(() => {
   const networkTypes = ['SWITCH', 'SWITCH_MANAGED', 'SWITCH_UNMANAGED', 'ROUTER', 'ACCESS_POINT']
   return device.value && device.value.typeCode && networkTypes.includes(device.value.typeCode)
+})
+
+const isServerDevice = computed(() => {
+  if (!device.value?.typeCode) return false
+  return /SERVER/i.test(device.value.typeCode)
+})
+
+const serverUid = ref(false)
+
+const serverModelLabel = computed(() => {
+  const name = device.value?.deviceType?.name || device.value?.hostname || device.value?.name
+  if (name && /dl\s*380|proliant|hpe/i.test(name)) return name
+  return name ? `${name} · HPE DL380 Gen10 style` : 'HPE ProLiant DL380 Gen10'
+})
+
+const serverHealth = computed<'ok' | 'warning' | 'critical'>(() => {
+  const s = String(device.value?.status || '').toUpperCase()
+  if (s === 'OFFLINE' || s === 'ERROR' || s === 'CRITICAL') return 'critical'
+  if (s === 'WARNING' || s === 'DEGRADED') return 'warning'
+  return 'ok'
+})
+
+const serverBays = computed((): ServerBay[] => {
+  // Placeholder occupancy until live disk inventory exists for servers
+  const online = serverHealth.value === 'ok'
+  return Array.from({ length: 8 }, (_, i) => ({
+    slot: i + 1,
+    status: online ? (i < 6 ? 'healthy' : 'empty') : (i < 6 ? 'unknown' : 'empty'),
+  }))
+})
+
+const serverNicActive = computed(() => {
+  const online = String(device.value?.status || '').toUpperCase() === 'ONLINE'
+  return [online, online, false, false]
 })
 
 // Check if device supports SSH (Linux servers/PCs)

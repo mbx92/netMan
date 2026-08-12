@@ -20,8 +20,12 @@ export default defineEventHandler(async (event) => {
         orderBy: { name: 'asc' },
     })
 
+    // Strip password from response
     return {
-        devices,
+        devices: devices.map(({ password, ...rest }) => ({
+            ...rest,
+            hasCredentials: !!(rest.username && password),
+        })),
         total: devices.length,
     }
 })

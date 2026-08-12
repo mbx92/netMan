@@ -110,8 +110,14 @@ function getTierLabel(tier: number): string {
 }
 
 async function deleteType(dt: DeviceType) {
-  if (!confirm(`Deactivate device type "${dt.name}"?`)) return
-  
+  const ok = await confirmDialog({
+    title: 'Deactivate Device Type',
+    message: `Deactivate device type "${dt.name}"?`,
+    confirmLabel: 'Deactivate',
+    variant: 'danger',
+  })
+  if (!ok) return
+
   try {
     await $fetch(`/api/device-types/${dt.id}`, { method: 'DELETE' })
     refresh()

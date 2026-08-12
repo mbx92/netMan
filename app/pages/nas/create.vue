@@ -18,32 +18,55 @@
             <input v-model="form.name" type="text" class="input input-bordered w-full" placeholder="e.g., Storage NAS 1" required />
           </div>
 
-          <!-- Type & Location -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Vendor -->
+          <div class="form-control">
+            <label class="label"><span class="label-text">Vendor</span></label>
+            <select v-model="form.type" class="select select-bordered w-full" @change="onVendorChange">
+              <option value="">Select vendor...</option>
+              <option value="QNAP">QNAP</option>
+              <option value="Synology">Synology</option>
+              <option value="TrueNAS">TrueNAS</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <!-- Model (chassis SVG) -->
+          <div class="form-control">
+            <label class="label"><span class="label-text">Model</span></label>
+            <select v-model="form.model" class="select select-bordered w-full">
+              <option value="">Auto-detect on capture</option>
+              <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.label }}</option>
+            </select>
+            <p class="text-xs text-base-content/50 mt-1">
+              Pilih model untuk chassis SVG (RS1221+ / TS-873A). Bisa dikosongkan — capture dari API akan mengisi otomatis.
+            </p>
+          </div>
+
+          <!-- Location -->
+          <div class="form-control">
+            <label class="label"><span class="label-text">Location</span></label>
+            <input v-model="form.location" type="text" class="input input-bordered w-full" placeholder="e.g., Server Room A" />
+          </div>
+
+          <!-- IP Address & Credentials -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div class="form-control">
-              <label class="label"><span class="label-text">Type</span></label>
-              <select v-model="form.type" class="select select-bordered w-full">
-                <option value="">Select type...</option>
-                <option value="QNAP">QNAP</option>
-                <option value="Synology">Synology</option>
-                <option value="TrueNAS">TrueNAS</option>
-                <option value="Other">Other</option>
-              </select>
+              <label class="label"><span class="label-text">IP Address</span></label>
+              <input v-model="form.ipAddress" type="text" class="input input-bordered w-full" placeholder="e.g., 192.168.1.100" />
             </div>
             <div class="form-control">
-              <label class="label"><span class="label-text">Location</span></label>
-              <input v-model="form.location" type="text" class="input input-bordered w-full" placeholder="e.g., Server Room A" />
+              <label class="label"><span class="label-text">API Username</span></label>
+              <input v-model="form.username" type="text" class="input input-bordered w-full" placeholder="admin" />
             </div>
           </div>
 
-          <!-- IP Address -->
           <div class="form-control">
-            <label class="label"><span class="label-text">IP Address</span></label>
-            <input v-model="form.ipAddress" type="text" class="input input-bordered w-full" placeholder="e.g., 192.168.1.100" />
+            <label class="label"><span class="label-text">API Password</span></label>
+            <input v-model="form.password" type="password" class="input input-bordered w-full" placeholder="NAS admin password" />
           </div>
 
           <!-- Storage Capacity -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div class="form-control">
               <label class="label"><span class="label-text">Total Capacity (GB)</span></label>
               <input v-model.number="form.totalCapacityGB" type="number" step="0.01" class="input input-bordered w-full" placeholder="e.g., 10000" />
@@ -55,7 +78,7 @@
           </div>
 
           <!-- Bay Count & Site -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div class="form-control">
               <label class="label"><span class="label-text">Number of Bays</span></label>
               <input v-model.number="form.bayCount" type="number" class="input input-bordered w-full" placeholder="e.g., 8" />
@@ -90,6 +113,7 @@
 
 <script setup lang="ts">
 import { ArrowLeft } from '@lucide/vue'
+import { modelsForVendor, resolveNasModel } from '~/utils/nas-models'
 
 interface Site {
   id: string
@@ -104,13 +128,32 @@ const sites = computed(() => siteData.value?.sites as Site[] || [])
 const form = reactive({
   name: '',
   type: '',
+  model: '',
   location: '',
   ipAddress: '',
+  username: '',
+  password: '',
   totalCapacityGB: undefined as number | undefined,
   usedCapacityGB: undefined as number | undefined,
   bayCount: undefined as number | undefined,
   siteId: '',
   notes: '',
+})
+
+const modelOptions = computed(() => modelsForVendor(form.type || null))
+
+function onVendorChange() {
+  if (form.model && !modelOptions.value.some(m => m.id === form.model)) {
+    form.model = ''
+  }
+}
+
+watch(() => form.model, (id) => {
+  const known = resolveNasModel(id)
+  if (known) {
+    if (!form.type) form.type = known.vendor
+    if (!form.bayCount) form.bayCount = known.bayCount
+  }
 })
 
 const saving = ref(false)
@@ -122,6 +165,7 @@ async function saveDevice() {
       method: 'POST',
       body: {
         ...form,
+        model: form.model || undefined,
         siteId: form.siteId || undefined,
       },
     })

@@ -185,20 +185,20 @@
           <Compass class="w-10 h-10 text-primary" :stroke-width="2" />
         </div>
         <h3 class="type-card-title mb-2">Ready to Discover</h3>
-        <p class="text-base-content/60 max-w-md mb-6">
+        <p class="text-base-content/60 mb-6 leading-relaxed">
           Enter a network range above and click "Start Scan" to automatically discover devices on your network.
         </p>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl">
           <div class="bg-base-200/50 rounded-none p-4 text-left">
-            <div class="font-semibold mb-1">🔍 Ping Sweep</div>
+            <div class="font-semibold mb-1"><Search class="w-4 h-4 inline-block mr-1 align-text-bottom" :stroke-width="2" />Ping Sweep</div>
             <p class="text-sm text-base-content/60">Checks which IPs are alive</p>
           </div>
           <div class="bg-base-200/50 rounded-none p-4 text-left">
-            <div class="font-semibold mb-1">🔌 Port Scan</div>
+            <div class="font-semibold mb-1"><Scan class="w-4 h-4 inline-block mr-1 align-text-bottom" :stroke-width="2" />Port Scan</div>
             <p class="text-sm text-base-content/60">Identifies device services</p>
           </div>
           <div class="bg-base-200/50 rounded-none p-4 text-left">
-            <div class="font-semibold mb-1">📋 Auto Import</div>
+            <div class="font-semibold mb-1"><FileInput class="w-4 h-4 inline-block mr-1 align-text-bottom" :stroke-width="2" />Auto Import</div>
             <p class="text-sm text-base-content/60">Add to device registry</p>
           </div>
         </div>
@@ -209,14 +209,14 @@
     <div v-if="importResult" class="toast toast-end">
       <div :class="['alert', importResult.imported > 0 ? 'alert-success' : 'alert-warning']">
         <span>Imported {{ importResult.imported }} devices, skipped {{ importResult.skipped }}</span>
-        <button @click="importResult = null" class="btn btn-ghost btn-xs">✕</button>
+        <button @click="importResult = null" class="btn btn-ghost btn-xs"><X class="w-4 h-4" :stroke-width="2" /></button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Compass, Loader2, Search, Upload } from '@lucide/vue'
+import { Compass, FileInput, Loader2, Scan, Search, Upload, X } from '@lucide/vue'
 import { ref, computed, onUnmounted } from 'vue'
 
 interface DiscoveredDevice {

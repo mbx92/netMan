@@ -338,6 +338,7 @@ export class MikroTikV6Client {
                 type: iface.type,
                 mac: iface['mac-address'],
                 running: iface.running === 'true',
+                disabled: iface.disabled === 'true',
             }))
 
             // Get first ether MAC as main MAC

@@ -46,7 +46,11 @@
                   {{ device.isActive ? 'Active' : 'Inactive' }}
                 </span>
               </td>
-              <td class="font-medium">{{ device.name }}</td>
+              <td class="font-medium">
+                <NuxtLink :to="`/settings/mikrotik/${device.id}`" class="link link-hover text-primary">
+                  {{ device.name }}
+                </NuxtLink>
+              </td>
               <td class="font-mono text-sm">{{ device.host }}:{{ device.port }}</td>
               <td>
                 <span :class="['badge badge-sm', device.apiVersion === 'v7' ? 'badge-info' : 'badge-warning']">
@@ -57,6 +61,20 @@
               <td class="text-sm text-base-content/60">{{ formatTimeAgo(device.lastSync) }}</td>
               <td>
                 <div class="flex items-center gap-1">
+                  <NuxtLink
+                    :to="`/settings/mikrotik/${device.id}`"
+                    class="btn btn-ghost btn-xs tooltip"
+                    data-tip="View Detail"
+                  >
+                    <Eye class="w-4 h-4" :stroke-width="2" />
+                  </NuxtLink>
+                  <NuxtLink 
+                    :to="`/settings/mikrotik/${device.id}/edit`" 
+                    class="btn btn-ghost btn-xs tooltip" 
+                    data-tip="Edit Router"
+                  >
+                    <Pencil class="w-4 h-4" :stroke-width="2" />
+                  </NuxtLink>
                   <button 
                     class="btn btn-ghost btn-xs tooltip" 
                     data-tip="Test Connection"
@@ -108,7 +126,7 @@
 
     <!-- Feedback Modal -->
     <dialog class="modal" :class="{ 'modal-open': showFeedbackModal }" :open="showFeedbackModal || undefined" @close="showFeedbackModal = false">
-      <div class="modal-box glass-modal rounded-none">
+      <div class="modal-box glass-modal rounded-none !max-w-[514px]">
         <div class="flex items-start gap-3">
           <div :class="['w-10 h-10 rounded-none flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
             <CheckCircle2 v-if="feedbackType === 'success'" class="w-6 h-6" :stroke-width="2" />
@@ -132,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { AlertCircle, CheckCircle2, Plus, RefreshCw, Trash2, XCircle } from '@lucide/vue'
+import { AlertCircle, CheckCircle2, Eye, Pencil, Plus, RefreshCw, Trash2, XCircle } from '@lucide/vue'
 
 interface Site {
   id: string

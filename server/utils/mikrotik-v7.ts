@@ -320,7 +320,8 @@ export class MikroTikClient {
                 name: iface.name,
                 type: iface.type,
                 mac: iface['mac-address'],
-                running: iface.running,
+                running: iface.running === true || String(iface.running) === 'true',
+                disabled: iface.disabled === true || String(iface.disabled) === 'true',
             }))
 
             // Get first ether MAC as main MAC

@@ -1,9 +1,13 @@
 <template>
   <div class="topology-device-node" :class="statusClass">
-    <Handle type="target" :position="Position.Top" class="topology-handle" />
+    <Handle
+      type="target"
+      :position="Position.Top"
+      class="topology-handle"
+    />
     <div class="topology-device-node__icon" :style="{ backgroundColor: accentColor }">
       <Router v-if="data.type === 'router'" :stroke-width="2" />
-      <Cable v-else-if="data.type === 'switch'" :stroke-width="2" />
+      <EthernetPort v-else-if="data.type === 'switch'" :stroke-width="2" />
       <Wifi v-else-if="data.type === 'access_point'" :stroke-width="2" />
       <HardDrive v-else-if="data.type === 'server' || data.type === 'nas'" :stroke-width="2" />
       <Monitor v-else :stroke-width="2" />
@@ -12,13 +16,17 @@
       <div class="topology-device-node__name">{{ truncatedName }}</div>
       <div class="topology-device-node__meta">{{ typeLabel }}</div>
     </div>
-    <Handle type="source" :position="Position.Bottom" class="topology-handle" />
+    <Handle
+      type="source"
+      :position="Position.Bottom"
+      class="topology-handle"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Cable, HardDrive, Monitor, Router, Wifi } from '@lucide/vue'
+import { EthernetPort, HardDrive, Monitor, Router, Wifi } from '@lucide/vue'
 import { Handle, Position } from '@vue-flow/core'
 
 interface TopologyNodeData {
@@ -32,6 +40,9 @@ interface TopologyNodeData {
   ports?: number
   color: string
 }
+
+// Local props only — imported generics need the `typescript` package for Vue SFC
+defineOptions({ inheritAttrs: false })
 
 const props = defineProps<{
   id: string
@@ -107,11 +118,16 @@ const statusClass = computed(() => {
   color: color-mix(in oklab, var(--color-base-content, #161616) 55%, transparent);
 }
 
+/* Invisible anchors — edges attach without visible blue dots */
 .topology-handle {
-  width: 8px !important;
-  height: 8px !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 1px !important;
+  min-height: 1px !important;
+  border: none !important;
   border-radius: 0 !important;
-  background: #0f62fe !important;
-  border: 1px solid #ffffff !important;
+  background: transparent !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 </style>

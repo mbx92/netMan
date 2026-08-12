@@ -191,7 +191,6 @@
 import {
   AlertCircle,
   Box,
-  Cable,
   CircleDot,
   EthernetPort,
   Monitor,
@@ -261,7 +260,7 @@ function getTypeIcon(type: string) {
     PRINTER: Printer,
     VM: Box,
     ROUTER: Router,
-    SWITCH: Cable,
+    SWITCH: EthernetPort,
     ACCESS_POINT: Wifi,
     OTHER: Monitor,
   }

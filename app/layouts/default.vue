@@ -226,6 +226,9 @@ import {
   Database,
   Boxes,
   ScrollText,
+  Users,
+  Video,
+  Server,
   PanelLeftOpen,
   PanelLeftClose,
 } from '@lucide/vue'
@@ -290,6 +293,9 @@ const configLinks = [
   { to: '/settings/mikrotik', label: 'MikroTik', icon: Router },
   { to: '/nas', label: 'NAS Storage', icon: Database },
   { to: '/settings/device-types', label: 'Device Types', icon: Boxes },
+  { to: '/hikvision', label: 'Hikvision', icon: Video },
+  { to: '/proxmox', label: 'Proxmox', icon: Server },
+  { to: '/users', label: 'Users', icon: Users },
 ]
 
 const observeLinks = [

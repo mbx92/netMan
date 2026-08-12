@@ -23,10 +23,12 @@ model Site {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  devices         Device[]
-  mikrotikDevices MikrotikDevice[]
-  nasDevices      NAS[]
-  ipRanges        IPRange[]
+  devices          Device[]
+  mikrotikDevices  MikrotikDevice[]
+  nasDevices       NAS[]
+  ipRanges         IPRange[]
+  hikvisionDevices HikvisionDevice[]
+  proxmoxNodes     ProxmoxNode[]
 }
 
 // ============================================
@@ -232,18 +234,18 @@ enum AllocationType {
 // ============================================
 
 model MikrotikDevice {
-  id         String    @id @default(uuid())
-  name       String
-  host       String
-  port       Int       @default(8728)
-  username   String
-  password   String // Should be encrypted in production
-  apiVersion String    @default("v6") // "v6" (API protocol) or "v7" (REST API)
-  isActive   Boolean   @default(true)
-  lastSync   DateTime?
+  id           String    @id @default(uuid())
+  name         String
+  host         String
+  port         Int       @default(8728)
+  username     String
+  password     String // Should be encrypted in production
+  apiVersion   String    @default("v6") // "v6" (API protocol) or "v7" (REST API)
+  isActive     Boolean   @default(true)
+  lastSync     DateTime?
   lastSnapshot Json? // Last captured ports/interfaces snapshot
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   // Site relation
   siteId String?
@@ -304,4 +306,80 @@ model AppUser {
   updatedAt    DateTime @updatedAt
 
   @@index([email])
+}
+
+// ============================================
+// HIKVISION INTEGRATION
+// ============================================
+
+model HikvisionDevice {
+  id           String             @id @default(uuid())
+  name         String
+  host         String
+  port         Int                @default(80)
+  username     String
+  password     String // Should be encrypted in production
+  protocol     String             @default("http") // http or https
+  deviceType   String             @default("NVR") // NVR, DVR, Camera, AccessControl
+  model        String?
+  serialNumber String?
+  firmware     String?
+  macAddress   String?
+  isActive     Boolean            @default(true)
+  lastSync     DateTime?
+  lastSnapshot Json? // Last captured device info and channel list
+  siteId       String?
+  site         Site?              @relation(fields: [siteId], references: [id])
+  channels     HikvisionChannel[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([host, port])
+  @@index([siteId])
+}
+
+model HikvisionChannel {
+  id                String          @id @default(uuid())
+  channelIndex      Int // Channel number on NVR/DVR (1-based)
+  name              String?
+  ipAddress         String?
+  managePort        Int             @default(80)
+  protocol          String? // HIKVISION, ONVIF
+  macAddress        String?
+  status            String          @default("UNKNOWN") // ONLINE, OFFLINE, UNKNOWN
+  model             String?
+  firmware          String?
+  isActive          Boolean         @default(true)
+  hikvisionDeviceId String
+  device            HikvisionDevice @relation(fields: [hikvisionDeviceId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([hikvisionDeviceId, channelIndex])
+  @@index([ipAddress])
+  @@index([hikvisionDeviceId])
+}
+
+// ============================================
+// PROXMOX VE INTEGRATION
+// ============================================
+
+model ProxmoxNode {
+  id          String    @id @default(uuid())
+  name        String
+  host        String
+  port        Int       @default(8006)
+  realm       String    @default("pam")
+  token       String // "user@realm!token-name=secret" (full PVEAPIToken value)
+  isActive    Boolean   @default(true)
+  lastSync    DateTime?
+  lastSnapshot Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id])
+
+  @@unique([host, port])
+  @@index([siteId])
 }

@@ -41,12 +41,9 @@ ENV PORT=3000
 
 # Copy built output
 COPY --from=builder /app/.output ./.output
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY package*.json ./
-
-# Install only production dependencies for prisma CLI (needed for migrations)
-RUN npm install --omit=dev prisma
 
 EXPOSE 3000
 

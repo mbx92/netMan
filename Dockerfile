@@ -44,8 +44,11 @@ COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY package*.json ./
+COPY docker-entrypoint.sh ./
+RUN chmod +x ./docker-entrypoint.sh
 
 EXPOSE 3000
 
-# Start the application
-CMD ["node", ".output/server/index.mjs"]
+# Apply pending Prisma migrations, then start the application.
+# migrate deploy is additive-only (no reset/drop), so this is safe on redeploys.
+ENTRYPOINT ["./docker-entrypoint.sh"]

@@ -21,15 +21,15 @@
     <!-- Ethernet -->
     <div v-if="ethernetPorts.length">
       <p class="text-sm font-medium mb-2">Ethernet ({{ ethernetPorts.length }})</p>
-      <div class="border border-base-300 rounded-none p-4 md:p-5 bg-[var(--nm-inverse-surface)]">
-        <div class="flex flex-wrap justify-start gap-3 md:gap-4">
+      <div class="border border-base-300 rounded-none p-2 bg-[var(--nm-inverse-surface)]">
+        <div class="grid w-full gap-x-1 gap-y-2" :style="gridStyle(ethernetPorts.length)">
           <PortBay
             v-for="port in ethernetPorts"
             :key="`eth-${port.name}`"
+            fluid
             kind="ethernet"
             :label="port.label"
             :status="portStatus(port)"
-            :caption="port.name"
             @select="$emit('select', port)"
           />
         </div>
@@ -39,15 +39,15 @@
     <!-- SFP -->
     <div v-if="sfpPorts.length">
       <p class="text-sm font-medium mb-2">SFP / SFP+ ({{ sfpPorts.length }})</p>
-      <div class="border border-base-300 rounded-none p-4 md:p-5 bg-[var(--nm-inverse-surface)]">
-        <div class="flex flex-wrap justify-start gap-3 md:gap-4">
+      <div class="border border-base-300 rounded-none p-2 bg-[var(--nm-inverse-surface)]">
+        <div class="grid w-full gap-x-1 gap-y-2" :style="gridStyle(sfpPorts.length)">
           <PortBay
             v-for="port in sfpPorts"
             :key="`sfp-${port.name}`"
+            fluid
             kind="sfp"
             :label="port.label"
             :status="portStatus(port)"
-            :caption="port.name"
             @select="$emit('select', port)"
           />
         </div>
@@ -88,4 +88,18 @@ function portStatus(port: MikroTikPortView): 'up' | 'down' | 'disabled' {
 
 const ethernetPorts = computed(() => props.ports.filter(p => p.kind === 'ethernet'))
 const sfpPorts = computed(() => props.ports.filter(p => p.kind === 'sfp'))
+
+/** Keep 1–16 ports on a single row; 24-port faces split into two rows of 12. */
+function rowCols(count: number): number {
+  if (count <= 16) return Math.max(count, 1)
+  return Math.ceil(count / 2)
+}
+
+function gridStyle(count: number): Record<string, string> {
+  const cols = rowCols(count)
+  return {
+    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+    maxWidth: `min(100%, calc(${cols} * 3.5rem + ${(cols - 1)} * 0.25rem))`,
+  }
+}
 </script>

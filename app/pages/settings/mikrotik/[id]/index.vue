@@ -58,55 +58,56 @@
         <span>{{ feedback.message }}</span>
       </div>
 
-      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div class="xl:col-span-2 space-y-6">
-          <div class="bg-base-100 border border-base-300 rounded-none p-6">
-            <h2 class="type-card-title mb-4">Port Map</h2>
-            <MikrotikPortGrid :ports="ports" @select="selectedPort = $event" />
+      <div class="space-y-6">
+        <div class="bg-base-100 border border-base-300 rounded-none p-6">
+          <h2 class="type-card-title mb-4">Port Map</h2>
+          <MikrotikPortGrid :ports="ports" @select="selectedPort = $event" />
 
-            <div v-if="selectedPort" class="mt-6 p-4 bg-base-200 border border-base-300 rounded-none">
-              <div class="flex items-start justify-between gap-4">
-                <div>
-                  <p class="text-sm text-ink-muted">Selected port</p>
-                  <p class="font-medium font-mono">{{ selectedPort.name }}</p>
-                  <p class="text-sm mt-1 capitalize">
-                    {{ selectedPort.kind }}
-                    · {{ selectedPort.running ? 'link up' : 'link down' }}
-                    <template v-if="selectedPort.disabled"> · disabled</template>
-                  </p>
-                  <p v-if="selectedPort.mac" class="font-mono text-sm text-ink-muted mt-1">
-                    {{ selectedPort.mac }}
-                  </p>
-                </div>
-                <button class="btn btn-ghost btn-sm" @click="selectedPort = null">Close</button>
+          <div v-if="selectedPort" class="mt-6 p-4 bg-base-200 border border-base-300 rounded-none">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-sm text-ink-muted">Selected port</p>
+                <p class="font-medium font-mono">{{ selectedPort.name }}</p>
+                <p class="text-sm mt-1 capitalize">
+                  {{ selectedPort.kind }}
+                  · {{ selectedPort.running ? 'link up' : 'link down' }}
+                  <template v-if="selectedPort.disabled"> · disabled</template>
+                </p>
+                <p v-if="selectedPort.mac" class="font-mono text-sm text-ink-muted mt-1">
+                  {{ selectedPort.mac }}
+                </p>
               </div>
-            </div>
-          </div>
-
-          <div v-if="snapshot?.vlans?.length" class="bg-base-100 border border-base-300 rounded-none p-6">
-            <h2 class="type-card-title mb-4">VLANs</h2>
-            <div class="overflow-x-auto">
-              <table class="table table-zebra w-full">
-                <thead>
-                  <tr class="bg-base-200/50">
-                    <th>Name</th>
-                    <th>VLAN ID</th>
-                    <th>Interface</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="vlan in snapshot.vlans" :key="vlan.name + vlan.vlanId">
-                    <td>{{ vlan.name }}</td>
-                    <td class="font-mono">{{ vlan.vlanId }}</td>
-                    <td class="font-mono text-sm">{{ vlan.interface || '-' }}</td>
-                  </tr>
-                </tbody>
-              </table>
+              <button class="btn btn-ghost btn-sm" @click="selectedPort = null">Close</button>
             </div>
           </div>
         </div>
 
-        <div class="space-y-6">
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div class="xl:col-span-2 space-y-6">
+            <div v-if="snapshot?.vlans?.length" class="bg-base-100 border border-base-300 rounded-none p-6">
+              <h2 class="type-card-title mb-4">VLANs</h2>
+              <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                  <thead>
+                    <tr class="bg-base-200/50">
+                      <th>Name</th>
+                      <th>VLAN ID</th>
+                      <th>Interface</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="vlan in snapshot.vlans" :key="vlan.name + vlan.vlanId">
+                      <td>{{ vlan.name }}</td>
+                      <td class="font-mono">{{ vlan.vlanId }}</td>
+                      <td class="font-mono text-sm">{{ vlan.interface || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-6">
           <div class="bg-base-100 border border-base-300 rounded-none p-6">
             <h2 class="type-card-title mb-4">Router Details</h2>
             <dl class="space-y-4">
@@ -172,6 +173,7 @@
               </li>
             </ul>
           </div>
+        </div>
         </div>
       </div>
     </template>

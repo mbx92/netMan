@@ -81,7 +81,7 @@ const saving = ref(false)
 
 async function saveUser() {
   if (formData.password !== formData.confirmPassword) {
-    alert('Passwords do not match')
+    await alertDialog({ title: 'Validation', message: 'Passwords do not match', variant: 'warning' })
     return
   }
 
@@ -100,7 +100,11 @@ async function saveUser() {
     await navigateTo('/users')
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string }; message?: string }
-    alert('Error: ' + (err.data?.statusMessage || err.message || 'Failed to create user'))
+    await alertDialog({
+      title: 'Error',
+      message: err.data?.statusMessage || err.message || 'Failed to create user',
+      variant: 'danger',
+    })
   } finally {
     saving.value = false
   }

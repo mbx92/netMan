@@ -1,8 +1,11 @@
 <template>
   <button
     type="button"
-    class="port-bay inline-flex flex-col items-center gap-1 p-0 border-0 bg-transparent cursor-pointer w-[3.5rem] shrink-0 rounded-none"
-    :class="selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-[var(--nm-inverse-surface)]' : ''"
+    class="port-bay inline-flex flex-col items-center gap-0.5 p-0 border-0 bg-transparent cursor-pointer rounded-none"
+    :class="[
+      fluid ? 'w-full min-w-0' : 'w-[3.5rem] shrink-0',
+      selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-[var(--nm-inverse-surface)]' : '',
+    ]"
     :title="tooltip"
     :aria-label="tooltip"
     @click="$emit('select')"
@@ -77,12 +80,15 @@ const props = withDefaults(defineProps<{
   status?: 'up' | 'down' | 'disabled'
   caption?: string
   selected?: boolean
+  /** Fill the parent grid cell so a 16-port row stays on one line */
+  fluid?: boolean
 }>(), {
   kind: 'ethernet',
   label: '',
   status: 'down',
   caption: '',
   selected: false,
+  fluid: false,
 })
 
 defineEmits<{ select: [] }>()

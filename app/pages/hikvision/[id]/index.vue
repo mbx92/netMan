@@ -55,6 +55,10 @@
             <span>{{ device.firmware || '-' }}</span>
           </div>
           <div class="flex items-center gap-3">
+            <span class="type-mono text-base-content/50 w-16">SITE</span>
+            <span>{{ device.site?.name || 'Not set' }}</span>
+          </div>
+          <div class="flex items-center gap-3">
             <span class="type-mono text-base-content/50 w-16">SYNC</span>
             <span>{{ device.lastSync ? formatDate(device.lastSync) : 'Never' }}</span>
           </div>
@@ -390,11 +394,24 @@ function formatDate(value: string): string {
 async function syncDevice() {
   syncing.value = true
   try {
-    await $fetch(`/api/hikvision/${id}/sync`, { method: 'POST' })
+    const result = await $fetch<{ message?: string; ipam?: { created: number; updated: number; skipped: number } }>(
+      `/api/hikvision/${id}/sync`,
+      { method: 'POST' },
+    )
     await refresh()
+    if (result?.ipam) {
+      await alertDialog({
+        title: 'Sync Complete',
+        message: result.message || `IPAM: +${result.ipam.created} created, ${result.ipam.updated} named`,
+      })
+    }
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string }; message?: string }
-    alert('Sync failed: ' + (err.data?.statusMessage || err.message || 'Unknown error'))
+    await alertDialog({
+      title: 'Sync Failed',
+      message: err.data?.statusMessage || err.message || 'Unknown error',
+      variant: 'danger',
+    })
   } finally {
     syncing.value = false
   }

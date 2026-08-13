@@ -1,5 +1,6 @@
 import prisma from '../../../utils/prisma'
 import { createHikvisionClientById } from '../../../utils/hikvision'
+import { enrichIpam } from '../../../utils/ipam-enrich'
 
 // POST /api/hikvision/[id]/sync - Sync device info and channels from Hikvision ISAPI
 export default defineEventHandler(async (event) => {
@@ -70,6 +71,10 @@ export default defineEventHandler(async (event) => {
             where: { hikvisionDeviceId: id },
         })
 
+        let ipamCreated = 0
+        let ipamUpdated = 0
+        let ipamSkipped = 0
+
         for (const ch of channels) {
             await prisma.hikvisionChannel.create({
                 data: {
@@ -86,11 +91,25 @@ export default defineEventHandler(async (event) => {
                 },
             })
 
-            // Enrich IPAM: create or update IPAllocation if IP is known and site has matching range
-            if (ch.ipAddress) {
-                await enrichIpam(device.siteId, ch.ipAddress, ch.macAddress, ch.name || `Channel ${ch.channelIndex}`)
-            }
+            const result = await enrichIpam(
+                device.siteId,
+                ch.ipAddress,
+                ch.macAddress,
+                ch.name || `Channel ${ch.channelIndex}`,
+            )
+            if (result === 'created') ipamCreated++
+            else if (result === 'updated') ipamUpdated++
+            else if (result === 'skipped') ipamSkipped++
         }
+
+        const nvrIpam = await enrichIpam(
+            device.siteId,
+            device.host,
+            info.macAddress || device.macAddress,
+            device.name,
+        )
+        if (nvrIpam === 'created') ipamCreated++
+        else if (nvrIpam === 'updated') ipamUpdated++
 
         await prisma.auditLog.create({
             data: {
@@ -101,6 +120,9 @@ export default defineEventHandler(async (event) => {
                     name: device.name,
                     host: device.host,
                     channelCount: channels.length,
+                    ipamCreated,
+                    ipamUpdated,
+                    ipamSkipped,
                 },
                 result: 'success',
             },
@@ -110,7 +132,8 @@ export default defineEventHandler(async (event) => {
             success: true,
             info,
             channels: channels.length,
-            message: `Synced ${channels.length} channels from ${device.name}`,
+            ipam: { created: ipamCreated, updated: ipamUpdated, skipped: ipamSkipped },
+            message: `Synced ${channels.length} channels from ${device.name} · IPAM +${ipamCreated} / updated ${ipamUpdated}`,
         }
     } catch (error) {
         await prisma.auditLog.create({
@@ -129,69 +152,3 @@ export default defineEventHandler(async (event) => {
         })
     }
 })
-
-/**
- * Try to enrich IPAM by finding the matching IPRange for the site and creating/updating an allocation.
- */
-async function enrichIpam(
-    siteId: string | null,
-    ip: string,
-    mac: string | undefined,
-    hostname: string,
-): Promise<void> {
-    if (!siteId) return
-
-    // Find an IPRange in the same site whose network contains this IP
-    const ranges = await prisma.iPRange.findMany({
-        where: { siteId },
-    })
-
-    const matchingRange = ranges.find(range => ipInCidr(ip, range.network))
-    if (!matchingRange) return
-
-    const existing = await prisma.iPAllocation.findUnique({
-        where: {
-            rangeId_ip: {
-                rangeId: matchingRange.id,
-                ip,
-            },
-        },
-    })
-
-    if (existing) {
-        // Only enrich hostname/mac if not already set, to avoid overwriting manual data
-        const data: Record<string, unknown> = {}
-        if (!existing.hostname && hostname) data.hostname = hostname
-        if (!existing.mac && mac) data.mac = mac
-        if (Object.keys(data).length > 0) {
-            await prisma.iPAllocation.update({
-                where: { id: existing.id },
-                data,
-            })
-        }
-    } else {
-        await prisma.iPAllocation.create({
-            data: {
-                rangeId: matchingRange.id,
-                ip,
-                mac: mac || null,
-                hostname: hostname || null,
-                type: 'STATIC',
-            },
-        })
-    }
-}
-
-function ipToLong(ip: string): number {
-    return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0
-}
-
-function ipInCidr(ip: string, cidr: string): boolean {
-    const [network, bits] = cidr.split('/')
-    const mask = parseInt(bits, 10)
-    if (Number.isNaN(mask) || mask < 0 || mask > 32) return false
-    const ipLong = ipToLong(ip)
-    const netLong = ipToLong(network)
-    const maskLong = (0xFFFFFFFF << (32 - mask)) >>> 0
-    return (ipLong & maskLong) === (netLong & maskLong)
-}

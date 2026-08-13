@@ -7,10 +7,12 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "sso:pack": "npm pack ../sso-login/packages/nuxt-sso-client --pack-destination packages"
   },
   "dependencies": {
     "@lucide/vue": "^1.31.0",
+    "@mbx92/nuxt-sso-client": "file:packages/mbx92-nuxt-sso-client-0.2.0.tgz",
     "@novnc/novnc": "^1.6.0",
     "@pinia/nuxt": "^0.11.3",
     "@prisma/client": "^5.22.0",

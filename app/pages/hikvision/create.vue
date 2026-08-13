@@ -132,7 +132,11 @@ async function saveDevice() {
     await navigateTo('/hikvision')
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string }; message?: string }
-    alert('Error: ' + (err.data?.statusMessage || err.message || 'Failed to add device'))
+    await alertDialog({
+      title: 'Error',
+      message: err.data?.statusMessage || err.message || 'Failed to add device',
+      variant: 'danger',
+    })
   } finally {
     saving.value = false
   }

@@ -79,9 +79,10 @@ export class MikroTikV6Client {
             console.log(`[MikroTik-v6] Connected to ${this.config.host}:${this.config.port}`)
             return this.api
         } catch (error) {
-            console.error('[MikroTik-v6] Connection failed:', error)
+            const message = error instanceof Error ? error.message : String(error)
+            console.error(`[MikroTik-v6] Connection failed: ${this.config.host}:${this.config.port} — ${message}`)
             this.api = null
-            throw error
+            throw new Error(`MikroTik v6 connection failed (${this.config.host}:${this.config.port}): ${message}`)
         }
     }
 
@@ -138,7 +139,7 @@ export class MikroTikV6Client {
             console.log(`[MikroTik-v6] Fetched ${entries.length} ARP entries`)
             return entries
         } catch (error) {
-            console.error('[MikroTik-v6] Failed to fetch ARP table:', error)
+            console.error('[MikroTik-v6] Failed to fetch ARP table:', error instanceof Error ? error.message : error)
             return []
         }
     }

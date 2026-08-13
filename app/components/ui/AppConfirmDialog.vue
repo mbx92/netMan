@@ -14,7 +14,12 @@
         <h3 :id="titleId" class="type-card-title">{{ state.title }}</h3>
         <p :id="descId" class="py-4 whitespace-pre-wrap">{{ state.message }}</p>
         <div class="modal-action">
-          <button class="btn btn-ghost" type="button" @click="cancel">
+          <button
+            v-if="state.mode !== 'alert'"
+            class="btn btn-ghost"
+            type="button"
+            @click="cancel"
+          >
             {{ state.cancelLabel }}
           </button>
           <button

@@ -95,26 +95,6 @@
         </table>
       </div>
     </div>
-
-    <!-- Delete Confirmation Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showDeleteModal }" :open="showDeleteModal || undefined" @close="showDeleteModal = false">
-      <div class="modal-box glass-modal rounded-none">
-        <h3 class="type-card-title">Delete NAS Device</h3>
-        <p class="py-4">
-          Are you sure you want to delete <strong>{{ deviceToDelete?.name }}</strong>?
-        </p>
-        <div class="modal-action">
-          <button class="btn btn-ghost" @click="showDeleteModal = false">Cancel</button>
-          <button class="btn btn-error" :disabled="deleting" @click="deleteDevice">
-            <span v-if="deleting" class="loading loading-spinner loading-sm"></span>
-            Delete
-          </button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showDeleteModal = false">close</button>
-      </form>
-    </dialog>
   </div>
 </template>
 
@@ -143,30 +123,24 @@ interface NASDevice {
 const { data: deviceData, pending, refresh } = await useFetch('/api/nas')
 const devices = computed(() => deviceData.value?.devices as NASDevice[] || [])
 
-// Delete modal
-const showDeleteModal = ref(false)
-const deleting = ref(false)
-const deviceToDelete = ref<NASDevice | null>(null)
-
-function confirmDelete(device: NASDevice) {
-  deviceToDelete.value = device
-  showDeleteModal.value = true
-}
-
-async function deleteDevice() {
-  if (!deviceToDelete.value) return
-  deleting.value = true
+async function confirmDelete(device: NASDevice) {
+  const ok = await confirmDialog({
+    title: 'Delete NAS Device',
+    message: `Are you sure you want to delete "${device.name}"?`,
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  })
+  if (!ok) return
   try {
-    await $fetch(`/api/nas/${deviceToDelete.value.id}`, {
-      method: 'DELETE',
-    })
-    showDeleteModal.value = false
-    deviceToDelete.value = null
+    await $fetch(`/api/nas/${device.id}`, { method: 'DELETE' })
     refresh()
-  } catch (error) {
-    console.error('Failed to delete NAS device:', error)
-  } finally {
-    deleting.value = false
+  } catch (error: unknown) {
+    const err = error as { data?: { statusMessage?: string }; message?: string }
+    await alertDialog({
+      title: 'Failed to Delete',
+      message: err.data?.statusMessage || err.message || 'An error occurred while deleting the NAS device',
+      variant: 'danger',
+    })
   }
 }
 

@@ -92,9 +92,6 @@
 
 <script setup lang="ts">
 import { Power, Terminal as TerminalIcon, XCircle } from '@lucide/vue'
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -122,8 +119,8 @@ const password = ref('')
 
 // Terminal refs
 const terminalRef = ref<HTMLElement | null>(null)
-let terminal: Terminal | null = null
-let fitAddon: FitAddon | null = null
+let terminal: any = null
+let fitAddon: any = null
 let ws: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 
@@ -221,11 +218,19 @@ function disconnect() {
   handleDisconnected()
 }
 
-function initTerminal() {
+async function initTerminal() {
   if (!terminalRef.value) return
 
+  // xterm and its addons are browser-only (they reference `self`), so load
+  // them lazily after a successful connection instead of at module import.
+  const [{ Terminal: TerminalClass }, { FitAddon }, { WebLinksAddon }] = await Promise.all([
+    import('@xterm/xterm'),
+    import('@xterm/addon-fit'),
+    import('@xterm/addon-web-links'),
+  ])
+
   // Create terminal
-  terminal = new Terminal({
+  terminal = new TerminalClass({
     cursorBlink: true,
     cursorStyle: 'block',
     fontSize: 14,

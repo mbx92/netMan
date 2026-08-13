@@ -125,7 +125,11 @@ async function syncDevice(device: HikvisionDevice) {
     await refresh()
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string }; message?: string }
-    alert('Sync failed: ' + (err.data?.statusMessage || err.message || 'Unknown error'))
+    await alertDialog({
+      title: 'Sync Failed',
+      message: err.data?.statusMessage || err.message || 'Unknown error',
+      variant: 'danger',
+    })
   } finally {
     syncing.value = null
   }
@@ -145,7 +149,11 @@ async function deleteDevice(device: HikvisionDevice) {
     await refresh()
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string }; message?: string }
-    alert('Error: ' + (err.data?.statusMessage || err.message || 'Failed to delete device'))
+    await alertDialog({
+      title: 'Error',
+      message: err.data?.statusMessage || err.message || 'Failed to delete device',
+      variant: 'danger',
+    })
   }
 }
 </script>

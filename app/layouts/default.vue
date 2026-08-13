@@ -186,27 +186,6 @@
         </main>
       </div>
     </div>
-
-    <dialog
-      class="modal"
-      :class="{ 'modal-open': showLogoutModal }"
-      :open="showLogoutModal || undefined"
-      @close="showLogoutModal = false"
-    >
-      <div class="modal-box glass-modal rounded-none">
-        <h3 class="type-card-title">Konfirmasi logout</h3>
-        <p class="py-4 type-body text-base-content/70">
-          Apakah Anda yakin ingin logout?
-        </p>
-        <div class="modal-action">
-          <button type="button" class="btn btn-ghost" @click="showLogoutModal = false">Batal</button>
-          <button type="button" class="btn btn-error" @click="confirmLogout">Logout</button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button type="submit" @click="showLogoutModal = false">close</button>
-      </form>
-    </dialog>
   </div>
 </template>
 
@@ -252,7 +231,6 @@ const sidebarCollapsed = computed({
     }
   },
 })
-const showLogoutModal = ref(false)
 const now = ref<Date | null>(null)
 
 const tipClass = computed(() => (sidebarCollapsed.value ? 'tooltip tooltip-right' : ''))
@@ -306,12 +284,15 @@ const toggleSidebarCollapsed = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
 }
 
-const handleLogout = () => {
-  showLogoutModal.value = true
-}
-
-const confirmLogout = async () => {
-  showLogoutModal.value = false
+const handleLogout = async () => {
+  const ok = await confirmDialog({
+    title: 'Konfirmasi logout',
+    message: 'Apakah Anda yakin ingin logout?',
+    confirmLabel: 'Logout',
+    cancelLabel: 'Batal',
+    variant: 'danger',
+  })
+  if (!ok) return
   await logout()
 }
 

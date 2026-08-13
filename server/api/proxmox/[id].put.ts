@@ -1,4 +1,5 @@
 import prisma from '../../utils/prisma'
+import { linkProxmoxInventory } from '../../utils/device-link'
 
 export default defineEventHandler(async (event) => {
     const id = getRouterParam(event, 'id')
@@ -53,6 +54,16 @@ export default defineEventHandler(async (event) => {
         },
         include: { site: { select: { id: true, name: true } } },
     })
+
+    try {
+        await linkProxmoxInventory({
+            host: updated.host,
+            name: updated.name,
+            siteId: updated.siteId,
+        })
+    } catch (error) {
+        console.error('[Proxmox] Failed to link Device record:', error)
+    }
 
     await prisma.auditLog.create({
         data: {

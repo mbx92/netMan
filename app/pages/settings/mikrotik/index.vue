@@ -103,54 +103,11 @@
         </table>
       </div>
     </div>
-
-    <!-- Delete Confirmation Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showDeleteModal }" :open="showDeleteModal || undefined" @close="showDeleteModal = false">
-      <div class="modal-box glass-modal rounded-none">
-        <h3 class="type-card-title">Delete Router</h3>
-        <p class="py-4">
-          Are you sure you want to delete <strong>{{ deviceToDelete?.name }}</strong>?
-        </p>
-        <div class="modal-action">
-          <button class="btn btn-ghost" @click="showDeleteModal = false">Cancel</button>
-          <button class="btn btn-error" :disabled="deleting" @click="deleteDevice">
-            <span v-if="deleting" class="loading loading-spinner loading-sm"></span>
-            Delete
-          </button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showDeleteModal = false">close</button>
-      </form>
-    </dialog>
-
-    <!-- Feedback Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showFeedbackModal }" :open="showFeedbackModal || undefined" @close="showFeedbackModal = false">
-      <div class="modal-box glass-modal rounded-none !max-w-[514px]">
-        <div class="flex items-start gap-3">
-          <div :class="['w-10 h-10 rounded-none flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
-            <CheckCircle2 v-if="feedbackType === 'success'" class="w-6 h-6" :stroke-width="2" />
-            <XCircle v-else-if="feedbackType === 'error'" class="w-6 h-6" :stroke-width="2" />
-            <AlertCircle v-else class="w-6 h-6" :stroke-width="2" />
-          </div>
-          <div>
-            <h3 class="type-card-title">{{ feedbackTitle }}</h3>
-            <p class="py-2 text-base-content/80">{{ feedbackMessage }}</p>
-          </div>
-        </div>
-        <div class="modal-action">
-          <button class="btn btn-primary" @click="showFeedbackModal = false">OK</button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showFeedbackModal = false">close</button>
-      </form>
-    </dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { AlertCircle, CheckCircle2, Eye, Pencil, Plus, RefreshCw, Trash2, XCircle } from '@lucide/vue'
+import { Eye, Pencil, Plus, RefreshCw, Trash2 } from '@lucide/vue'
 
 interface Site {
   id: string
@@ -174,20 +131,6 @@ interface MikrotikDevice {
 const { data: deviceData, pending, refresh } = await useFetch('/api/mikrotik')
 const devices = computed(() => deviceData.value?.devices as MikrotikDevice[] || [])
 
-// Feedback modal
-const showFeedbackModal = ref(false)
-const feedbackType = ref<'success' | 'error' | 'warning'>('success')
-const feedbackTitle = ref('')
-const feedbackMessage = ref('')
-
-function showFeedback(type: 'success' | 'error' | 'warning', title: string, message: string) {
-  feedbackType.value = type
-  feedbackTitle.value = title
-  feedbackMessage.value = message
-  showFeedbackModal.value = true
-}
-
-// Test connection
 const testing = ref<string | null>(null)
 async function testConnection(device: MikrotikDevice) {
   testing.value = device.id
@@ -195,16 +138,23 @@ async function testConnection(device: MikrotikDevice) {
     const result = await $fetch<{ success: boolean; message: string; identity?: string }>(`/api/mikrotik/${device.id}/test`, {
       method: 'POST',
     })
-    showFeedback(result.success ? 'success' : 'error', result.success ? 'Connection Successful' : 'Connection Failed', result.message)
+    await alertDialog({
+      title: result.success ? 'Connection Successful' : 'Connection Failed',
+      message: result.message,
+      variant: result.success ? 'primary' : 'danger',
+    })
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string } }
-    showFeedback('error', 'Connection Failed', err.data?.statusMessage || 'Connection test failed')
+    await alertDialog({
+      title: 'Connection Failed',
+      message: err.data?.statusMessage || 'Connection test failed',
+      variant: 'danger',
+    })
   } finally {
     testing.value = null
   }
 }
 
-// Sync device
 const syncing = ref<string | null>(null)
 async function syncDevice(device: MikrotikDevice) {
   syncing.value = device.id
@@ -212,41 +162,38 @@ async function syncDevice(device: MikrotikDevice) {
     const result = await $fetch<{ success: boolean; message: string; devices: number }>(`/api/mikrotik/${device.id}/sync`, {
       method: 'POST',
     })
-    showFeedback('success', 'Sync Complete', result.message)
+    await alertDialog({ title: 'Sync Complete', message: result.message })
     refresh()
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string } }
-    showFeedback('error', 'Sync Failed', err.data?.statusMessage || 'Failed to sync data from router')
+    await alertDialog({
+      title: 'Sync Failed',
+      message: err.data?.statusMessage || 'Failed to sync data from router',
+      variant: 'danger',
+    })
   } finally {
     syncing.value = null
   }
 }
 
-// Delete modal
-const showDeleteModal = ref(false)
-const deleting = ref(false)
-const deviceToDelete = ref<MikrotikDevice | null>(null)
-
-function confirmDelete(device: MikrotikDevice) {
-  deviceToDelete.value = device
-  showDeleteModal.value = true
-}
-
-async function deleteDevice() {
-  if (!deviceToDelete.value) return
-  deleting.value = true
+async function confirmDelete(device: MikrotikDevice) {
+  const ok = await confirmDialog({
+    title: 'Delete Router',
+    message: `Are you sure you want to delete "${device.name}"?`,
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  })
+  if (!ok) return
   try {
-    await $fetch(`/api/mikrotik/${deviceToDelete.value.id}`, {
-      method: 'DELETE',
-    })
-    showDeleteModal.value = false
-    deviceToDelete.value = null
+    await $fetch(`/api/mikrotik/${device.id}`, { method: 'DELETE' })
     refresh()
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string } }
-    showFeedback('error', 'Failed to Delete', err.data?.statusMessage || 'An error occurred while deleting the router')
-  } finally {
-    deleting.value = false
+    await alertDialog({
+      title: 'Failed to Delete',
+      message: err.data?.statusMessage || 'An error occurred while deleting the router',
+      variant: 'danger',
+    })
   }
 }
 

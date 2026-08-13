@@ -25,8 +25,13 @@
             <p class="page-kicker mb-2">Proxmox Node</p>
             <h1 class="type-card-title">{{ node.name }}</h1>
             <p class="type-body-sm text-base-content/60 mt-1">
-              {{ node.host }}:{{ node.port }}
-              <span v-if="node.site">· {{ node.site.name }}</span>
+              <template v-if="node.linkedDevice">
+                <NuxtLink :to="`/devices/${node.linkedDevice.id}`" class="text-primary hover:underline font-mono">
+                  {{ node.host }}
+                </NuxtLink>:{{ node.port }}
+              </template>
+              <span v-else class="font-mono">{{ node.host }}:{{ node.port }}</span>
+              <span v-if="node.site"> · {{ node.site.name }}</span>
             </p>
           </div>
           <div class="flex gap-2">
@@ -43,7 +48,15 @@
         <div class="mt-6 space-y-2 type-body-sm">
           <div class="flex items-center gap-3">
             <span class="type-mono text-base-content/50 w-16">HOST</span>
-            <span class="font-medium">{{ node.host }}:{{ node.port }}</span>
+            <NuxtLink
+              v-if="node.linkedDevice"
+              :to="`/devices/${node.linkedDevice.id}`"
+              class="font-medium text-primary hover:underline"
+            >
+              {{ node.host }}:{{ node.port }}
+              <span class="text-base-content/50 font-normal"> · {{ node.linkedDevice.name }}</span>
+            </NuxtLink>
+            <span v-else class="font-medium">{{ node.host }}:{{ node.port }}</span>
           </div>
           <div class="flex items-center gap-3">
             <span class="type-mono text-base-content/50 w-16">SYNC</span>
@@ -101,6 +114,7 @@
                 <th>Node</th>
                 <th>IP</th>
                 <th>MAC</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -118,8 +132,26 @@
                   </span>
                 </td>
                 <td class="text-sm">{{ g.node }}</td>
-                <td class="font-mono text-sm">{{ g.ipAddress || '-' }}</td>
+                <td class="font-mono text-sm">
+                  <div class="flex items-center gap-2">
+                    <NuxtLink
+                      v-if="guestDevice(g.ipAddress)"
+                      :to="`/devices/${guestDevice(g.ipAddress)!.id}`"
+                      class="text-primary hover:underline"
+                    >
+                      {{ g.ipAddress }}
+                    </NuxtLink>
+                    <span v-else>{{ g.ipAddress || '—' }}</span>
+                    <span v-if="g.ipSource === 'arp'" class="badge badge-ghost badge-xs">ARP</span>
+                    <span v-else-if="g.ipSource === 'manual'" class="badge badge-ghost badge-xs">manual</span>
+                  </div>
+                </td>
                 <td class="font-mono text-sm">{{ g.macAddress || '-' }}</td>
+                <td class="text-right">
+                  <button class="btn btn-ghost btn-xs" @click="openSetIp(g)">
+                    Set IP
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -213,6 +245,40 @@
           </table>
         </div>
       </div>
+
+      <dialog
+        class="modal"
+        :class="{ 'modal-open': ipForm.open }"
+        :open="ipForm.open || undefined"
+        @close="ipForm.open = false"
+      >
+        <div class="modal-box glass-modal rounded-none">
+          <h3 class="type-card-title">Set guest IP</h3>
+          <p class="py-2 type-body-sm text-base-content/70">
+            {{ ipForm.name }}
+            <span v-if="ipForm.mac" class="font-mono"> · {{ ipForm.mac }}</span>
+          </p>
+          <p class="type-body-sm text-base-content/50 mb-3">
+            Match this MAC against MikroTik ARP on Sync, or type the IP here.
+          </p>
+          <input
+            v-model="ipForm.ip"
+            type="text"
+            class="input input-bordered w-full font-mono"
+            placeholder="192.168.1.50"
+            @keydown.enter="saveGuestIp"
+          />
+          <div class="modal-action">
+            <button type="button" class="btn btn-ghost" @click="ipForm.open = false">Cancel</button>
+            <button type="button" class="btn btn-primary" :disabled="ipForm.saving" @click="saveGuestIp">
+              Save
+            </button>
+          </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+          <button type="submit" @click="ipForm.open = false">close</button>
+        </form>
+      </dialog>
     </div>
   </div>
 </template>
@@ -237,6 +303,7 @@ interface ProxmoxGuest {
   node: string
   ipAddress?: string
   macAddress?: string
+  ipSource?: 'config' | 'agent' | 'arp' | 'manual'
   networks?: { name: string; ip?: string; mac?: string }[]
 }
 
@@ -284,6 +351,8 @@ interface ProxmoxNodeDetail {
   site: { id: string; name: string } | null
   createdAt: string
   updatedAt: string
+  linkedDevice: { id: string; name: string; ip: string | null; typeCode: string } | null
+  guestDevices: { id: string; name: string; ip: string | null }[]
 }
 
 const route = useRoute()
@@ -293,6 +362,49 @@ const { data: node, refresh, pending } = await useFetch<ProxmoxNodeDetail>(`/api
 const syncing = ref(false)
 
 const snapshot = computed(() => node.value?.lastSnapshot || null)
+
+function guestDevice(ip?: string) {
+  if (!ip || !node.value?.guestDevices) return null
+  return node.value.guestDevices.find(d => d.ip === ip) || null
+}
+
+const ipForm = reactive({
+  open: false,
+  saving: false,
+  vmid: 0,
+  name: '',
+  mac: '',
+  ip: '',
+})
+
+function openSetIp(guest: ProxmoxGuest) {
+  ipForm.vmid = guest.vmid
+  ipForm.name = `${guest.name} (vmid ${guest.vmid})`
+  ipForm.mac = guest.macAddress || ''
+  ipForm.ip = guest.ipAddress || ''
+  ipForm.open = true
+}
+
+async function saveGuestIp() {
+  ipForm.saving = true
+  try {
+    await $fetch(`/api/proxmox/${id}/guest-ip`, {
+      method: 'POST',
+      body: { vmid: ipForm.vmid, ip: ipForm.ip.trim() },
+    })
+    ipForm.open = false
+    await refresh()
+  } catch (error: unknown) {
+    const err = error as { data?: { statusMessage?: string }; message?: string }
+    await alertDialog({
+      title: 'Failed to save IP',
+      message: err.data?.statusMessage || err.message || 'Unknown error',
+      variant: 'danger',
+    })
+  } finally {
+    ipForm.saving = false
+  }
+}
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleString('en-GB', {
@@ -333,7 +445,11 @@ async function syncNode() {
     await refresh()
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string }; message?: string }
-    alert('Sync failed: ' + (err.data?.statusMessage || err.message || 'Unknown error'))
+    await alertDialog({
+      title: 'Sync Failed',
+      message: err.data?.statusMessage || err.message || 'Unknown error',
+      variant: 'danger',
+    })
   } finally {
     syncing.value = false
   }

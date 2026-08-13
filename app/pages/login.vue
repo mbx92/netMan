@@ -72,6 +72,10 @@
           />
         </div>
 
+        <div v-if="sessionExpired" class="alert alert-warning w-full">
+          <span class="type-body-sm">Session expired. Sign in again.</span>
+        </div>
+
         <div v-if="errorMessage" class="alert alert-error w-full">
           <XCircle class="stroke-current shrink-0 h-5 w-5" :stroke-width="2" />
           <span class="type-body-sm">{{ errorMessage }}</span>
@@ -87,18 +91,20 @@
         </button>
       </form>
 
-      <div class="divider type-caption my-8">or</div>
+      <template v-if="ssoEnabled">
+        <div class="divider type-caption my-8">or</div>
 
-      <button
-        type="button"
-        class="btn btn-outline w-full gap-2"
-        :disabled="isLoading"
-        @click="handleSsoLogin"
-      >
-        <span v-if="ssoSubmitting" class="loading loading-spinner loading-sm"></span>
-        <LogIn v-else class="w-5 h-5" :stroke-width="2" />
-        Continue with SSO
-      </button>
+        <button
+          type="button"
+          class="btn btn-outline w-full gap-2"
+          :disabled="isLoading"
+          @click="handleSsoLogin"
+        >
+          <span v-if="ssoSubmitting" class="loading loading-spinner loading-sm"></span>
+          <LogIn v-else class="w-5 h-5" :stroke-width="2" />
+          Continue with SSO
+        </button>
+      </template>
 
       <p class="type-mono text-base-content/40 mt-8 text-center">
         LOCAL · SSO · AUDITED SESSION
@@ -114,7 +120,7 @@ definePageMeta({
   layout: false,
 })
 
-const { login, loginLocal, isLoading } = useAuth()
+const { login, loginLocal, isLoading, ssoEnabled } = useAuth()
 const route = useRoute()
 
 const email = ref('')
@@ -122,6 +128,7 @@ const password = ref('')
 const errorMessage = ref('')
 const localSubmitting = ref(false)
 const ssoSubmitting = ref(false)
+const sessionExpired = computed(() => route.query.reason === 'session_expired')
 
 const handleLocalLogin = async () => {
   errorMessage.value = ''
@@ -151,7 +158,7 @@ const handleSsoLogin = async () => {
 onMounted(() => {
   const error = route.query.error as string
   if (error) {
-    errorMessage.value = `Login gagal: ${route.query.error_description || error}`
+    errorMessage.value = String(route.query.error_description || error)
   }
 })
 </script>

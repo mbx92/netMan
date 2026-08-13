@@ -23,30 +23,28 @@
     </div>
 
     <!-- Filters -->
-    <div class="bg-base-100 border border-base-300 rounded-none p-4 mb-6">
-      <div class="flex flex-wrap gap-4">
-        <div class="form-control w-full md:w-64">
-          <input 
-            v-model="filters.search" 
-            type="text" 
-            placeholder="Search by name, hostname, or IP..." 
-            class="input input-bordered w-full"
-            @input="debouncedSearch"
-          />
-        </div>
-        <select v-model="filters.type" class="select select-bordered" @change="loadDevices">
+    <div class="bg-base-100 border border-base-300 rounded-none p-3 mb-6">
+      <div class="flex items-center gap-3">
+        <input
+          v-model="filters.search"
+          type="text"
+          placeholder="Search by name, hostname, or IP..."
+          class="input input-bordered flex-1 min-w-0"
+          @input="debouncedSearch"
+        />
+        <select v-model="filters.type" class="select select-bordered w-44 shrink-0" @change="loadDevices">
           <option value="">All Types</option>
           <option v-for="dt in deviceTypes" :key="dt.code" :value="dt.code">{{ dt.name }}</option>
         </select>
-        <select v-model="filters.status" class="select select-bordered" @change="loadDevices">
+        <select v-model="filters.status" class="select select-bordered w-40 shrink-0" @change="loadDevices">
           <option value="">All Status</option>
           <option value="ONLINE">Online</option>
           <option value="OFFLINE">Offline</option>
           <option value="UNKNOWN">Unknown</option>
           <option value="MAINTENANCE">Maintenance</option>
         </select>
-        <button v-if="hasFilters" class="btn btn-ghost btn-sm" @click="clearFilters">
-          Clear filters
+        <button v-if="hasFilters" class="btn btn-ghost shrink-0" @click="clearFilters">
+          Clear
         </button>
       </div>
     </div>
@@ -145,56 +143,11 @@
         Total: {{ totalDevices }} devices
       </div>
     </div>
-
-    <!-- Delete Confirmation Modal -->
-    <!-- Delete Device Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showDeleteModal }" :open="showDeleteModal || undefined" @close="showDeleteModal = false">
-      <div class="modal-box glass-modal rounded-none !max-w-[516px]">
-        <h3 class="type-card-title">Delete Device</h3>
-        <p class="py-4">
-          Are you sure you want to delete <strong>{{ deviceToDelete?.name }}</strong>? 
-          This action cannot be undone.
-        </p>
-        <div class="modal-action">
-          <button class="btn btn-ghost" @click="showDeleteModal = false">Cancel</button>
-          <button class="btn btn-error" :disabled="deletingDevice" @click="deleteDevice">
-            <span v-if="deletingDevice" class="loading loading-spinner loading-sm"></span>
-            Delete
-          </button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showDeleteModal = false">close</button>
-      </form>
-    </dialog>
-
-    <!-- Feedback Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showFeedbackModal }" :open="showFeedbackModal || undefined" @close="showFeedbackModal = false">
-      <div class="modal-box glass-modal rounded-none">
-        <div class="flex items-start gap-3">
-          <div :class="['w-10 h-10 rounded-none flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
-            <CheckCircle2 v-if="feedbackType === 'success'" class="w-6 h-6" :stroke-width="2" />
-            <XCircle v-else-if="feedbackType === 'error'" class="w-6 h-6" :stroke-width="2" />
-            <AlertCircle v-else class="w-6 h-6" :stroke-width="2" />
-          </div>
-          <div>
-            <h3 class="type-card-title">{{ feedbackTitle }}</h3>
-            <p class="py-2 text-base-content/80">{{ feedbackMessage }}</p>
-          </div>
-        </div>
-        <div class="modal-action">
-          <button class="btn btn-primary" @click="showFeedbackModal = false">OK</button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showFeedbackModal = false">close</button>
-      </form>
-    </dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { AlertCircle, CheckCircle2, Eye, Plus, Power, Trash2, XCircle } from '@lucide/vue'
+import { Eye, Plus, Power, Trash2 } from '@lucide/vue'
 
 interface Device {
   id: string
@@ -336,57 +289,47 @@ function clearFilters() {
   loadDevices()
 }
 
-// Feedback modal (replaces browser alerts)
-const showFeedbackModal = ref(false)
-const feedbackType = ref<'success' | 'error' | 'warning'>('success')
-const feedbackTitle = ref('')
-const feedbackMessage = ref('')
-
-function showFeedback(type: 'success' | 'error' | 'warning', title: string, message: string) {
-  feedbackType.value = type
-  feedbackTitle.value = title
-  feedbackMessage.value = message
-  showFeedbackModal.value = true
-}
-
-// Delete device modal
-const showDeleteModal = ref(false)
-const deletingDevice = ref(false)
-const deviceToDelete = ref<Device | null>(null)
-
-function confirmDelete(device: Device) {
-  deviceToDelete.value = device
-  showDeleteModal.value = true
-}
-
-async function deleteDevice() {
-  if (!deviceToDelete.value) return
-  deletingDevice.value = true
+async function confirmDelete(device: Device) {
+  const ok = await confirmDialog({
+    title: 'Delete Device',
+    message: `Are you sure you want to delete "${device.name}"?\nThis action cannot be undone.`,
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  })
+  if (!ok) return
   try {
-    await $fetch(`/api/devices/${deviceToDelete.value.id}`, {
-      method: 'DELETE',
-    })
-    showDeleteModal.value = false
-    deviceToDelete.value = null
+    await $fetch(`/api/devices/${device.id}`, { method: 'DELETE' })
     loadDevices()
-  } catch (error) {
-    showFeedback('error', 'Failed to Delete', 'An error occurred while deleting the device')
-  } finally {
-    deletingDevice.value = false
+  } catch {
+    await alertDialog({
+      title: 'Failed to Delete',
+      message: 'An error occurred while deleting the device',
+      variant: 'danger',
+    })
   }
 }
 
-// Wake on LAN
 async function sendWoL(device: Device) {
   if (!device.mac) {
-    showFeedback('warning', 'No MAC Address', 'No MAC address configured for this device')
+    await alertDialog({
+      title: 'No MAC Address',
+      message: 'No MAC address configured for this device',
+      variant: 'warning',
+    })
     return
   }
   try {
     await $fetch(`/api/wol/${device.mac}`, { method: 'POST' })
-    showFeedback('success', 'Wake-on-LAN Sent', `Magic packet sent to ${device.name}`)
-  } catch (error) {
-    showFeedback('error', 'WoL Failed', 'Failed to send Wake-on-LAN packet')
+    await alertDialog({
+      title: 'Wake-on-LAN Sent',
+      message: `Magic packet sent to ${device.name}`,
+    })
+  } catch {
+    await alertDialog({
+      title: 'WoL Failed',
+      message: 'Failed to send Wake-on-LAN packet',
+      variant: 'danger',
+    })
   }
 }
 

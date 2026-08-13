@@ -34,11 +34,20 @@ declare global {
   var prisma: undefined | ReturnType<typeof prismaClientSingleton>
 }
 
-export const prisma = globalThis.prisma ?? prismaClientSingleton()
-
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.prisma = prisma
+function getPrisma() {
+  const existing = globalThis.prisma ?? prismaClientSingleton()
+  // Recreate if this process still holds a client generated before newer models
+  if (!(existing as { hikvisionDevice?: unknown }).hikvisionDevice) {
+    globalThis.prisma = prismaClientSingleton()
+    return globalThis.prisma
+  }
+  if (process.env.NODE_ENV !== 'production') {
+    globalThis.prisma = existing
+  }
+  return existing
 }
+
+export const prisma = getPrisma()
 
 /** Run a Prisma call; on connection drop reconnect once and retry */
 export async function withPrismaRetry<T>(fn: () => Promise<T>): Promise<T> {

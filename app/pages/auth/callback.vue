@@ -20,10 +20,10 @@
 
         <button
           v-if="hasError"
-          @click="handleRetry"
           class="btn btn-primary mt-6"
+          @click="handleRetry"
         >
-          Kembali ke login
+          Back to login
         </button>
       </div>
     </div>
@@ -37,10 +37,9 @@ definePageMeta({
   layout: false,
 })
 
-const route = useRoute()
-const { handleCallback } = useAuth()
+const { completeSsoHandoff } = useAuth()
 
-const message = ref('Memproses login...')
+const message = ref('Finishing SSO sign-in...')
 const hasError = ref(false)
 
 const handleRetry = () => {
@@ -48,35 +47,13 @@ const handleRetry = () => {
 }
 
 onMounted(async () => {
-  const code = route.query.code as string
-  const state = route.query.state as string
-  const error = route.query.error as string
-
-  if (error) {
-    hasError.value = true
-    message.value = `Login gagal: ${(route.query.error_description as string) || error}`
-    setTimeout(() => {
-      navigateTo('/login')
-    }, 3000)
-    return
-  }
-
-  if (!code || !state) {
-    hasError.value = true
-    message.value = 'Invalid callback parameters'
-    setTimeout(() => {
-      navigateTo('/login')
-    }, 2000)
-    return
-  }
-
   try {
-    await handleCallback(code, state)
-    message.value = 'Login berhasil! Redirecting...'
-  } catch (err: any) {
-    console.error('Callback error:', err)
+    await completeSsoHandoff()
+    message.value = 'Signed in. Redirecting...'
+  } catch (err: unknown) {
+    const error = err as { message?: string }
     hasError.value = true
-    message.value = `Login gagal: ${err.message}`
+    message.value = error.message || 'SSO sign-in failed'
     setTimeout(() => {
       navigateTo('/login')
     }, 3000)

@@ -123,7 +123,11 @@ async function deleteType(dt: DeviceType) {
     refresh()
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string }, message?: string }
-    alert('Error: ' + (err.data?.statusMessage || err.message || 'Failed to delete'))
+    await alertDialog({
+      title: 'Error',
+      message: err.data?.statusMessage || err.message || 'Failed to delete',
+      variant: 'danger',
+    })
   }
 }
 </script>

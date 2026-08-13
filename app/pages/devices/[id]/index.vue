@@ -135,6 +135,31 @@
               </div>
             </div>
 
+            <div v-if="device.parentDevice" class="mt-6 pt-6 border-t border-base-200">
+              <div class="text-sm text-base-content/60">Hypervisor</div>
+              <NuxtLink
+                :to="`/devices/${device.parentDevice.id}`"
+                class="mt-1 inline-block text-primary hover:underline"
+              >
+                {{ device.parentDevice.name }}
+                <span v-if="device.parentDevice.ip" class="font-mono text-base-content/60">
+                  ({{ device.parentDevice.ip }})
+                </span>
+              </NuxtLink>
+            </div>
+
+            <div v-if="device.childDevices?.length" class="mt-6 pt-6 border-t border-base-200">
+              <div class="text-sm text-base-content/60">Virtual guests</div>
+              <ul class="mt-2 space-y-1">
+                <li v-for="child in device.childDevices" :key="child.id">
+                  <NuxtLink :to="`/devices/${child.id}`" class="text-primary hover:underline">
+                    {{ child.name }}
+                    <span v-if="child.ip" class="font-mono text-base-content/60">{{ child.ip }}</span>
+                  </NuxtLink>
+                </li>
+              </ul>
+            </div>
+
             <div v-if="device.notes" class="mt-6 pt-6 border-t border-base-200">
               <div class="text-sm text-base-content/60">Notes</div>
               <p class="mt-1 whitespace-pre-wrap">{{ device.notes }}</p>
@@ -279,27 +304,6 @@
       <button type="button" class="modal-backdrop" aria-label="Close" @click="showAddPortsModal = false" />
     </div>
 
-    <!-- Feedback Modal -->
-    <div v-if="showFeedbackModal" class="modal modal-open" role="dialog" aria-modal="true">
-      <div class="modal-box glass-modal rounded-none">
-        <div class="flex items-start gap-3">
-          <div :class="['w-10 h-10 rounded-none flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
-            <CheckCircle2 v-if="feedbackType === 'success'" class="w-6 h-6" :stroke-width="2" />
-            <XCircle v-else-if="feedbackType === 'error'" class="w-6 h-6" :stroke-width="2" />
-            <AlertCircle v-else class="w-6 h-6" :stroke-width="2" />
-          </div>
-          <div>
-            <h3 class="type-card-title">{{ feedbackTitle }}</h3>
-            <p class="py-2 text-base-content/80">{{ feedbackMessage }}</p>
-          </div>
-        </div>
-        <div class="modal-action">
-          <button type="button" class="btn btn-primary" @click="showFeedbackModal = false">OK</button>
-        </div>
-      </div>
-      <button type="button" class="modal-backdrop" aria-label="Close" @click="showFeedbackModal = false" />
-    </div>
-
     <!-- SSH Terminal Modal -->
     <div v-if="showSshModal" class="modal modal-open" role="dialog" aria-modal="true">
       <div class="modal-box max-w-4xl h-[80vh] p-0 flex flex-col glass-modal rounded-none">
@@ -353,7 +357,6 @@
 <script setup lang="ts">
 import {
   AlertCircle,
-  CheckCircle2,
   ChevronLeft,
   EthernetPort,
   Monitor,
@@ -361,7 +364,6 @@ import {
   Power,
   Terminal,
   X,
-  XCircle,
 } from '@lucide/vue'
 import ServerChassis from '~/components/server/ServerChassis.vue'
 import type { ServerBay } from '~/components/server/ServerChassis.vue'
@@ -430,6 +432,8 @@ interface Device {
   lastApiSync: string | null
   siteId: string | null
   site?: { id: string; name: string }
+  parentDevice?: { id: string; name: string; ip: string | null; typeCode: string } | null
+  childDevices?: { id: string; name: string; ip: string | null; typeCode: string }[]
   createdAt: string
   updatedAt: string
   ports: Port[]
@@ -453,17 +457,12 @@ const { data: connectedToData } = await useFetch<{
 }>(`/api/devices/${deviceId}/connected-to`)
 const connectedToPort = computed(() => connectedToData.value?.connectedToPort ?? null)
 
-// Feedback modal
-const showFeedbackModal = ref(false)
-const feedbackType = ref<'success' | 'error' | 'warning'>('success')
-const feedbackTitle = ref('')
-const feedbackMessage = ref('')
-
-function showFeedback(type: 'success' | 'error' | 'warning', title: string, message: string) {
-  feedbackType.value = type
-  feedbackTitle.value = title
-  feedbackMessage.value = message
-  showFeedbackModal.value = true
+async function showFeedback(type: 'success' | 'error' | 'warning', title: string, message: string) {
+  await alertDialog({
+    title,
+    message,
+    variant: type === 'error' ? 'danger' : type === 'warning' ? 'warning' : 'primary',
+  })
 }
 
 // PortGrid state
@@ -547,8 +546,8 @@ function onRemoteDisconnected(protocol: string) {
   console.log(`[Remote] ${protocol} disconnected from ${device.value?.name}`)
 }
 
-function onRemoteError(message: string) {
-  showFeedback('error', 'Connection Error', message)
+async function onRemoteError(message: string) {
+  await showFeedback('error', 'Connection Error', message)
 }
 
 // Fetch ports with ping status
@@ -582,7 +581,7 @@ async function handleAssign(portId: string, connectedDeviceId: string) {
     })
     await fetchPorts()
   } catch (e) {
-    showFeedback('error', 'Failed', 'An error occurred')
+    await showFeedback('error', 'Failed', 'An error occurred')
   }
 }
 
@@ -595,7 +594,7 @@ async function handleUnassign(portId: string) {
     })
     await fetchPorts()
   } catch (e) {
-    showFeedback('error', 'Failed', 'An error occurred')
+    await showFeedback('error', 'Failed', 'An error occurred')
   }
 }
 
@@ -608,7 +607,7 @@ async function handleDeletePort(portId: string) {
     await fetchPorts()
     refresh()
   } catch (e) {
-    showFeedback('error', 'Failed', 'An error occurred')
+    await showFeedback('error', 'Failed', 'An error occurred')
   }
 }
 
@@ -629,7 +628,7 @@ async function addPorts() {
     await fetchPorts()
     refresh()
   } catch (e) {
-    showFeedback('error', 'Failed', 'An error occurred')
+    await showFeedback('error', 'Failed', 'An error occurred')
   }
 }
 // SSE connection for real-time port status
@@ -711,14 +710,14 @@ onUnmounted(() => {
 // Wake on LAN
 async function sendWoL(mac: string | null) {
   if (!mac) {
-    showFeedback('warning', 'No MAC Address', 'Device does not have a MAC address configured')
+    await showFeedback('warning', 'No MAC Address', 'Device does not have a MAC address configured')
     return
   }
   try {
     await $fetch(`/api/wol/${mac}`, { method: 'POST' })
-    showFeedback('success', 'Wake-on-LAN Sent', 'Magic packet sent to device')
+    await showFeedback('success', 'Wake-on-LAN Sent', 'Magic packet sent to device')
   } catch (e) {
-    showFeedback('error', 'WoL Failed', 'Failed to send Wake-on-LAN packet')
+    await showFeedback('error', 'WoL Failed', 'Failed to send Wake-on-LAN packet')
   }
 }
 

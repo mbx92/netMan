@@ -97,7 +97,11 @@ async function saveType() {
     await navigateTo('/settings/device-types')
   } catch (error: unknown) {
     const err = error as { message?: string }
-    alert('Error: ' + (err.message || 'Failed to save'))
+    await alertDialog({
+      title: 'Error',
+      message: err.message || 'Failed to save',
+      variant: 'danger',
+    })
   } finally {
     saving.value = false
   }

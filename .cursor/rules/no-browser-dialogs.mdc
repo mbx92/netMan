@@ -1,0 +1,16 @@
+---
+description: Never use native browser confirm/alert; use the global AppConfirmDialog.
+globs: app/**/*.{vue,ts}
+alwaysApply: false
+---
+
+# Global confirm / alert only
+
+Never use `window.confirm`, `window.alert`, or the bare `confirm()` / `alert()` browser dialogs.
+
+Use the shared dialog mounted in `app/app.vue`:
+
+- Yes/No (delete, logout, deallocate): `confirmDialog({ title, message, confirmLabel, variant })`
+- Notice / error / success (single OK): `alertDialog({ title, message, variant })`
+
+Do not add per-page DaisyUI confirm/feedback modals for these cases. Keep data UIs (IPAM detail, sync preview, SSH/VNC) as local modals.

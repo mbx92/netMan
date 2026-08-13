@@ -110,27 +110,6 @@
       </div>
     </div>
 
-    <!-- Delete Confirmation Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showDeleteModal }" :open="showDeleteModal || undefined" @close="showDeleteModal = false">
-      <div class="modal-box glass-modal rounded-none">
-        <h3 class="type-card-title">Delete IP Range</h3>
-        <p class="py-4">
-          Are you sure you want to delete <strong>{{ rangeToDelete?.name }}</strong>?
-          This will also delete all {{ rangeToDelete?.usedIps || 0 }} IP allocations.
-        </p>
-        <div class="modal-action">
-          <button class="btn btn-ghost" @click="showDeleteModal = false">Cancel</button>
-          <button class="btn btn-error" :disabled="deleting" @click="deleteRange">
-            <span v-if="deleting" class="loading loading-spinner loading-sm"></span>
-            Delete
-          </button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showDeleteModal = false">close</button>
-      </form>
-    </dialog>
-
     <!-- Range Detail Modal -->
     <dialog class="modal" :class="{ 'modal-open': showDetailModal }" :open="showDetailModal || undefined" @close="showDetailModal = false">
       <div class="modal-box max-w-4xl glass-modal rounded-none">
@@ -211,53 +190,6 @@
       </form>
     </dialog>
 
-    <!-- Feedback Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showFeedbackModal }" :open="showFeedbackModal || undefined" @close="showFeedbackModal = false">
-      <div class="modal-box glass-modal rounded-none !max-w-[514px]">
-        <div class="flex items-start gap-3">
-          <div :class="['w-10 h-10 rounded-none flex items-center justify-center flex-shrink-0', feedbackType === 'success' ? 'bg-success/20 text-success' : feedbackType === 'error' ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning']">
-            <CheckCircle2 v-if="feedbackType === 'success'" class="w-6 h-6" :stroke-width="2" />
-            <XCircle v-else-if="feedbackType === 'error'" class="w-6 h-6" :stroke-width="2" />
-            <AlertCircle v-else class="w-6 h-6" :stroke-width="2" />
-          </div>
-          <div>
-            <h3 class="type-card-title">{{ feedbackTitle }}</h3>
-            <p class="py-2 text-base-content/80">{{ feedbackMessage }}</p>
-          </div>
-        </div>
-        <div class="modal-action">
-          <button class="btn btn-primary" @click="showFeedbackModal = false">OK</button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showFeedbackModal = false">close</button>
-      </form>
-    </dialog>
-
-    <!-- Deallocate Confirmation Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showDeallocateModal }" :open="showDeallocateModal || undefined" @close="showDeallocateModal = false">
-      <div class="modal-box glass-modal rounded-none">
-        <h3 class="type-card-title">Deallocate IP</h3>
-        <p class="py-4">
-          Hapus alokasi IP <strong class="font-mono">{{ ipToDeallocate?.ip }}</strong>?
-          <br/>
-          <span class="text-base-content/60 text-sm">
-            IP ini akan menjadi free/tersedia kembali.
-          </span>
-        </p>
-        <div class="modal-action">
-          <button class="btn btn-ghost" @click="showDeallocateModal = false">Batal</button>
-          <button class="btn btn-warning" :disabled="deallocating" @click="confirmDeallocate">
-            <span v-if="deallocating" class="loading loading-spinner loading-sm"></span>
-            Deallocate
-          </button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="showDeallocateModal = false">close</button>
-      </form>
-    </dialog>
-
     <!-- Sync Preview Modal -->
     <dialog class="modal" :class="{ 'modal-open': showSyncPreviewModal }" :open="showSyncPreviewModal || undefined" @close="showSyncPreviewModal = false">
       <div class="modal-box max-w-2xl glass-modal rounded-none">
@@ -327,7 +259,7 @@
 </template>
 
 <script setup lang="ts">
-import { AlertCircle, AlertTriangle, CheckCircle2, EthernetPort, LayoutGrid, Pencil, Plus, RefreshCw, Trash2, X, XCircle } from '@lucide/vue'
+import { AlertTriangle, EthernetPort, LayoutGrid, Pencil, Plus, RefreshCw, Trash2, X } from '@lucide/vue'
 
 interface Site {
   id: string
@@ -377,29 +309,25 @@ const { data: rangesData, pending, refresh: loadRanges } = await useFetch('/api/
 })
 const ranges = computed(() => rangesData.value?.ranges as IPRange[] || [])
 
-// Delete modal
-const showDeleteModal = ref(false)
-const deleting = ref(false)
-const rangeToDelete = ref<IPRange | null>(null)
-
-function confirmDelete(range: IPRange) {
-  rangeToDelete.value = range
-  showDeleteModal.value = true
-}
-
-async function deleteRange() {
-  if (!rangeToDelete.value) return
-  deleting.value = true
+async function confirmDelete(range: IPRange) {
+  const ok = await confirmDialog({
+    title: 'Delete IP Range',
+    message: `Are you sure you want to delete "${range.name}"?\nThis will also delete all ${range.usedIps || 0} IP allocations.`,
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  })
+  if (!ok) return
   try {
-    await $fetch(`/api/ipam/ranges/${rangeToDelete.value.id}`, { method: 'DELETE' })
-    showDeleteModal.value = false
+    await $fetch(`/api/ipam/ranges/${range.id}`, { method: 'DELETE' })
     loadRanges()
-    showFeedback('success', 'Deleted', 'IP range deleted successfully')
+    await alertDialog({ title: 'Deleted', message: 'IP range deleted successfully' })
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string } }
-    showFeedback('error', 'Error', err.data?.statusMessage || 'Failed to delete range')
-  } finally {
-    deleting.value = false
+    await alertDialog({
+      title: 'Error',
+      message: err.data?.statusMessage || 'Failed to delete range',
+      variant: 'danger',
+    })
   }
 }
 
@@ -423,7 +351,7 @@ async function viewRange(range: IPRange) {
     ipGrid.value = data.ipGrid
     rangeStats.value = data.stats
   } catch (error) {
-    showFeedback('error', 'Error', 'Failed to load range details')
+    await alertDialog({ title: 'Error', message: 'Failed to load range details', variant: 'danger' })
   } finally {
     loadingDetail.value = false
   }
@@ -451,7 +379,11 @@ async function addAllocation() {
     loadRanges()
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string } }
-    showFeedback('error', 'Error', err.data?.statusMessage || 'Failed to add allocation')
+    await alertDialog({
+      title: 'Error',
+      message: err.data?.statusMessage || 'Failed to add allocation',
+      variant: 'danger',
+    })
   } finally {
     addingAllocation.value = false
   }
@@ -459,32 +391,23 @@ async function addAllocation() {
 
 async function handleIpClick(ip: IPGridItem) {
   if (ip.allocation) {
-    // Show deallocate modal
-    ipToDeallocate.value = ip
-    showDeallocateModal.value = true
+    const ok = await confirmDialog({
+      title: 'Deallocate IP',
+      message: `Hapus alokasi IP ${ip.ip}?\nIP ini akan menjadi free/tersedia kembali.`,
+      confirmLabel: 'Deallocate',
+      cancelLabel: 'Batal',
+      variant: 'warning',
+    })
+    if (!ok) return
+    try {
+      await $fetch(`/api/ipam/allocations/${ip.allocation.id}`, { method: 'DELETE' })
+      if (selectedRange.value) await viewRange(selectedRange.value)
+      loadRanges()
+    } catch {
+      await alertDialog({ title: 'Error', message: 'Failed to deallocate IP', variant: 'danger' })
+    }
   } else {
-    // Pre-fill for allocation
     newAllocation.ip = ip.ip
-  }
-}
-
-// Deallocate modal
-const showDeallocateModal = ref(false)
-const deallocating = ref(false)
-const ipToDeallocate = ref<IPGridItem | null>(null)
-
-async function confirmDeallocate() {
-  if (!ipToDeallocate.value?.allocation) return
-  deallocating.value = true
-  try {
-    await $fetch(`/api/ipam/allocations/${ipToDeallocate.value.allocation.id}`, { method: 'DELETE' })
-    showDeallocateModal.value = false
-    if (selectedRange.value) await viewRange(selectedRange.value)
-    loadRanges()
-  } catch (error) {
-    showFeedback('error', 'Error', 'Failed to deallocate IP')
-  } finally {
-    deallocating.value = false
   }
 }
 
@@ -534,7 +457,11 @@ async function syncFromMikroTik() {
     syncPreviewData.value = result
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string } }
-    showFeedback('error', 'Sync Failed', err.data?.statusMessage || 'Failed to get sync preview')
+    await alertDialog({
+      title: 'Sync Failed',
+      message: err.data?.statusMessage || 'Failed to get sync preview',
+      variant: 'danger',
+    })
     showSyncPreviewModal.value = false
   } finally {
     syncPreviewLoading.value = false
@@ -550,10 +477,14 @@ async function applySyncChanges() {
     })
     showSyncPreviewModal.value = false
     loadRanges()
-    showFeedback('success', 'Sync Complete', result.message)
+    await alertDialog({ title: 'Sync Complete', message: result.message })
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string } }
-    showFeedback('error', 'Sync Failed', err.data?.statusMessage || 'Failed to apply sync')
+    await alertDialog({
+      title: 'Sync Failed',
+      message: err.data?.statusMessage || 'Failed to apply sync',
+      variant: 'danger',
+    })
   } finally {
     syncing.value = false
   }
@@ -563,19 +494,6 @@ function formatMac(mac: string | null): string {
   if (!mac) return '-'
   const clean = mac.replace(/[:-]/g, '').toLowerCase()
   return clean.match(/.{1,2}/g)?.join(':') || mac
-}
-
-// Feedback modal
-const showFeedbackModal = ref(false)
-const feedbackType = ref<'success' | 'error' | 'warning'>('success')
-const feedbackTitle = ref('')
-const feedbackMessage = ref('')
-
-function showFeedback(type: 'success' | 'error' | 'warning', title: string, message: string) {
-  feedbackType.value = type
-  feedbackTitle.value = title
-  feedbackMessage.value = message
-  showFeedbackModal.value = true
 }
 </script>
 

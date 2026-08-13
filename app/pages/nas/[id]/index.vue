@@ -242,22 +242,6 @@
         </div>
       </div>
     </template>
-
-    <dialog class="modal" :class="{ 'modal-open': showDeleteModal }" :open="showDeleteModal || undefined" @close="showDeleteModal = false">
-      <div class="modal-box glass-modal rounded-none">
-        <h3 class="type-card-title">Delete NAS Device</h3>
-        <p class="py-4">
-          Are you sure you want to delete <strong>{{ device?.name }}</strong>?
-        </p>
-        <div class="modal-action">
-          <button class="btn btn-ghost" @click="showDeleteModal = false">Cancel</button>
-          <button class="btn btn-error" :disabled="deleting" @click="deleteDevice">
-            <span v-if="deleting" class="loading loading-spinner loading-sm"></span>
-            Delete
-          </button>
-        </div>
-      </div>
-    </dialog>
   </div>
 </template>
 
@@ -372,22 +356,24 @@ async function captureData() {
   }
 }
 
-const showDeleteModal = ref(false)
-const deleting = ref(false)
-
-function confirmDelete() {
-  showDeleteModal.value = true
-}
-
-async function deleteDevice() {
-  deleting.value = true
+async function confirmDelete() {
+  const ok = await confirmDialog({
+    title: 'Delete NAS Device',
+    message: `Are you sure you want to delete "${device.value?.name}"?`,
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  })
+  if (!ok) return
   try {
     await $fetch(`/api/nas/${id}`, { method: 'DELETE' })
     await navigateTo('/nas')
-  } catch (error) {
-    console.error('Failed to delete NAS device:', error)
-  } finally {
-    deleting.value = false
+  } catch (error: unknown) {
+    const err = error as { data?: { statusMessage?: string }; message?: string }
+    await alertDialog({
+      title: 'Failed to Delete',
+      message: err.data?.statusMessage || err.message || 'An error occurred while deleting the NAS device',
+      variant: 'danger',
+    })
   }
 }
 

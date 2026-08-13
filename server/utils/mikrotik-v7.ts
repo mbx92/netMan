@@ -1,9 +1,12 @@
 /**
  * MikroTik REST API Client
- * 
+ *
  * Provides methods to query MikroTik RouterOS 7+ REST API
  * for network discovery, ARP table, DHCP leases, etc.
  */
+
+import https from 'node:https'
+import http from 'node:http'
 
 interface MikroTikConfig {
     host: string
@@ -62,43 +65,69 @@ export class MikroTikClient {
     }
 
     /**
-     * Make authenticated request to MikroTik REST API
+     * Make authenticated request to MikroTik REST API.
+     * Uses node:http(s) so self-signed certs work in Nitro ESM (no `require`).
      */
     private async request<T>(endpoint: string, method: 'GET' | 'POST' = 'GET', body?: object): Promise<T> {
         const url = `${this.baseUrl}${endpoint}`
         const auth = Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64')
-
-        const headers: HeadersInit = {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/json',
-        }
-
-        const options: RequestInit = {
-            method,
-            headers,
-        }
-
-        if (body) {
-            options.body = JSON.stringify(body)
-        }
+        const payload = body ? JSON.stringify(body) : undefined
 
         try {
-            // Use node-fetch or native fetch with SSL ignore for self-signed certs
-            const response = await fetch(url, {
-                ...options,
-                // @ts-ignore - Node.js specific option for self-signed certs
-                agent: this.config.secure ? new (require('https').Agent)({ rejectUnauthorized: false }) : undefined,
-            })
-
-            if (!response.ok) {
-                throw new Error(`MikroTik API error: ${response.status} ${response.statusText}`)
-            }
-
-            return await response.json() as T
+            const text = await this.httpRequest(url, method, auth, payload)
+            return JSON.parse(text) as T
         } catch (error) {
-            console.error('[MikroTik] API request failed:', endpoint, error)
+            const message = error instanceof Error ? error.message : String(error)
+            console.error('[MikroTik] API request failed:', endpoint, message)
             throw error
         }
+    }
+
+    private httpRequest(url: string, method: 'GET' | 'POST', auth: string, payload?: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const u = new URL(url)
+            const isHttps = u.protocol === 'https:'
+            const mod = isHttps ? https : http
+            const req = mod.request(
+                {
+                    protocol: u.protocol,
+                    hostname: u.hostname,
+                    port: u.port || (isHttps ? 443 : 80),
+                    path: `${u.pathname}${u.search}`,
+                    method,
+                    rejectUnauthorized: false,
+                    timeout: 15000,
+                    headers: {
+                        Authorization: `Basic ${auth}`,
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'NetMan/1.0',
+                        Connection: 'close',
+                        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+                    },
+                },
+                (res) => {
+                    const chunks: Buffer[] = []
+                    res.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+                    res.on('end', () => {
+                        const text = Buffer.concat(chunks).toString('utf8')
+                        const status = res.statusCode || 0
+                        if (status >= 200 && status < 300) {
+                            resolve(text || '[]')
+                            return
+                        }
+                        reject(new Error(`MikroTik API error: ${status} ${res.statusMessage || ''} ${text.slice(0, 200)}`.trim()))
+                    })
+                },
+            )
+            req.on('timeout', () => {
+                req.destroy()
+                reject(new Error('Timeout after 15000ms'))
+            })
+            req.on('error', reject)
+            if (payload) req.write(payload)
+            req.end()
+        })
     }
 
     /**

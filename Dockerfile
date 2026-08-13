@@ -2,6 +2,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
+COPY packages ./packages
 RUN npm ci
 
 # Build stage - Builder
@@ -10,16 +11,19 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# SSO Configuration - passed as build args
-ARG SSO_BASE_URL=https://sso.baliroyalhospital.co.id
+# SSO Configuration — @mbx92/nuxt-sso-client
+ARG SSO_ISSUER=https://sso.baliroyalhospital.co.id
 ARG SSO_CLIENT_ID
 ARG SSO_CLIENT_SECRET
-ARG SSO_REDIRECT_URI=https://netman.baliroyalhospital.co.id/auth/callback
+ARG SSO_REDIRECT_URI=https://netman.baliroyalhospital.co.id/api/auth/sso/callback
+ARG APP_URL=https://netman.baliroyalhospital.co.id
 
-ENV SSO_BASE_URL=$SSO_BASE_URL
+ENV SSO_ISSUER=$SSO_ISSUER
 ENV SSO_CLIENT_ID=$SSO_CLIENT_ID
 ENV SSO_CLIENT_SECRET=$SSO_CLIENT_SECRET
 ENV SSO_REDIRECT_URI=$SSO_REDIRECT_URI
+ENV APP_URL=$APP_URL
+ENV SSO_AUTO_PROVISION=true
 
 RUN npx prisma generate
 RUN npm run build

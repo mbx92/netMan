@@ -1,4 +1,5 @@
 import prisma from '../../utils/prisma'
+import { findDeviceByHost } from '../../utils/device-link'
 
 export default defineEventHandler(async (event) => {
     const id = getRouterParam(event, 'id')
@@ -12,8 +13,24 @@ export default defineEventHandler(async (event) => {
     })
 
     if (!node) {
-        throw createError({ statusCode: 404, statusMessage: 'Proxmox node not found' })
+        throw createError({
+            statusCode: 404,
+            statusMessage: 'Proxmox node not found',
+        })
     }
+
+    const linkedDevice = await findDeviceByHost(node.host)
+
+    const snapshot = node.lastSnapshot as { virtualGuests?: { ipAddress?: string }[] } | null
+    const guestIps = (snapshot?.virtualGuests || [])
+        .map(g => g.ipAddress)
+        .filter((ip): ip is string => !!ip)
+    const guestDevices = guestIps.length
+        ? await prisma.device.findMany({
+            where: { ip: { in: guestIps } },
+            select: { id: true, name: true, ip: true },
+        })
+        : []
 
     return {
         id: node.id,
@@ -27,5 +44,7 @@ export default defineEventHandler(async (event) => {
         site: node.site,
         createdAt: node.createdAt,
         updatedAt: node.updatedAt,
+        linkedDevice,
+        guestDevices,
     }
 })

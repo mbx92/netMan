@@ -289,6 +289,7 @@ export class HikvisionClient {
 
                 const list = Array.isArray(raw) ? raw : [raw]
                 const channels = list.map((item, idx) => this.parseChannel(item, idx + 1))
+                await this.mergeChannelStatus(channels)
                 console.log(`[Hikvision] ${endpoint} -> ${channels.length} channels`)
                 return channels
             } catch {
@@ -298,10 +299,48 @@ export class HikvisionClient {
         return []
     }
 
+    /** Status endpoint often has IP/online even when channel list omits them. */
+    private async mergeChannelStatus(channels: HikvisionChannelInfo[]): Promise<void> {
+        try {
+            const data = await this.request<{
+                InputProxyChannelStatusList?: { InputProxyChannelStatus?: unknown[] | unknown }
+            }>('/ISAPI/ContentMgmt/InputProxy/channels/status')
+            const raw = data.InputProxyChannelStatusList?.InputProxyChannelStatus
+            if (!raw) return
+            const list = Array.isArray(raw) ? raw : [raw]
+            const byIndex = new Map(channels.map(c => [c.channelIndex, c]))
+
+            for (const item of list) {
+                const st = (item || {}) as Record<string, unknown>
+                const idx = this.asNum(st.id || st.channelIndex || st.chanIndex, 0) || 0
+                if (!idx) continue
+                let ch = byIndex.get(idx)
+                if (!ch) {
+                    ch = { channelIndex: idx }
+                    channels.push(ch)
+                    byIndex.set(idx, ch)
+                }
+                const ip = this.asStr(st.ipAddress || st.IpAddress || st.sourceInputPortDescriptor)
+                if (ip && !ch.ipAddress) ch.ipAddress = ip
+                const name = this.asStr(st.name || st.chanName || st.channelName)
+                if (name && !ch.name) ch.name = name
+                const mac = this.asStr(st.macAddress || st.MacAddress)
+                if (mac && !ch.macAddress) ch.macAddress = mac
+                const online = this.asStr(st.online || st.chanStatus || st.status)
+                if (online && (!ch.status || ch.status === 'UNKNOWN')) {
+                    ch.status = /online|true|1/i.test(online) ? 'ONLINE' : /offline|false|0/i.test(online) ? 'OFFLINE' : ch.status
+                }
+            }
+        } catch {
+            // status endpoint is optional
+        }
+    }
+
     private parseChannel(item: unknown, fallbackIndex: number): HikvisionChannelInfo {
         const ch = (item || {}) as Record<string, unknown>
         const descriptor = (ch.sourceInputPortDescriptor || ch.SourceInputPortDescriptor || {}) as Record<string, unknown>
         const portDescriptor = (ch.portDescriptor || ch.PortDescriptor || {}) as Record<string, unknown>
+        const src = (ch.srcInputPortDescriptor || ch.SrcInputPortDescriptor || {}) as Record<string, unknown>
 
         const managePort = this.asNum(
             descriptor.managePortNo || descriptor.ManagePortNo
@@ -317,9 +356,10 @@ export class HikvisionClient {
         )
 
         const ip = this.asStr(
-            descriptor.ipAddress || descriptor.IpAddress
+            descriptor.ipAddress || descriptor.IpAddress || descriptor.ipv4Address || descriptor.IPv4Address
             || portDescriptor.ipAddress || portDescriptor.IpAddress
-            || ch.ipAddress || ch.IpAddress,
+            || ch.ipAddress || ch.IpAddress || ch.ipv4Address || ch.IPv4Address
+            || src.ipAddress || src.IpAddress,
         )
 
         let rtspUrl: string | undefined

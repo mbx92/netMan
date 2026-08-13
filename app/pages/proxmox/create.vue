@@ -102,7 +102,11 @@ async function saveNode() {
     await navigateTo('/proxmox')
   } catch (error: unknown) {
     const err = error as { data?: { statusMessage?: string }; message?: string }
-    alert('Error: ' + (err.data?.statusMessage || err.message || 'Failed to add node'))
+    await alertDialog({
+      title: 'Error',
+      message: err.data?.statusMessage || err.message || 'Failed to add node',
+      variant: 'danger',
+    })
   } finally {
     saving.value = false
   }

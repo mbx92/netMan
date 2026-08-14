@@ -43,12 +43,13 @@ ENV PORT=3000
 COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY package*.json ./
+COPY packages ./packages
 
-# Install only production dependencies for prisma CLI (needed for migrations)
-RUN npm install --omit=dev prisma
+# Prisma CLI for migrate deploy at container start
+RUN npm install --omit=dev prisma @prisma/client
 
 EXPOSE 3000
 
-# Start the application
-CMD ["node", ".output/server/index.mjs"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node .output/server/index.mjs"]

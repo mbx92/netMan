@@ -8,6 +8,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "start": "prisma migrate deploy && node .output/server/index.mjs",
+    "db:migrate": "prisma migrate deploy",
     "sso:pack": "npm pack ../sso-login/packages/nuxt-sso-client --pack-destination packages"
   },
   "dependencies": {

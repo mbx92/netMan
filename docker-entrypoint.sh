@@ -9,7 +9,7 @@ echo "==> Waiting for database and applying migrations..."
 
 attempt=1
 max_attempts=10
-until npx prisma migrate deploy; do
+until ./node_modules/.bin/prisma migrate deploy; do
   if [ "$attempt" -ge "$max_attempts" ]; then
     echo "==> Migration failed after ${max_attempts} attempts, giving up."
     exit 1
@@ -22,7 +22,7 @@ done
 echo "==> Migrations applied."
 
 echo "==> Running seed (admin user + device types, upsert-based)..."
-if ! npx prisma db seed; then
+if ! ./node_modules/.bin/prisma db seed; then
   echo "==> Seed failed, continuing startup anyway (seed is non-destructive/idempotent)."
 fi
 

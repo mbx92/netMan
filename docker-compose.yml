@@ -30,10 +30,10 @@ services:
       - postgres_default
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 5s
+      interval: 15s
+      timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 90s
 
 # ==============================================================================
 # Networks - Use existing PostgreSQL network

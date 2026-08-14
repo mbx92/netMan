@@ -53,7 +53,11 @@ EXPOSE 3000
 
 # Coolify reads this HEALTHCHECK to know when the container is ready to
 # receive traffic and to detect a crashed/hung server during redeploys.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+# start-period is generous because docker-entrypoint.sh runs migrate deploy
+# + db seed (two Prisma engine cold-starts) before the server even binds —
+# on a slow DB link that can take well over 30s, which was flapping the
+# container to "unhealthy" mid-startup.
+HEALTHCHECK --interval=15s --timeout=10s --start-period=90s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 # Apply pending Prisma migrations, seed baseline data (admin user + device

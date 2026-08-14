@@ -60,6 +60,7 @@ interface HotspotIpBindingRaw {
 export class MikroTikV6Client {
     private config: MikroTikV6Config
     private api: RouterOSAPI | null = null
+    private connecting: Promise<RouterOSAPI> | null = null
 
     constructor(config: MikroTikV6Config) {
         this.config = {
@@ -76,8 +77,15 @@ export class MikroTikV6Client {
         if (this.api) {
             return this.api
         }
+        // Concurrent callers (e.g. getArpTable + getDhcpLeases via Promise.all) must
+        // await the same in-flight connect — RouterOS's API login handshake shares a
+        // single TCP stream, and writing a second command before login finishes
+        // corrupts the sentence framing and hangs the connection forever with no reply.
+        if (this.connecting) {
+            return this.connecting
+        }
 
-        this.api = new RouterOSAPI({
+        const api = new RouterOSAPI({
             host: this.config.host,
             port: this.config.port,
             user: this.config.username,
@@ -85,16 +93,22 @@ export class MikroTikV6Client {
             timeout: this.config.timeout,
         })
 
-        try {
-            await this.api.connect()
-            console.log(`[MikroTik-v6] Connected to ${this.config.host}:${this.config.port}`)
-            return this.api
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error)
-            console.error(`[MikroTik-v6] Connection failed: ${this.config.host}:${this.config.port} — ${message}`)
-            this.api = null
-            throw new Error(`MikroTik v6 connection failed (${this.config.host}:${this.config.port}): ${message}`)
-        }
+        this.connecting = api.connect()
+            .then(() => {
+                console.log(`[MikroTik-v6] Connected to ${this.config.host}:${this.config.port}`)
+                this.api = api
+                return api
+            })
+            .catch((error) => {
+                const message = error instanceof Error ? error.message : String(error)
+                console.error(`[MikroTik-v6] Connection failed: ${this.config.host}:${this.config.port} — ${message}`)
+                throw new Error(`MikroTik v6 connection failed (${this.config.host}:${this.config.port}): ${message}`)
+            })
+            .finally(() => {
+                this.connecting = null
+            })
+
+        return this.connecting
     }
 
     /**

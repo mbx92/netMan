@@ -1,9 +1,9 @@
 import { createError } from 'h3'
 import { randomUUID } from 'node:crypto'
-import prisma from '../utils/prisma'
-import { hashPassword } from '../utils/password'
-import { signLocalToken } from '../utils/local-auth'
-import { writeHandoff } from '../utils/sso-handoff'
+import prisma from '../utils/prisma.ts'
+import { hashPassword } from '../utils/password.ts'
+import { signLocalToken } from '../utils/local-auth.ts'
+import { writeHandoff } from '../utils/sso-handoff.ts'
 
 type SsoUserInfo = {
   sub?: string

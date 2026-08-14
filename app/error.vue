@@ -59,5 +59,5 @@ onMounted(async () => {
   if (registered) query.sso_redirect_uri = registered
   const next = `/login?${new URLSearchParams(query).toString()}`
   await clearError({ redirect: next })
-)
+})
 </script>

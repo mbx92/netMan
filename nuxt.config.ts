@@ -77,6 +77,8 @@ export default defineNuxtConfig({
     public: {
       appUrl,
       appPort,
+      ssoRedirectUri:
+        process.env.SSO_REDIRECT_URI || `${appUrl}/api/auth/sso/callback`,
     },
   },
 

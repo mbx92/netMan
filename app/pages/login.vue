@@ -81,6 +81,18 @@
           <span class="type-body-sm">{{ errorMessage }}</span>
         </div>
 
+        <div
+          v-if="redirectUriHint"
+          class="alert w-full border border-base-300 bg-base-200"
+        >
+          <div class="text-left space-y-2">
+            <p class="type-body-sm text-base-content/80">
+              Daftarkan Redirect URI ini di SSO Admin → OIDC Clients (harus sama persis, satu URI per baris):
+            </p>
+            <code class="type-mono text-xs break-all block">{{ redirectUriHint }}</code>
+          </div>
+        </div>
+
         <button
           type="submit"
           class="btn btn-primary w-full"
@@ -122,6 +134,7 @@ definePageMeta({
 
 const { login, loginLocal, isLoading, ssoEnabled } = useAuth()
 const route = useRoute()
+const config = useRuntimeConfig()
 
 const email = ref('')
 const password = ref('')
@@ -129,6 +142,14 @@ const errorMessage = ref('')
 const localSubmitting = ref(false)
 const ssoSubmitting = ref(false)
 const sessionExpired = computed(() => route.query.reason === 'session_expired')
+const isRedirectUriError = computed(() =>
+  /redirect_uri/i.test(errorMessage.value),
+)
+const redirectUriHint = computed(() => {
+  if (!isRedirectUriError.value) return ''
+  const fromQuery = String(route.query.sso_redirect_uri || '').trim()
+  return fromQuery || String(config.public.ssoRedirectUri || '').trim()
+})
 
 const handleLocalLogin = async () => {
   errorMessage.value = ''

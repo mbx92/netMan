@@ -43,6 +43,7 @@ ENV PORT=3000
 COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/server ./server
 COPY package*.json ./
 COPY packages ./packages
 COPY docker-entrypoint.sh ./
@@ -55,6 +56,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
-# Apply pending Prisma migrations, then start the application.
-# migrate deploy is additive-only (no reset/drop), so this is safe on redeploys.
+# Apply pending Prisma migrations, seed baseline data (admin user + device
+# types), then start the application. Both steps are additive/upsert-only,
+# so this is safe to run on every redeploy.
 ENTRYPOINT ["./docker-entrypoint.sh"]

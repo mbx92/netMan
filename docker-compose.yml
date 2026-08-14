@@ -24,7 +24,6 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-netMan}?schema=public
-    command: ["sh", "-c", "npx prisma migrate deploy && node .output/server/index.mjs"]
     env_file:
       - .env.docker
     networks:

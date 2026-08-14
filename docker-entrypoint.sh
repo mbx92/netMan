@@ -19,5 +19,12 @@ until npx prisma migrate deploy; do
   sleep 3
 done
 
-echo "==> Migrations applied. Starting NetMan..."
+echo "==> Migrations applied."
+
+echo "==> Running seed (admin user + device types, upsert-based)..."
+if ! npx prisma db seed; then
+  echo "==> Seed failed, continuing startup anyway (seed is non-destructive/idempotent)."
+fi
+
+echo "==> Starting NetMan..."
 exec node .output/server/index.mjs

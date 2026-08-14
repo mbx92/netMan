@@ -8,6 +8,31 @@ import { MikroTikV6Client } from './mikrotik-v6'
 import { MikroTikV7Client } from './mikrotik-v7'
 import prisma from './prisma'
 
+// Hotspot IP binding types (mirrors RouterOS /ip/hotspot/ip-binding "type" field)
+export type HotspotBindingType = 'bypassed' | 'regular' | 'blocked'
+
+export interface HotspotIpBindingEntry {
+    id: string
+    address: string
+    mac?: string
+    toAddress?: string
+    server?: string
+    type: HotspotBindingType
+    comment?: string
+    disabled?: boolean
+}
+
+export interface DhcpLeaseEntry {
+    id: string
+    address: string
+    mac: string
+    hostname?: string
+    server: string
+    status: string
+    dynamic: boolean
+    comment?: string
+}
+
 // Common interface for both clients
 export interface IMikroTikClient {
     testConnection(): Promise<boolean>
@@ -25,7 +50,29 @@ export interface IMikroTikClient {
         'host-name'?: string
         server: string
         status: string
+        dynamic?: boolean | string
     }[]>
+    /** Hotspot IP bindings (/ip/hotspot/ip-binding) — used for bypass/blocked/regular MAC+IP entries */
+    getHotspotIpBindings(): Promise<HotspotIpBindingEntry[]>
+    /** Add a hotspot IP binding, e.g. a "bypassed" entry to skip hotspot login for a known IP/MAC */
+    addHotspotIpBinding(data: {
+        address: string
+        mac?: string
+        type?: HotspotBindingType
+        toAddress?: string
+        server?: string
+        comment?: string
+    }): Promise<HotspotIpBindingEntry>
+    removeHotspotIpBinding(id: string): Promise<void>
+    /** Convert a dynamic DHCP lease into a static reservation (/ip/dhcp-server/lease/make-static) */
+    makeDhcpLeaseStatic(id: string): Promise<void>
+    /** Create a new static DHCP lease directly */
+    addStaticDhcpLease(data: {
+        address: string
+        mac: string
+        server: string
+        comment?: string
+    }): Promise<DhcpLeaseEntry>
     getNetworkDevices(): Promise<{
         ip: string
         mac: string

@@ -49,6 +49,17 @@ interface InterfaceInfo {
     disabled?: boolean
 }
 
+interface HotspotIpBindingRaw {
+    '.id': string
+    address: string
+    'mac-address'?: string
+    'to-address'?: string
+    server?: string
+    type?: string
+    comment?: string
+    disabled?: boolean | string
+}
+
 export class MikroTikClient {
     private config: MikroTikConfig
     private baseUrl: string
@@ -68,14 +79,14 @@ export class MikroTikClient {
      * Make authenticated request to MikroTik REST API.
      * Uses node:http(s) so self-signed certs work in Nitro ESM (no `require`).
      */
-    private async request<T>(endpoint: string, method: 'GET' | 'POST' = 'GET', body?: object): Promise<T> {
+    private async request<T>(endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' = 'GET', body?: object): Promise<T> {
         const url = `${this.baseUrl}${endpoint}`
         const auth = Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64')
         const payload = body ? JSON.stringify(body) : undefined
 
         try {
             const text = await this.httpRequest(url, method, auth, payload)
-            return JSON.parse(text) as T
+            return (text ? JSON.parse(text) : undefined) as T
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
             console.error('[MikroTik] API request failed:', endpoint, message)
@@ -83,7 +94,7 @@ export class MikroTikClient {
         }
     }
 
-    private httpRequest(url: string, method: 'GET' | 'POST', auth: string, payload?: string): Promise<string> {
+    private httpRequest(url: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', auth: string, payload?: string): Promise<string> {
         return new Promise((resolve, reject) => {
             const u = new URL(url)
             const isHttps = u.protocol === 'https:'
@@ -191,6 +202,135 @@ export class MikroTikClient {
         } catch (error) {
             console.error('[MikroTik] Failed to fetch DHCP leases:', error)
             return []
+        }
+    }
+
+    /**
+     * Get hotspot IP bindings (/ip/hotspot/ip-binding)
+     * Used for bypassed/regular/blocked IP+MAC entries that skip or force the hotspot login
+     */
+    async getHotspotIpBindings(): Promise<{
+        id: string
+        address: string
+        mac?: string
+        toAddress?: string
+        server?: string
+        type: 'bypassed' | 'regular' | 'blocked'
+        comment?: string
+        disabled?: boolean
+    }[]> {
+        try {
+            const entries = await this.request<HotspotIpBindingRaw[]>('/ip/hotspot/ip-binding')
+            console.log(`[MikroTik] Fetched ${entries.length} hotspot IP bindings`)
+            return entries.map(e => ({
+                id: e['.id'],
+                address: e.address,
+                mac: e['mac-address'],
+                toAddress: e['to-address'],
+                server: e.server,
+                type: (e.type as 'bypassed' | 'regular' | 'blocked') || 'bypassed',
+                comment: e.comment,
+                disabled: e.disabled === true || e.disabled === 'true',
+            }))
+        } catch (error) {
+            console.error('[MikroTik] Failed to fetch hotspot IP bindings:', error)
+            return []
+        }
+    }
+
+    /**
+     * Add a hotspot IP binding (e.g. "bypassed" to skip hotspot login for a known IP/MAC)
+     */
+    async addHotspotIpBinding(data: {
+        address: string
+        mac?: string
+        type?: 'bypassed' | 'regular' | 'blocked'
+        toAddress?: string
+        server?: string
+        comment?: string
+    }): Promise<{
+        id: string
+        address: string
+        mac?: string
+        toAddress?: string
+        server?: string
+        type: 'bypassed' | 'regular' | 'blocked'
+        comment?: string
+    }> {
+        const body: Record<string, string> = {
+            address: data.address,
+            type: data.type || 'bypassed',
+        }
+        if (data.mac) body['mac-address'] = data.mac
+        if (data.toAddress) body['to-address'] = data.toAddress
+        if (data.server) body.server = data.server
+        if (data.comment) body.comment = data.comment
+
+        const result = await this.request<HotspotIpBindingRaw>('/ip/hotspot/ip-binding', 'PUT', body)
+        console.log(`[MikroTik] Added hotspot IP binding ${data.address} (${data.type || 'bypassed'})`)
+
+        return {
+            id: result['.id'],
+            address: data.address,
+            mac: data.mac,
+            toAddress: data.toAddress,
+            server: data.server,
+            type: data.type || 'bypassed',
+            comment: data.comment,
+        }
+    }
+
+    /**
+     * Remove a hotspot IP binding by its RouterOS .id
+     */
+    async removeHotspotIpBinding(id: string): Promise<void> {
+        await this.request(`/ip/hotspot/ip-binding/${encodeURIComponent(id)}`, 'DELETE')
+        console.log(`[MikroTik] Removed hotspot IP binding ${id}`)
+    }
+
+    /**
+     * Convert a dynamic DHCP lease into a static reservation
+     */
+    async makeDhcpLeaseStatic(id: string): Promise<void> {
+        await this.request('/ip/dhcp-server/lease/make-static', 'POST', { '.id': id })
+        console.log(`[MikroTik] Converted DHCP lease ${id} to static`)
+    }
+
+    /**
+     * Create a new static DHCP lease directly
+     */
+    async addStaticDhcpLease(data: {
+        address: string
+        mac: string
+        server: string
+        comment?: string
+    }): Promise<{
+        id: string
+        address: string
+        mac: string
+        server: string
+        status: string
+        dynamic: boolean
+        comment?: string
+    }> {
+        const body: Record<string, string> = {
+            address: data.address,
+            'mac-address': data.mac,
+            server: data.server,
+        }
+        if (data.comment) body.comment = data.comment
+
+        const result = await this.request<DhcpLease>('/ip/dhcp-server/lease', 'PUT', body)
+        console.log(`[MikroTik] Added static DHCP lease ${data.address} -> ${data.mac}`)
+
+        return {
+            id: result['.id'],
+            address: data.address,
+            mac: data.mac,
+            server: data.server,
+            status: 'bound',
+            dynamic: false,
+            comment: data.comment,
         }
     }
 

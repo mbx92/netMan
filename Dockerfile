@@ -58,7 +58,7 @@ EXPOSE 3000
 # on a slow DB link that can take well over 30s, which was flapping the
 # container to "unhealthy" mid-startup.
 HEALTHCHECK --interval=15s --timeout=10s --start-period=90s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health || exit 1
+  CMD curl -f http://localhost:${PORT}/api/health || exit 1
 
 # Apply pending Prisma migrations, seed baseline data (admin user + device
 # types), then start the application. Both steps are additive/upsert-only,

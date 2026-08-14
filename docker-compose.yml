@@ -19,25 +19,23 @@ services:
         - APP_URL=${APP_URL:-https://netman.baliroyalhospital.co.id}
     container_name: netman-app
     restart: unless-stopped
-    ports:
-      - "${PORT:-3002}:3000"
+    # Host networking — the app needs to reach devices (MikroTik, etc.) on the
+    # LAN, which the isolated `postgres_default` bridge network has no route
+    # to. This makes the container use the host's network stack directly, so
+    # `ports:`/`networks:` don't apply anymore — the app binds straight to
+    # ${PORT} on the host, and DB_HOST must point at something reachable from
+    # the host itself (e.g. localhost, since Postgres publishes its port there).
+    network_mode: host
     environment:
       - NODE_ENV=${NODE_ENV:-production}
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-netMan}?schema=public
+      - HOST=0.0.0.0
+      - PORT=${PORT:-3002}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@${DB_HOST:-localhost}:${DB_PORT:-5432}/${DB_NAME:-netMan}?schema=public
     env_file:
       - .env.docker
-    networks:
-      - postgres_default
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3002}/api/health"]
       interval: 15s
       timeout: 10s
       retries: 3
       start_period: 90s
-
-# ==============================================================================
-# Networks - Use existing PostgreSQL network
-# ==============================================================================
-networks:
-  postgres_default:
-    external: true

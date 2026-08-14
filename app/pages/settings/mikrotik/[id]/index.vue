@@ -29,6 +29,10 @@
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
+          <NuxtLink :to="`/settings/mikrotik/${id}/hotspot`" class="btn btn-outline gap-2">
+            <Wifi class="w-4 h-4" :stroke-width="2" />
+            Hotspot Binding
+          </NuxtLink>
           <button class="btn btn-outline gap-2" :disabled="capturing" @click="capturePorts">
             <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': capturing }" :stroke-width="2" />
             {{ capturing ? 'Refreshing...' : 'Refresh Ports' }}
@@ -181,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { AlertCircle, ArrowLeft, CheckCircle2, Pencil, RefreshCw, Trash2 } from '@lucide/vue'
+import { AlertCircle, ArrowLeft, CheckCircle2, Pencil, RefreshCw, Trash2, Wifi } from '@lucide/vue'
 import MikrotikPortGrid from '~/components/mikrotik/PortGrid.vue'
 import type { MikroTikPortView } from '~/components/mikrotik/PortGrid.vue'
 

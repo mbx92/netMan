@@ -46,6 +46,17 @@ interface InterfaceInfo {
     disabled?: string
 }
 
+interface HotspotIpBindingRaw {
+    '.id': string
+    address: string
+    'mac-address'?: string
+    'to-address'?: string
+    server?: string
+    type?: string
+    comment?: string
+    disabled?: string
+}
+
 export class MikroTikV6Client {
     private config: MikroTikV6Config
     private api: RouterOSAPI | null = null
@@ -182,6 +193,142 @@ export class MikroTikV6Client {
         } catch (error) {
             console.error('[MikroTik-v6] Failed to fetch DHCP leases:', error)
             return []
+        }
+    }
+
+    /**
+     * Get hotspot IP bindings (/ip/hotspot/ip-binding)
+     * Used for bypassed/regular/blocked IP+MAC entries that skip or force the hotspot login
+     */
+    async getHotspotIpBindings(): Promise<{
+        id: string
+        address: string
+        mac?: string
+        toAddress?: string
+        server?: string
+        type: 'bypassed' | 'regular' | 'blocked'
+        comment?: string
+        disabled?: boolean
+    }[]> {
+        try {
+            const api = await this.connect()
+            const entries = await api.write('/ip/hotspot/ip-binding/print') as HotspotIpBindingRaw[]
+            console.log(`[MikroTik-v6] Fetched ${entries.length} hotspot IP bindings`)
+            return entries.map(e => ({
+                id: e['.id'],
+                address: e.address,
+                mac: e['mac-address'],
+                toAddress: e['to-address'],
+                server: e.server,
+                type: (e.type as 'bypassed' | 'regular' | 'blocked') || 'bypassed',
+                comment: e.comment,
+                disabled: e.disabled === 'true',
+            }))
+        } catch (error) {
+            console.error('[MikroTik-v6] Failed to fetch hotspot IP bindings:', error)
+            return []
+        }
+    }
+
+    /**
+     * Add a hotspot IP binding (e.g. "bypassed" to skip hotspot login for a known IP/MAC)
+     */
+    async addHotspotIpBinding(data: {
+        address: string
+        mac?: string
+        type?: 'bypassed' | 'regular' | 'blocked'
+        toAddress?: string
+        server?: string
+        comment?: string
+    }): Promise<{
+        id: string
+        address: string
+        mac?: string
+        toAddress?: string
+        server?: string
+        type: 'bypassed' | 'regular' | 'blocked'
+        comment?: string
+    }> {
+        const api = await this.connect()
+        const params = [
+            `=address=${data.address}`,
+            `=type=${data.type || 'bypassed'}`,
+        ]
+        if (data.mac) params.push(`=mac-address=${data.mac}`)
+        if (data.toAddress) params.push(`=to-address=${data.toAddress}`)
+        if (data.server) params.push(`=server=${data.server}`)
+        if (data.comment) params.push(`=comment=${data.comment}`)
+
+        const result = await api.write('/ip/hotspot/ip-binding/add', params) as { ret?: string }[]
+        const id = result[0]?.ret || ''
+        console.log(`[MikroTik-v6] Added hotspot IP binding ${data.address} (${data.type || 'bypassed'})`)
+
+        return {
+            id,
+            address: data.address,
+            mac: data.mac,
+            toAddress: data.toAddress,
+            server: data.server,
+            type: data.type || 'bypassed',
+            comment: data.comment,
+        }
+    }
+
+    /**
+     * Remove a hotspot IP binding by its RouterOS .id
+     */
+    async removeHotspotIpBinding(id: string): Promise<void> {
+        const api = await this.connect()
+        await api.write('/ip/hotspot/ip-binding/remove', [`=.id=${id}`])
+        console.log(`[MikroTik-v6] Removed hotspot IP binding ${id}`)
+    }
+
+    /**
+     * Convert a dynamic DHCP lease into a static reservation
+     */
+    async makeDhcpLeaseStatic(id: string): Promise<void> {
+        const api = await this.connect()
+        await api.write('/ip/dhcp-server/lease/make-static', [`=.id=${id}`])
+        console.log(`[MikroTik-v6] Converted DHCP lease ${id} to static`)
+    }
+
+    /**
+     * Create a new static DHCP lease directly
+     */
+    async addStaticDhcpLease(data: {
+        address: string
+        mac: string
+        server: string
+        comment?: string
+    }): Promise<{
+        id: string
+        address: string
+        mac: string
+        server: string
+        status: string
+        dynamic: boolean
+        comment?: string
+    }> {
+        const api = await this.connect()
+        const params = [
+            `=address=${data.address}`,
+            `=mac-address=${data.mac}`,
+            `=server=${data.server}`,
+        ]
+        if (data.comment) params.push(`=comment=${data.comment}`)
+
+        const result = await api.write('/ip/dhcp-server/lease/add', params) as { ret?: string }[]
+        const id = result[0]?.ret || ''
+        console.log(`[MikroTik-v6] Added static DHCP lease ${data.address} -> ${data.mac}`)
+
+        return {
+            id,
+            address: data.address,
+            mac: data.mac,
+            server: data.server,
+            status: 'bound',
+            dynamic: false,
+            comment: data.comment,
         }
     }
 

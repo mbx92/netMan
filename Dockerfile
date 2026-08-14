@@ -32,8 +32,8 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-# Install OpenSSL and other dependencies for Prisma
-RUN apk add --no-cache openssl libc6-compat
+# Install OpenSSL and other dependencies for Prisma, curl for the healthcheck
+RUN apk add --no-cache openssl libc6-compat curl
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
@@ -49,6 +49,11 @@ COPY docker-entrypoint.sh ./
 RUN chmod +x ./docker-entrypoint.sh
 
 EXPOSE 3000
+
+# Coolify reads this HEALTHCHECK to know when the container is ready to
+# receive traffic and to detect a crashed/hung server during redeploys.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
 # Apply pending Prisma migrations, then start the application.
 # migrate deploy is additive-only (no reset/drop), so this is safe on redeploys.

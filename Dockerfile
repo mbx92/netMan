@@ -41,15 +41,15 @@ ENV PORT=3000
 
 # Copy built output
 COPY --from=builder /app/.output ./.output
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY package*.json ./
 COPY packages ./packages
-
-# Prisma CLI for migrate deploy at container start
-RUN npm install --omit=dev prisma @prisma/client
+COPY docker-entrypoint.sh ./
+RUN chmod +x ./docker-entrypoint.sh
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node .output/server/index.mjs"]
+# Apply pending Prisma migrations, then start the application.
+# migrate deploy is additive-only (no reset/drop), so this is safe on redeploys.
+ENTRYPOINT ["./docker-entrypoint.sh"]

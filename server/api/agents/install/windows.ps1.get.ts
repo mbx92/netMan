@@ -21,12 +21,12 @@ Invoke-WebRequest -Uri "$Server/api/agents/download/windows" -OutFile $exePath
 # generated password: it is never reachable except through this agent's own
 # tunnel, never exposed on the LAN. The password is written locally
 # ($env:ProgramData\\netMan-agent\\vnc-password.txt) for the agent binary to
-# pick up and report back to the server at enroll — this runs BEFORE
-# enrolling below specifically so that file exists in time — so it shows up
+# pick up and report back to the server at enroll - this runs BEFORE
+# enrolling below specifically so that file exists in time - so it shows up
 # in the netMan UI instead of only ever existing in this console's scrollback.
 #
 # NOTE: the TightVNC MSI properties and download URL below match TightVNC's
-# documented 2.8.x installer options at the time this was written — TightVNC
+# documented 2.8.x installer options at the time this was written - TightVNC
 # releases change over time, so verify the download URL still resolves and
 # that LoopbackOnly/AllowLoopback/the password actually took effect (check
 # HKLM:\\SOFTWARE\\TightVNC\\Server) before relying on this in production.
@@ -68,6 +68,6 @@ sc.exe description netman-agent "netMan monitoring & remote-access agent" | Out-
 sc.exe failure netman-agent reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Null
 Start-Service netman-agent
 
-Write-Host "netMan agent installed and running. VNC password saved — view it in the agent's page in netMan."
+Write-Host "netMan agent installed and running. VNC password saved - view it in the agent's page in netMan."
 `
 })

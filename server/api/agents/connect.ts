@@ -2,13 +2,16 @@
  * Agent persistent connection.
  * A single outbound WebSocket an enrolled agent holds open for its entire
  * lifetime: first message is `hello` (auth), followed by periodic
- * `heartbeat` messages carrying live telemetry. A later phase multiplexes
- * SSH/RDP tunnel-data frames over this same connection by channelId.
+ * `heartbeat` messages carrying live telemetry. SSH/VNC tunnel sessions
+ * (see server/utils/agent-tunnel.ts) multiplex over this same connection —
+ * `tunnel-*` JSON control frames (text) plus channelId-prefixed binary
+ * frames carrying the actual proxied bytes.
  */
 import prisma from '../../utils/prisma'
 import { verifySecret } from '../../utils/agent-auth'
 import { agentManager } from '../../utils/agent-manager'
 import { publishNotification } from '../../utils/notification-bus'
+import { closeAllForAgent, handleTunnelControl, handleTunnelData } from '../../utils/agent-tunnel'
 
 interface HelloMessage {
     type: 'hello'
@@ -32,9 +35,16 @@ export default defineWebSocketHandler({
     },
 
     async message(peer, message) {
+        // Tunnel data (SSH/VNC bytes) arrives as binary frames: [4-byte channelId][payload].
+        // Everything else (hello, heartbeat, tunnel-open/ready/error/close) is JSON text.
+        if (message instanceof ArrayBuffer || ArrayBuffer.isView(message)) {
+            handleTunnelBinary(peer, message)
+            return
+        }
+
         let data: AgentMessage
         try {
-            data = JSON.parse(message.text())
+            data = JSON.parse(typeof message === 'string' ? message : message.text())
         } catch {
             peer.send(JSON.stringify({ type: 'error', message: 'Invalid message' }))
             return
@@ -47,6 +57,13 @@ export default defineWebSocketHandler({
             case 'heartbeat':
                 await handleHeartbeat(peer, data as HeartbeatMessage)
                 break
+            case 'tunnel-ready':
+            case 'tunnel-error':
+            case 'tunnel-close': {
+                const connected = agentManager.getByPeerId(peer.id)
+                if (connected) handleTunnelControl(connected.agentId, data as { type: string; channelId: number; message?: string })
+                break
+            }
         }
     },
 
@@ -60,6 +77,20 @@ export default defineWebSocketHandler({
         void handleDisconnect(peer)
     },
 })
+
+function handleTunnelBinary(peer: any, message: ArrayBuffer | ArrayBufferView) {
+    const buffer = message instanceof ArrayBuffer
+        ? Buffer.from(message)
+        : Buffer.from(message.buffer, message.byteOffset, message.byteLength)
+
+    if (buffer.length < 4) return
+
+    const connected = agentManager.getByPeerId(peer.id)
+    if (!connected) return
+
+    const channelId = buffer.readUInt32BE(0)
+    handleTunnelData(connected.agentId, channelId, buffer.subarray(4))
+}
 
 async function handleHello(peer: any, msg: HelloMessage) {
     if (!msg.agentId || !msg.authKey) {
@@ -138,6 +169,8 @@ async function handleHeartbeat(peer: any, msg: HeartbeatMessage) {
 async function handleDisconnect(peer: any) {
     const agentId = agentManager.unregisterByPeerId(peer.id)
     if (!agentId) return
+
+    closeAllForAgent(agentId)
 
     const agent = await prisma.agent.update({
         where: { id: agentId },

@@ -30,6 +30,9 @@
           <button v-if="agent.platform === 'WINDOWS' && agent.status === 'ONLINE' && agent.deviceId" class="btn btn-info gap-2" @click="showVncModal = true">
             <Monitor class="w-4 h-4" :stroke-width="2" /> Remote Desktop
           </button>
+          <button v-if="agent.status !== 'PENDING'" class="btn btn-outline gap-2" @click="showUpdateModal = true">
+            <RefreshCw class="w-4 h-4" :stroke-width="2" /> Update Agent
+          </button>
           <button v-if="agent.status !== 'ONLINE'" class="btn btn-outline gap-2" @click="showInstall">
             <Download class="w-4 h-4" :stroke-width="2" /> Install Command
           </button>
@@ -212,6 +215,25 @@
       <button type="button" class="modal-backdrop" aria-label="Close" @click="showVncModal = false" />
     </div>
 
+    <!-- Update Agent Modal -->
+    <div v-if="showUpdateModal" class="modal modal-open" role="dialog" aria-modal="true">
+      <div class="modal-box max-w-2xl">
+        <h3 class="font-bold text-lg mb-1">Update Agent</h3>
+        <p class="type-body-sm text-base-content/60 mb-4">
+          Re-downloads the latest agent binary and restarts the service. No token needed —
+          this machine's enrollment credentials are untouched, it just picks up new code.
+        </p>
+        <div class="flex items-start gap-2">
+          <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ updateCommand }}</pre>
+          <button class="btn btn-ghost btn-xs" @click="copy(updateCommand)"><Copy class="w-4 h-4" :stroke-width="2" /></button>
+        </div>
+        <div class="modal-action">
+          <button class="btn btn-primary" @click="showUpdateModal = false">Done</button>
+        </div>
+      </div>
+      <button type="button" class="modal-backdrop" aria-label="Close" @click="showUpdateModal = false" />
+    </div>
+
     <!-- Install Command Modal -->
     <dialog ref="installModal" class="modal">
       <div class="modal-box max-w-2xl">
@@ -253,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Copy, Cpu, Download, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Terminal, Trash2, X } from '@lucide/vue'
+import { ArrowLeft, Copy, Cpu, Download, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, RefreshCw, Terminal, Trash2, X } from '@lucide/vue'
 import type { AgentMetricsSnapshot, AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const route = useRoute()
@@ -268,6 +290,23 @@ const installCommands = ref<InstallCommands | null>(null)
 const tokenExpiresAt = ref<string | null>(null)
 const showSshModal = ref(false)
 const showVncModal = ref(false)
+const showUpdateModal = ref(false)
+
+const UPDATE_SCRIPT_BY_PLATFORM: Record<AgentSummary['platform'], string> = {
+  WINDOWS: 'update-windows.ps1',
+  LINUX: 'update-linux.sh',
+  MACOS: 'update-macos.sh',
+}
+
+const updateCommand = computed(() => {
+  if (!agent.value) return ''
+  const appUrl = useRuntimeConfig().public.appUrl as string
+  const script = UPDATE_SCRIPT_BY_PLATFORM[agent.value.platform]
+  if (agent.value.platform === 'WINDOWS') {
+    return `iwr -useb ${appUrl}/api/agents/install/${script} -OutFile update-agent.ps1; ./update-agent.ps1 -Server '${appUrl}'`
+  }
+  return `curl -fsSL ${appUrl}/api/agents/install/${script} | sudo bash -s -- --server '${appUrl}'`
+})
 
 async function showInstall() {
   const result = await regenerateInstall(id)

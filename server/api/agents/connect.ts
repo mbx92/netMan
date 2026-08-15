@@ -18,6 +18,7 @@ interface HelloMessage {
     type: 'hello'
     agentId: string
     authKey: string
+    agentVersion?: string
 }
 
 interface PartitionUsage { mountpoint: string; percent: number }
@@ -130,7 +131,12 @@ async function handleHello(peer: any, msg: HelloMessage) {
 
     await prisma.agent.update({
         where: { id: agent.id },
-        data: { status: 'ONLINE', lastSeen: new Date(), lastIp: remoteIp || undefined },
+        data: {
+            status: 'ONLINE',
+            lastSeen: new Date(),
+            lastIp: remoteIp || undefined,
+            agentVersion: msg.agentVersion || undefined,
+        },
     })
 
     if (agent.deviceId) {

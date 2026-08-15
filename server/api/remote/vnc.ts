@@ -124,7 +124,19 @@ async function startConnection(peer: any, params: ConnectParams) {
         if (device) deviceName = device.name
 
         const agent = device?.agent
-        if (agent && agent.platform === 'WINDOWS' && agentManager.isOnline(agent.id)) {
+        if (agent) {
+            // Agent-backed devices are only ever reachable through their tunnel —
+            // params.host is a non-resolvable placeholder ("agent-tunnel") from the
+            // UI in this case, so falling through to a direct dial here would just
+            // produce a confusing DNS error instead of an actionable one.
+            if (agent.platform !== 'WINDOWS') {
+                peer.send(JSON.stringify({ type: 'error', message: 'This agent is not Windows — use SSH, not Remote Desktop.' }))
+                return
+            }
+            if (!agentManager.isOnline(agent.id)) {
+                peer.send(JSON.stringify({ type: 'error', message: 'Agent is not currently connected. If the server was recently restarted, wait a few seconds for it to reconnect and try again.' }))
+                return
+            }
             const tunnel = await openTunnel(agent.id, 'vnc')
             vncTunnels.set(peer.id, tunnel)
             connectHost = '127.0.0.1'

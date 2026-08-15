@@ -25,9 +25,10 @@ const (
 )
 
 type helloMessage struct {
-	Type    string `json:"type"`
-	AgentID string `json:"agentId"`
-	AuthKey string `json:"authKey"`
+	Type         string `json:"type"`
+	AgentID      string `json:"agentId"`
+	AuthKey      string `json:"authKey"`
+	AgentVersion string `json:"agentVersion,omitempty"`
 }
 
 type heartbeatMessage struct {
@@ -65,7 +66,7 @@ type inboundMessage struct {
 // Run holds a persistent WebSocket connection to the server for as long as
 // stop is open, sending a heartbeat on every heartbeatInterval() tick and
 // reconnecting with exponential backoff + full jitter on any disconnect.
-func Run(cfg *config.Config, stop <-chan struct{}) {
+func Run(cfg *config.Config, version string, stop <-chan struct{}) {
 	backoff := minBackoff
 	collector := telemetry.NewCollector()
 
@@ -76,7 +77,7 @@ func Run(cfg *config.Config, stop <-chan struct{}) {
 		default:
 		}
 
-		connectedAt, err := runOnce(cfg, collector, stop)
+		connectedAt, err := runOnce(cfg, version, collector, stop)
 		if err != nil {
 			log.Printf("[agent] connection error: %v", err)
 		}
@@ -116,7 +117,7 @@ func heartbeatInterval() time.Duration {
 	return d
 }
 
-func runOnce(cfg *config.Config, collector *telemetry.Collector, stop <-chan struct{}) (connectedAt time.Time, err error) {
+func runOnce(cfg *config.Config, version string, collector *telemetry.Collector, stop <-chan struct{}) (connectedAt time.Time, err error) {
 	wsURL := toWebSocketURL(cfg.ServerURL) + "/api/agents/connect"
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -130,7 +131,7 @@ func runOnce(cfg *config.Config, collector *telemetry.Collector, stop <-chan str
 	defer tm.closeAll()
 
 	writeMu.Lock()
-	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey})
+	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey, AgentVersion: version})
 	writeMu.Unlock()
 	if helloErr != nil {
 		return time.Time{}, helloErr

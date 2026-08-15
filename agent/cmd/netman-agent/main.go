@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	agentVersion = "0.1.0"
+	agentVersion = "0.2.0"
 	serviceName  = "netman-agent"
 )
 
@@ -38,7 +38,13 @@ func main() {
 	enroll := flag.Bool("enroll", false, "Enroll this machine with a netMan server using a one-time install token, then exit")
 	token := flag.String("token", "", "One-time enrollment token (required with -enroll)")
 	server := flag.String("server", "", "netMan server base URL, e.g. https://netman.example.com (required with -enroll)")
+	version := flag.Bool("version", false, "Print the agent version and exit")
 	flag.Parse()
+
+	if *version {
+		fmt.Println(agentVersion)
+		return
+	}
 
 	if *enroll {
 		runEnroll(*token, *server)
@@ -51,7 +57,7 @@ func main() {
 	}
 
 	service.Run(serviceName, func(stop <-chan struct{}) {
-		client.Run(cfg, stop)
+		client.Run(cfg, agentVersion, stop)
 	})
 }
 

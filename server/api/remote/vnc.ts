@@ -37,37 +37,34 @@ export default defineWebSocketHandler({
     },
 
     async message(peer, message) {
-        // noVNC sends binary data directly
-        if (message instanceof ArrayBuffer || ArrayBuffer.isView(message)) {
-            console.log(`[VNC] Received binary message from client: ${message.byteLength || message.length} bytes`)
-            handleBinaryData(peer, message)
+        // noVNC sends binary data directly, and crossws's Node adapter discards
+        // the WS-protocol binary/text flag entirely (the underlying `ws` lib's
+        // `message(data, isBinary)` second argument isn't captured — see
+        // node_modules/crossws/dist/adapters/node.mjs), so there is no reliable
+        // way to ask "was this frame binary" here. Content-sniff instead: try
+        // JSON first with a recognized `type`, and treat anything else as raw
+        // VNC bytes. Safe in practice — real VNC protocol data parsing as valid
+        // JSON with one of these exact type strings by coincidence is
+        // vanishingly unlikely.
+        let data: any
+        try {
+            data = JSON.parse(message.text())
+        } catch {
+            // Not JSON — raw VNC data.
+        }
+
+        if (data && (data.type === 'connect' || data.type === 'disconnect')) {
+            if (data.type === 'connect') {
+                await startConnection(peer, { host: data.host, port: data.port, deviceId: data.deviceId })
+            } else {
+                handleDisconnect(peer)
+            }
             return
         }
 
-        // Handle JSON control messages (legacy/manual connect)
-        try {
-            const text = typeof message === 'string' ? message : message.text()
-            const data = JSON.parse(text)
-
-            switch (data.type) {
-                case 'connect':
-                    await startConnection(peer, {
-                        host: data.host,
-                        port: data.port,
-                        deviceId: data.deviceId
-                    })
-                    break
-                case 'disconnect':
-                    handleDisconnect(peer)
-                    break
-                default:
-                    // Treat as binary
-                    handleBinaryData(peer, message)
-            }
-        } catch (e) {
-            // Not JSON, treat as binary VNC data
-            handleBinaryData(peer, message)
-        }
+        const bytes = message.uint8Array()
+        console.log(`[VNC] Received binary message from client: ${bytes.byteLength} bytes`)
+        handleBinaryData(peer, bytes)
     },
 
     close(peer) {
@@ -223,12 +220,17 @@ async function startConnection(peer: any, params: ConnectParams) {
                 message: `VNC connection failed: ${err.message}`
             }))
         } catch { }
+        // Same reasoning as ssh.ts: a socket that already emitted its own
+        // 'error' must not be .destroy()'d again from cleanup — delete it from
+        // the map here so cleanup finds nothing and skips that call.
+        vncSockets.delete(peer.id)
         cleanup(peer.id, connectionId)
     })
 
     socket.on('close', () => {
         console.log(`[VNC] Socket closed`)
         const sessionId = (socket as any).sessionId
+        vncSockets.delete(peer.id)
         cleanup(peer.id, connectionId, sessionId)
     })
 
@@ -253,7 +255,7 @@ async function startConnection(peer: any, params: ConnectParams) {
 // Track client packets per connection
 const clientPacketCounts = new Map<string, number>()
 
-function handleBinaryData(peer: any, data: any) {
+function handleBinaryData(peer: any, data: Uint8Array) {
     const socket = vncSockets.get(peer.id)
     if (!socket || !socket.writable) {
         // Only log once per connection if socket not ready
@@ -268,19 +270,7 @@ function handleBinaryData(peer: any, data: any) {
     const count = (clientPacketCounts.get(peer.id) || 0) + 1
     clientPacketCounts.set(peer.id, count)
 
-    // Convert to Buffer if needed
-    let buffer: Buffer
-    if (data instanceof ArrayBuffer) {
-        buffer = Buffer.from(data)
-    } else if (ArrayBuffer.isView(data)) {
-        buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
-    } else if (typeof data === 'string') {
-        buffer = Buffer.from(data, 'binary')
-    } else if (data.text) {
-        buffer = Buffer.from(data.text(), 'binary')
-    } else {
-        buffer = Buffer.from(data)
-    }
+    const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
 
     // Log first few client packets
     if (count <= 5) {
@@ -299,10 +289,19 @@ function handleDisconnect(peer: any) {
     cleanup(peer.id, connectionId, sessionId)
 }
 
-async function cleanup(peerId: string, connectionId: string, sessionId?: string) {
-    // Close socket
+// Deferred one tick — same reasoning as ssh.ts's cleanup: tearing a socket
+// down synchronously from within its own 'error'/'close' emission (or from a
+// WS 'close' racing an in-flight connection attempt) can surface an unguarded
+// error on a later tick, outside any try/catch's stack frame.
+function cleanup(peerId: string, connectionId: string, sessionId?: string) {
+    setTimeout(() => cleanupNow(peerId, connectionId, sessionId), 100)
+}
+
+async function cleanupNow(peerId: string, connectionId: string, sessionId?: string) {
+    // Close socket. Safety-net 'error' listener first, same reasoning as ssh.ts.
     const socket = vncSockets.get(peerId)
     if (socket) {
+        socket.once('error', () => { })
         try { socket.destroy() } catch { }
         vncSockets.delete(peerId)
     }

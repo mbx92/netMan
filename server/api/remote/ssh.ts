@@ -180,11 +180,20 @@ async function handleConnect(peer: any, params: SSHConnectParams) {
             type: 'error',
             message: `SSH connection failed: ${err.message}`
         }))
+        // A client that already emitted its own 'error' must never be .end()'d
+        // again — see mscdex/ssh2#902 / #850: calling .end() on an
+        // already-erroring ssh2 Client can itself throw a SECOND, unhandled
+        // 'error' event on a later tick that bypasses any listener we attach,
+        // crashing the whole process. Deleting it here means cleanup's
+        // `sshClients.get(peerId)` finds nothing and skips .end() entirely —
+        // the client is already tearing itself down internally.
+        sshClients.delete(peer.id)
         cleanup(peer.id, connectionId)
     })
 
     client.on('close', () => {
         console.log(`[SSH] Connection closed`)
+        sshClients.delete(peer.id)
         cleanup(peer.id, connectionId)
     })
 
@@ -229,7 +238,18 @@ function handleDisconnect(peer: any) {
     cleanup(peer.id, connectionId, connection?.sessionId)
 }
 
-async function cleanup(peerId: string, connectionId: string, sessionId?: string) {
+// Deferred one tick: calling client.end()/stream.close() synchronously from
+// within ssh2's own 'error'/'close' emission (or from a WS 'close' racing an
+// in-flight connection attempt) re-enters its still-unwinding internal state,
+// which can throw an unguarded error of its own on a later tick — observed in
+// practice as a raw ECONNRESET that crashed the whole process, not just this
+// session, since it landed outside any try/catch's stack frame. Letting the
+// current synchronous call stack (ssh2's own teardown) finish first avoids it.
+function cleanup(peerId: string, connectionId: string, sessionId?: string) {
+    setTimeout(() => cleanupNow(peerId, connectionId, sessionId), 100)
+}
+
+async function cleanupNow(peerId: string, connectionId: string, sessionId?: string) {
     // Close stream
     const stream = sshStreams.get(peerId)
     if (stream) {
@@ -237,9 +257,13 @@ async function cleanup(peerId: string, connectionId: string, sessionId?: string)
         sshStreams.delete(peerId)
     }
 
-    // Close client
+    // Close client. A safety-net 'error' listener first: ending a client
+    // that's already mid-teardown from its own error can surface a second,
+    // unrelated-looking error (e.g. a raw ECONNRESET) — swallow it here
+    // rather than let it become unhandled.
     const client = sshClients.get(peerId)
     if (client) {
+        client.once('error', () => { })
         try { client.end() } catch { }
         sshClients.delete(peerId)
     }

@@ -54,16 +54,25 @@ export default defineWebSocketHandler({
     async message(peer, message) {
         // Tunnel data (SSH/VNC bytes) arrives as binary frames: [4-byte channelId][payload].
         // Everything else (hello, heartbeat, tunnel-open/ready/error/close) is JSON text.
-        if (message instanceof ArrayBuffer || ArrayBuffer.isView(message)) {
-            handleTunnelBinary(peer, message)
-            return
+        //
+        // crossws's Node adapter discards the WS-protocol binary/text flag (the
+        // underlying `ws` lib's `message(data, isBinary)` second argument isn't
+        // captured — see node_modules/crossws/dist/adapters/node.mjs), so
+        // message.rawData is ALWAYS a Buffer here regardless of original frame
+        // type; there is no reliable way to ask "was this frame binary" for this
+        // adapter. Content-sniff instead: try JSON first, and only treat it as
+        // tunnel binary data on parse failure. Safe in practice — a tunnel frame
+        // (random 4-byte channelId header + raw protocol bytes) parsing as valid
+        // JSON by coincidence is vanishingly unlikely.
+        let data: AgentMessage | undefined
+        try {
+            data = JSON.parse(message.text())
+        } catch {
+            // Not JSON — must be tunnel binary data.
         }
 
-        let data: AgentMessage
-        try {
-            data = JSON.parse(typeof message === 'string' ? message : message.text())
-        } catch {
-            peer.send(JSON.stringify({ type: 'error', message: 'Invalid message' }))
+        if (!data || typeof data.type !== 'string') {
+            handleTunnelBinary(peer, message.uint8Array())
             return
         }
 
@@ -95,10 +104,8 @@ export default defineWebSocketHandler({
     },
 })
 
-function handleTunnelBinary(peer: any, message: ArrayBuffer | ArrayBufferView) {
-    const buffer = message instanceof ArrayBuffer
-        ? Buffer.from(message)
-        : Buffer.from(message.buffer, message.byteOffset, message.byteLength)
+function handleTunnelBinary(peer: any, data: Uint8Array) {
+    const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
 
     if (buffer.length < 4) return
 

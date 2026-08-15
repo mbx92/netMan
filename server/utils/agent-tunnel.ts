@@ -114,7 +114,7 @@ export function handleTunnelControl(agentId: string, msg: { type: string; channe
         if (msg.type === 'tunnel-error') {
             console.error(`[AgentTunnel] Agent reported tunnel error for channel ${msg.channelId}: ${msg.message}`)
         }
-        channel.localSocket?.destroy()
+        destroySocket(channel.localSocket)
         channels.delete(msg.channelId)
     }
 }
@@ -131,7 +131,7 @@ export function closeAllForAgent(agentId: string) {
     for (const [channelId, channel] of channels) {
         if (channel.agentId === agentId) {
             channels.delete(channelId)
-            channel.localSocket?.destroy()
+            destroySocket(channel.localSocket)
         }
     }
 }
@@ -140,9 +140,22 @@ function closeChannel(channelId: number) {
     const channel = channels.get(channelId)
     if (!channel) return
     channels.delete(channelId)
-    channel.localSocket?.destroy()
+    destroySocket(channel.localSocket)
     const connected = agentManager.get(channel.agentId)
     if (connected) sendControl(connected.peer, { type: 'tunnel-close', channelId })
+}
+
+// Forcibly destroying a socket that a consumer library (ssh2, noVNC's raw
+// passthrough) is actively using can surface as an error on that consumer's
+// side on a later tick — outside any try/catch around this call. A one-time
+// no-op 'error' listener here is cheap insurance against this specific
+// socket re-emitting something we're not set up to observe/care about
+// (the consumer library has its own error handling for the connection it's
+// actually driving).
+function destroySocket(socket: Socket | null | undefined) {
+    if (!socket) return
+    socket.once('error', () => { })
+    socket.destroy()
 }
 
 function sendControl(peer: any, msg: Record<string, unknown>) {

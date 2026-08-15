@@ -39,11 +39,21 @@ chmod 700 /etc/netman-agent
 # dial on 127.0.0.1:22. Same "assume/enable, don't sandbox" treatment as the
 # Linux installer, which never touches sshd either: whatever LAN exposure
 # your normal SSH policy already implies applies here too.
-if [[ "$(systemsetup -getremotelogin 2>/dev/null)" != "Remote Login: On" ]]; then
-  echo "Enabling Remote Login (SSH)..."
-  systemsetup -setremotelogin on >/dev/null 2>&1 || echo "Warning: could not enable Remote Login automatically — enable it manually in System Settings > General > Sharing." >&2
+#
+# NOTE: systemsetup -setremotelogin is unreliable on modern macOS — it can
+# exit 0 while silently doing nothing (ssh.plist ships with Disabled=1 baked
+# in, and systemsetup doesn't always clear the launchd override). Drive
+# launchctl directly instead, which is the actual mechanism, and verify
+# against the real listening port rather than trusting any exit code.
+echo "Enabling Remote Login (SSH)..."
+systemsetup -setremotelogin on >/dev/null 2>&1 || true
+launchctl enable system/com.openssh.sshd 2>/dev/null || true
+launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist 2>/dev/null || true
+sleep 1
+if nc -z 127.0.0.1 22 2>/dev/null; then
+  echo "Remote Login (SSH) is on."
 else
-  echo "Remote Login (SSH) is already on."
+  echo "Warning: Remote Login still isn't listening on :22 — enable it manually in System Settings > General > Sharing > Remote Login." >&2
 fi
 
 PLIST_PATH="/Library/LaunchDaemons/com.netman.agent.plist"

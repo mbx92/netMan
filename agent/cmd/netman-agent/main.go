@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	agentVersion = "0.2.1"
+	agentVersion = "0.2.2"
 	serviceName  = "netman-agent"
 )
 

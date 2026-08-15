@@ -32,11 +32,18 @@ curl -fsSL "$SERVER/api/agents/download/macos" -o "$BIN_PATH.new"
 chmod 755 "$BIN_PATH.new"
 mv "$BIN_PATH.new" "$BIN_PATH"
 
-if [[ "$(systemsetup -getremotelogin 2>/dev/null)" != "Remote Login: On" ]]; then
-  echo "Enabling Remote Login (SSH)..."
-  systemsetup -setremotelogin on >/dev/null 2>&1 || echo "Warning: could not enable Remote Login automatically — enable it manually in System Settings > General > Sharing." >&2
+# systemsetup -setremotelogin is unreliable on modern macOS — it can exit 0
+# while silently doing nothing (ssh.plist ships with Disabled=1 baked in).
+# Drive launchctl directly, and verify against the real listening port.
+echo "Enabling Remote Login (SSH)..."
+systemsetup -setremotelogin on >/dev/null 2>&1 || true
+launchctl enable system/com.openssh.sshd 2>/dev/null || true
+launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist 2>/dev/null || true
+sleep 1
+if nc -z 127.0.0.1 22 2>/dev/null; then
+  echo "Remote Login (SSH) is on."
 else
-  echo "Remote Login (SSH) is already on."
+  echo "Warning: Remote Login still isn't listening on :22 — enable it manually in System Settings > General > Sharing > Remote Login." >&2
 fi
 
 echo "Restarting netman-agent service..."

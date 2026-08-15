@@ -29,6 +29,7 @@ type helloMessage struct {
 	AgentID      string `json:"agentId"`
 	AuthKey      string `json:"authKey"`
 	AgentVersion string `json:"agentVersion,omitempty"`
+	MACAddress   string `json:"macAddress,omitempty"`
 }
 
 type heartbeatMessage struct {
@@ -131,7 +132,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 	defer tm.closeAll()
 
 	writeMu.Lock()
-	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey, AgentVersion: version})
+	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey, AgentVersion: version, MACAddress: DetectMACAddress()})
 	writeMu.Unlock()
 	if helloErr != nil {
 		return time.Time{}, helloErr

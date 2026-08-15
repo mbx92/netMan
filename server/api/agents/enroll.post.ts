@@ -7,6 +7,7 @@ import prisma from '../../utils/prisma'
 import { generateSecret, hashSecret, verifySecret } from '../../utils/agent-auth'
 import { parseEnrollmentToken } from '../../utils/agent-install'
 import { isRateLimited } from '../../utils/rate-limit'
+import { updateDeviceNetworkInfo } from '../../utils/device-network-info'
 
 interface EnrollBody {
     token?: string
@@ -66,20 +67,11 @@ export default defineEventHandler(async (event) => {
     })
 
     if (agent.deviceId) {
-        const mac = body.macAddress?.trim().toLowerCase() || undefined
-        await prisma.device.update({
-            where: { id: agent.deviceId },
-            data: { name: body.hostname, hostname: body.hostname, ip: ip !== 'unknown' ? ip : undefined, mac },
-        }).catch(async (e) => {
-            // mac is unique — if another device already claims it (e.g. a stale
-            // entry from network discovery for the same physical machine),
-            // retry without it rather than losing the hostname/ip update too.
-            if (mac) {
-                await prisma.device.update({
-                    where: { id: agent.deviceId! },
-                    data: { name: body.hostname, hostname: body.hostname, ip: ip !== 'unknown' ? ip : undefined },
-                }).catch(() => { /* device may have been deleted independently; enrollment still succeeds */ })
-            }
+        await updateDeviceNetworkInfo(agent.deviceId, {
+            name: body.hostname,
+            hostname: body.hostname,
+            ip: ip !== 'unknown' ? ip : undefined,
+            mac: body.macAddress,
         })
     }
 

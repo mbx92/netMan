@@ -13,11 +13,13 @@ import { agentManager } from '../../utils/agent-manager'
 import { publishNotification } from '../../utils/notification-bus'
 import { closeAllForAgent, handleTunnelControl, handleTunnelData } from '../../utils/agent-tunnel'
 import { checkResourceThresholds, clearBreachStreaks } from '../../utils/agent-alerts'
+import { updateDeviceNetworkInfo } from '../../utils/device-network-info'
 
 interface HelloMessage {
     type: 'hello'
     agentId: string
     authKey: string
+    macAddress?: string
     agentVersion?: string
 }
 
@@ -149,8 +151,12 @@ async function handleHello(peer: any, msg: HelloMessage) {
     if (agent.deviceId) {
         await prisma.device.update({
             where: { id: agent.deviceId },
-            data: { status: 'ONLINE', lastSeen: new Date(), ip: remoteIp || undefined },
+            data: { status: 'ONLINE', lastSeen: new Date() },
         }).catch(() => { })
+        // Separate from the status/lastSeen update above so a mac unique-
+        // collision (handled inside updateDeviceNetworkInfo) can never affect
+        // the online-status write.
+        await updateDeviceNetworkInfo(agent.deviceId, { ip: remoteIp || undefined, mac: msg.macAddress })
     }
 
     // Resolve any outstanding "agent offline" alert raised by the offline-watcher plugin.

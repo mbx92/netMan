@@ -1,0 +1,44 @@
+export interface AgentSummary {
+  id: string
+  deviceId: string | null
+  platform: 'WINDOWS' | 'LINUX'
+  hostname: string
+  osVersion: string | null
+  agentVersion: string | null
+  status: 'PENDING' | 'ONLINE' | 'OFFLINE'
+  lastSeen: string | null
+  lastIp: string | null
+  lastCpuPercent: number | null
+  lastMemPercent: number | null
+  lastDiskPercent: number | null
+  lastUptimeSec: number | null
+  enrollExpiresAt: string | null
+  isConnected: boolean
+  device: { id: string; name: string; ip: string | null; siteId: string | null } | null
+}
+
+export interface InstallCommands {
+  windows: string
+  linux: string
+}
+
+export function useAgents() {
+  async function createAgent(payload: { platform: 'WINDOWS' | 'LINUX'; name?: string; siteId?: string }) {
+    return $fetch<{ agent: AgentSummary; install: InstallCommands; tokenExpiresAt: string }>('/api/agents', {
+      method: 'POST',
+      body: payload,
+    })
+  }
+
+  async function deleteAgent(id: string) {
+    return $fetch(`/api/agents/${id}`, { method: 'DELETE' })
+  }
+
+  async function regenerateInstall(id: string) {
+    return $fetch<{ install: InstallCommands; tokenExpiresAt: string }>(`/api/agents/${id}/generate-install`, {
+      method: 'POST',
+    })
+  }
+
+  return { createAgent, deleteAgent, regenerateInstall }
+}

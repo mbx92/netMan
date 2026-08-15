@@ -96,6 +96,7 @@ model Device {
   ports          NetworkPort[]   @relation("DevicePorts") // Ports ON this device
   connectedPorts NetworkPort[]   @relation("PortConnections") // Ports this device is connected TO
   sessions       RemoteSession[]
+  agent          Agent?
 
   @@index([typeCode])
   @@index([status])
@@ -148,17 +149,20 @@ enum PortStatus {
 // ============================================
 
 model RemoteSession {
-  id        String         @id @default(uuid())
-  user      String
-  targetId  String
-  protocol  RemoteProtocol
-  startedAt DateTime       @default(now())
-  endedAt   DateTime?
-  notes     String?
-  target    Device         @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  id         String         @id @default(uuid())
+  user       String
+  targetId   String
+  protocol   RemoteProtocol
+  startedAt  DateTime       @default(now())
+  endedAt    DateTime?
+  notes      String?
+  target     Device         @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  viaAgentId String? // Set when this session was relayed through an Agent tunnel instead of a direct LAN dial
+  viaAgent   Agent?         @relation(fields: [viaAgentId], references: [id], onDelete: SetNull)
 
   @@index([user])
   @@index([targetId])
+  @@index([viaAgentId])
 }
 
 enum RemoteProtocol {
@@ -167,6 +171,62 @@ enum RemoteProtocol {
   VNC
   CONSOLE
   HTTP
+}
+
+// ============================================
+// REMOTE AGENTS (Windows PC / Linux server)
+// ============================================
+
+// An installed netMan agent phoning home over an outbound WebSocket.
+// Enables presence/telemetry monitoring and (via server/utils/agent-tunnel.ts,
+// added in a later phase) SSH/RDP access to machines that aren't directly
+// reachable on the LAN (NAT/firewall).
+model Agent {
+  id       String  @id @default(uuid())
+  deviceId String? @unique
+  device   Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  platform     AgentPlatform
+  hostname     String
+  osVersion    String?
+  agentVersion String?
+
+  // Enrollment (one-time token, hashed; consumed on successful enroll)
+  enrollTokenHash String?
+  enrollExpiresAt DateTime?
+  enrolledAt      DateTime?
+
+  // Long-lived reconnect credential, hashed — never stored/returned in plaintext after issuance
+  authKeyHash String?
+
+  status AgentStatus @default(PENDING)
+  lastSeen DateTime?
+  lastIp   String?
+
+  // Latest telemetry snapshot (no history table for now — add one later if trend graphs are needed)
+  lastCpuPercent  Float?
+  lastMemPercent  Float?
+  lastDiskPercent Float?
+  lastUptimeSec   Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions RemoteSession[]
+
+  @@index([status])
+  @@index([deviceId])
+}
+
+enum AgentPlatform {
+  WINDOWS
+  LINUX
+}
+
+enum AgentStatus {
+  PENDING // enrollment token issued, agent has not connected yet
+  ONLINE
+  OFFLINE
 }
 
 // ============================================

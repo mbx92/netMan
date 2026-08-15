@@ -83,6 +83,10 @@ export default defineNuxtConfig({
       ssoRedirectUri:
         process.env.SSO_REDIRECT_URI || `${appUrl}/api/auth/sso/callback`,
       lgMacPrefixes: process.env.LG_MAC_PREFIXES || "",
+      // Must match agentVersion in agent/cmd/netman-agent/main.go — bump both
+      // together. Lets the agent detail page hide "Update Agent" once a
+      // reconnected agent already reports this version.
+      agentLatestVersion: "0.2.1",
     },
   },
 

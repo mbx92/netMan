@@ -30,7 +30,7 @@
           <button v-if="agent.platform === 'WINDOWS' && agent.status === 'ONLINE' && agent.deviceId" class="btn btn-info gap-2" @click="showVncModal = true">
             <Monitor class="w-4 h-4" :stroke-width="2" /> Remote Desktop
           </button>
-          <button v-if="agent.status !== 'PENDING'" class="btn btn-outline gap-2" @click="showUpdateModal = true">
+          <button v-if="agent.status !== 'PENDING' && !isUpToDate" class="btn btn-outline gap-2" @click="showUpdateModal = true">
             <RefreshCw class="w-4 h-4" :stroke-width="2" /> Update Agent
           </button>
           <button v-if="agent.status !== 'ONLINE'" class="btn btn-outline gap-2" @click="showInstall">
@@ -182,7 +182,7 @@
             <X class="w-5 h-5" :stroke-width="2" />
           </button>
         </div>
-        <div class="flex-1 overflow-hidden">
+        <div class="flex-1 overflow-y-auto">
           <SshTerminal
             v-if="agent?.deviceId"
             :device-id="agent.deviceId"
@@ -203,7 +203,7 @@
             <X class="w-5 h-5" :stroke-width="2" />
           </button>
         </div>
-        <div class="flex-1 overflow-hidden">
+        <div class="flex-1 overflow-y-auto">
           <VncViewer
             v-if="agent?.deviceId"
             :device-id="agent.deviceId"
@@ -306,6 +306,14 @@ const updateCommand = computed(() => {
     return `iwr -useb ${appUrl}/api/agents/install/${script} -OutFile update-agent.ps1; ./update-agent.ps1 -Server '${appUrl}'`
   }
   return `curl -fsSL ${appUrl}/api/agents/install/${script} | sudo bash -s -- --server '${appUrl}'`
+})
+
+// Only true once a reconnected agent has actually confirmed it's running the
+// latest build (agentVersion is set on every hello, not just at enroll) —
+// null/older means "unknown or stale," which should still offer the update.
+const isUpToDate = computed(() => {
+  const latest = useRuntimeConfig().public.agentLatestVersion as string
+  return agent.value?.agentVersion === latest
 })
 
 async function showInstall() {

@@ -12,25 +12,30 @@
         </div>
 
         <form @submit.prevent="connect" class="space-y-4">
-          <div class="form-control">
-            <label class="label"><span class="label-text">Host</span></label>
-            <input 
-              v-model="host" 
-              type="text" 
-              class="input input-bordered w-full" 
-              readonly
-              :placeholder="deviceIp || 'IP Address'"
-            />
+          <div v-if="viaAgent" class="alert bg-base-200 text-sm">
+            <TerminalIcon class="w-4 h-4 shrink-0" :stroke-width="2" />
+            <span>Relayed through {{ deviceName || 'this device' }}'s agent tunnel — no host or port needed.</span>
           </div>
-          <div class="form-control">
-            <label class="label"><span class="label-text">Port</span></label>
-            <input 
-              v-model.number="port" 
-              type="number" 
-              class="input input-bordered w-full" 
-              placeholder="22"
-            />
-          </div>
+          <template v-else>
+            <div class="form-control">
+              <label class="label"><span class="label-text">Host</span></label>
+              <input 
+                v-model="host" 
+                type="text" 
+                class="input input-bordered w-full" 
+                :placeholder="deviceIp || 'IP Address'"
+              />
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text">Port</span></label>
+              <input 
+                v-model.number="port" 
+                type="number" 
+                class="input input-bordered w-full" 
+                placeholder="22"
+              />
+            </div>
+          </template>
           <div class="form-control">
             <label class="label"><span class="label-text">Username</span></label>
             <input 
@@ -98,6 +103,8 @@ const props = defineProps<{
   deviceId: string
   deviceName?: string
   deviceIp?: string
+  /** Session is relayed through the device's agent tunnel — host/port are server-resolved, not user input. */
+  viaAgent?: boolean
 }>()
 
 const emit = defineEmits<{

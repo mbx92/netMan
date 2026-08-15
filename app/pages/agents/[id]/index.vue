@@ -188,6 +188,7 @@
             :device-id="agent.deviceId"
             :device-name="agent.hostname"
             device-ip="agent-tunnel"
+            :via-agent="true"
           />
         </div>
       </div>
@@ -209,6 +210,7 @@
             :device-id="agent.deviceId"
             :device-name="agent.hostname"
             device-ip="agent-tunnel"
+            :via-agent="true"
           />
         </div>
       </div>

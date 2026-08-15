@@ -42,6 +42,9 @@ export default defineNuxtConfig({
 
   devServer: {
     port: appPort,
+    // Bind on all interfaces (not just localhost) so LAN devices — e.g. a
+    // netMan agent enrolling from another machine — can reach this server.
+    host: process.env.NUXT_HOST || "0.0.0.0",
   },
 
   modules: ["@pinia/nuxt", "@mbx92/nuxt-sso-client"],

@@ -207,6 +207,13 @@ model Agent {
   lastSeen DateTime?
   lastIp   String?
 
+  // Windows only — the TightVNC password the install/update script generated
+  // and configured. Plaintext for now (same trade-off as Device.apiPass
+  // elsewhere in this schema — should be encrypted in production); shown
+  // masked with a reveal toggle in the UI, not logged or exposed in the
+  // agent list response.
+  vncPassword String?
+
   // Latest telemetry snapshot — scalar columns for the summary list/badges,
   // lastMetrics for everything else (per-core CPU, I/O rates, partitions,
   // top processes, logged-in users). History lives in AgentMetricSample.

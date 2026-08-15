@@ -19,6 +19,8 @@ export interface AgentSummary {
   platform: 'WINDOWS' | 'LINUX' | 'MACOS'
   hostname: string
   alias: string | null
+  /** Windows only, and only present on the single-agent GET (never in the list). */
+  vncPassword?: string | null
   osVersion: string | null
   agentVersion: string | null
   status: 'PENDING' | 'ONLINE' | 'OFFLINE'

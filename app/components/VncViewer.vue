@@ -124,6 +124,8 @@ const props = defineProps<{
   deviceIp?: string
   /** Session is relayed through the device's agent tunnel — host/port are server-resolved, not user input. */
   viaAgent?: boolean
+  /** Pre-fills the password field — e.g. the VNC password the agent reported, so the operator doesn't have to look it up. */
+  initialPassword?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -143,7 +145,7 @@ const iframeSrc = ref('')
 // Form data
 const host = ref(props.deviceIp || '')
 const port = ref(5900)
-const password = ref('')
+const password = ref(props.initialPassword || '')
 
 // Refs
 const vncIframeRef = ref<HTMLIFrameElement | null>(null)

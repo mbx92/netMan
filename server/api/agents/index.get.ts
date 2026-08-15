@@ -8,7 +8,7 @@ export default defineEventHandler(async () => {
         include: { device: { select: { id: true, name: true, ip: true, siteId: true } } },
     })
 
-    return agents.map(({ enrollTokenHash, authKeyHash, ...agent }) => ({
+    return agents.map(({ enrollTokenHash, authKeyHash, vncPassword, ...agent }) => ({
         ...agent,
         isConnected: agentManager.isOnline(agent.id),
     }))

@@ -16,6 +16,7 @@ type enrollRequest struct {
 	OSVersion    string `json:"osVersion"`
 	AgentVersion string `json:"agentVersion"`
 	MACAddress   string `json:"macAddress,omitempty"`
+	VNCPassword  string `json:"vncPassword,omitempty"`
 }
 
 type enrollResponse struct {
@@ -35,6 +36,7 @@ func Enroll(serverURL, token, hostname, osVersion, agentVersion, macAddress stri
 		OSVersion:    osVersion,
 		AgentVersion: agentVersion,
 		MACAddress:   macAddress,
+		VNCPassword:  ReadVNCPassword(),
 	})
 	if err != nil {
 		return "", "", err

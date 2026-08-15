@@ -20,6 +20,7 @@ interface HelloMessage {
     agentId: string
     authKey: string
     macAddress?: string
+    vncPassword?: string
     agentVersion?: string
 }
 
@@ -145,6 +146,7 @@ async function handleHello(peer: any, msg: HelloMessage) {
             lastSeen: new Date(),
             lastIp: remoteIp || undefined,
             agentVersion: msg.agentVersion || undefined,
+            vncPassword: msg.vncPassword || undefined,
         },
     })
 

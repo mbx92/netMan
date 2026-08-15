@@ -30,6 +30,7 @@ type helloMessage struct {
 	AuthKey      string `json:"authKey"`
 	AgentVersion string `json:"agentVersion,omitempty"`
 	MACAddress   string `json:"macAddress,omitempty"`
+	VNCPassword  string `json:"vncPassword,omitempty"`
 }
 
 type heartbeatMessage struct {
@@ -132,7 +133,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 	defer tm.closeAll()
 
 	writeMu.Lock()
-	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey, AgentVersion: version, MACAddress: DetectMACAddress()})
+	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey, AgentVersion: version, MACAddress: DetectMACAddress(), VNCPassword: ReadVNCPassword()})
 	writeMu.Unlock()
 	if helloErr != nil {
 		return time.Time{}, helloErr

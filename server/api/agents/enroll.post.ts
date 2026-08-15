@@ -15,6 +15,7 @@ interface EnrollBody {
     osVersion?: string
     agentVersion?: string
     macAddress?: string
+    vncPassword?: string
 }
 
 export default defineEventHandler(async (event) => {
@@ -63,6 +64,7 @@ export default defineEventHandler(async (event) => {
             enrollTokenHash: null,
             enrollExpiresAt: null,
             lastIp: ip,
+            vncPassword: body.vncPassword || undefined,
         },
     })
 

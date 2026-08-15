@@ -116,6 +116,18 @@
             <dt class="text-base-content/60">Linked device</dt>
             <dd class="font-medium">{{ agent.device?.name || '-' }}</dd>
           </div>
+          <div v-if="agent.vncPassword">
+            <dt class="text-base-content/60">VNC Password</dt>
+            <dd class="font-mono font-medium flex items-center gap-1">
+              <span>{{ showVncPassword ? agent.vncPassword : '••••••••' }}</span>
+              <button class="btn btn-ghost btn-xs btn-square" @click="showVncPassword = !showVncPassword">
+                <component :is="showVncPassword ? EyeOff : Eye" class="w-3.5 h-3.5" :stroke-width="2" />
+              </button>
+              <button class="btn btn-ghost btn-xs btn-square" @click="copy(agent.vncPassword)">
+                <Copy class="w-3.5 h-3.5" :stroke-width="2" />
+              </button>
+            </dd>
+          </div>
           <div>
             <dt class="text-base-content/60">Load average (1 / 5 / 15m)</dt>
             <dd class="font-mono font-medium">{{ formatLoadAvg(agent.lastMetrics) }}</dd>
@@ -229,6 +241,7 @@
             :device-name="agent.hostname"
             device-ip="agent-tunnel"
             :via-agent="true"
+            :initial-password="agent.vncPassword"
           />
         </div>
       </div>
@@ -295,7 +308,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Copy, Cpu, Download, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, RefreshCw, Terminal, Trash2, X } from '@lucide/vue'
+import { ArrowLeft, Copy, Cpu, Download, Eye, EyeOff, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, RefreshCw, Terminal, Trash2, X } from '@lucide/vue'
 import type { AgentMetricsSnapshot, AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const route = useRoute()
@@ -343,6 +356,7 @@ async function showInstall() {
   installModal.value?.showModal()
 }
 
+const showVncPassword = ref(false)
 const renamingAgent = ref(false)
 const renameValue = ref('')
 

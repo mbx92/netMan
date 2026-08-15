@@ -8,6 +8,7 @@
 import prisma from '../utils/prisma'
 import { agentManager } from '../utils/agent-manager'
 import { closeAllForAgent } from '../utils/agent-tunnel'
+import { clearBreachStreaks } from '../utils/agent-alerts'
 import { publishNotification } from '../utils/notification-bus'
 
 const SWEEP_INTERVAL_MS = Number(process.env.AGENT_OFFLINE_SWEEP_MS) || 30_000
@@ -37,6 +38,7 @@ async function sweepStaleAgents() {
         try {
             agentManager.unregisterByAgentId(agent.id)
             closeAllForAgent(agent.id)
+            clearBreachStreaks(agent.id)
 
             await prisma.agent.update({ where: { id: agent.id }, data: { status: 'OFFLINE' } })
 

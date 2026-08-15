@@ -43,7 +43,7 @@
       </div>
 
       <!-- Telemetry -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div class="bg-base-100 border border-base-300 rounded-none p-4">
           <div class="flex items-center gap-2 text-base-content/60 text-sm mb-1">
             <Cpu class="w-4 h-4" :stroke-width="2" /> CPU
@@ -62,6 +62,17 @@
           </div>
           <div class="text-2xl font-semibold">{{ formatPercent(agent.lastDiskPercent) }}</div>
         </div>
+        <div class="bg-base-100 border border-base-300 rounded-none p-4">
+          <div class="flex items-center gap-2 text-base-content/60 text-sm mb-1">
+            <Layers class="w-4 h-4" :stroke-width="2" /> Swap
+          </div>
+          <div class="text-2xl font-semibold">{{ formatPercent(agent.lastMetrics?.swapPercent) }}</div>
+        </div>
+      </div>
+
+      <!-- History chart -->
+      <div class="mb-6">
+        <AgentMetricChart :agent-id="id" />
       </div>
 
       <!-- Details -->
@@ -84,7 +95,66 @@
             <dt class="text-base-content/60">Linked device</dt>
             <dd class="font-medium">{{ agent.device?.name || '-' }}</dd>
           </div>
+          <div>
+            <dt class="text-base-content/60">Load average (1 / 5 / 15m)</dt>
+            <dd class="font-mono font-medium">{{ formatLoadAvg(agent.lastMetrics) }}</dd>
+          </div>
+          <div>
+            <dt class="text-base-content/60">Logged-in users</dt>
+            <dd class="font-medium">{{ agent.lastMetrics?.loggedInUsers?.join(', ') || '-' }}</dd>
+          </div>
+          <div>
+            <dt class="text-base-content/60">Network I/O</dt>
+            <dd class="font-mono font-medium">
+              ↓{{ formatRate(agent.lastMetrics?.netRxBytesPerSec) }} ↑{{ formatRate(agent.lastMetrics?.netTxBytesPerSec) }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-base-content/60">Disk I/O</dt>
+            <dd class="font-mono font-medium">
+              R:{{ formatRate(agent.lastMetrics?.diskReadBytesPerSec) }} W:{{ formatRate(agent.lastMetrics?.diskWriteBytesPerSec) }}
+            </dd>
+          </div>
         </dl>
+
+        <div v-if="agent.lastMetrics?.partitions?.length" class="mt-4 pt-4 border-t border-base-200">
+          <div class="text-sm text-base-content/60 mb-2">Disk partitions</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div
+              v-for="p in agent.lastMetrics.partitions"
+              :key="p.mountpoint"
+              class="flex items-center justify-between text-xs font-mono bg-base-200/50 px-2 py-1"
+            >
+              <span class="truncate">{{ p.mountpoint }}</span>
+              <span class="font-medium shrink-0 ml-2">{{ formatPercent(p.percent) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Processes -->
+      <div v-if="agent.lastMetrics?.topProcesses?.length" class="bg-base-100 border border-base-300 rounded-none p-6 mb-6">
+        <h2 class="type-card-title mb-4">Top Processes (by memory)</h2>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr class="bg-base-200/50">
+                <th>Process</th>
+                <th>PID</th>
+                <th>CPU</th>
+                <th>Memory</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="proc in agent.lastMetrics.topProcesses" :key="proc.pid">
+                <td class="font-medium">{{ proc.name }}</td>
+                <td class="text-base-content/60">{{ proc.pid }}</td>
+                <td>{{ formatPercent(proc.cpuPercent) }}</td>
+                <td>{{ formatPercent(proc.memPercent) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Remote Access -->
@@ -183,8 +253,8 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Copy, Cpu, Download, ExternalLink, HardDrive, MemoryStick, Monitor, Terminal, Trash2, X } from '@lucide/vue'
-import type { AgentSummary, InstallCommands } from '~/composables/useAgents'
+import { ArrowLeft, Copy, Cpu, Download, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Terminal, Trash2, X } from '@lucide/vue'
+import type { AgentMetricsSnapshot, AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const route = useRoute()
 const id = route.params.id as string
@@ -220,6 +290,24 @@ function copy(text: string | undefined) {
 
 function formatPercent(value: number | null | undefined): string {
   return value == null ? '-' : `${Math.round(value)}%`
+}
+
+function formatRate(bytesPerSec: number | null | undefined): string {
+  if (bytesPerSec == null) return '-'
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  let value = bytesPerSec
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  return `${value.toFixed(1)} ${units[unit]}`
+}
+
+function formatLoadAvg(metrics: AgentMetricsSnapshot | null | undefined): string {
+  if (!metrics || metrics.loadAvg1 == null) return '-'
+  const fmt = (v: number | null | undefined) => (v == null ? '-' : v.toFixed(2))
+  return `${fmt(metrics.loadAvg1)} / ${fmt(metrics.loadAvg5)} / ${fmt(metrics.loadAvg15)}`
 }
 
 function formatUptime(seconds: number | null | undefined): string {

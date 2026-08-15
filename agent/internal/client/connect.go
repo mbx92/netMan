@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"math/rand"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,9 +18,10 @@ import (
 )
 
 const (
-	heartbeatInterval = 30 * time.Second
-	minBackoff        = 1 * time.Second
-	maxBackoff        = 60 * time.Second
+	defaultHeartbeatInterval = 30 * time.Second
+	minHeartbeatInterval     = 5 * time.Second
+	minBackoff               = 1 * time.Second
+	maxBackoff               = 60 * time.Second
 )
 
 type helloMessage struct {
@@ -33,6 +36,23 @@ type heartbeatMessage struct {
 	MemPercent  float64 `json:"memPercent"`
 	DiskPercent float64 `json:"diskPercent"`
 	UptimeSec   uint64  `json:"uptimeSec"`
+
+	CPUPerCore []float64 `json:"cpuPerCore,omitempty"`
+
+	SwapPercent float64 `json:"swapPercent,omitempty"`
+
+	NetRxBytesPerSec     *float64 `json:"netRxBytesPerSec,omitempty"`
+	NetTxBytesPerSec     *float64 `json:"netTxBytesPerSec,omitempty"`
+	DiskReadBytesPerSec  *float64 `json:"diskReadBytesPerSec,omitempty"`
+	DiskWriteBytesPerSec *float64 `json:"diskWriteBytesPerSec,omitempty"`
+
+	LoadAvg1  *float64 `json:"loadAvg1,omitempty"`
+	LoadAvg5  *float64 `json:"loadAvg5,omitempty"`
+	LoadAvg15 *float64 `json:"loadAvg15,omitempty"`
+
+	Partitions    []telemetry.PartitionUsage `json:"partitions,omitempty"`
+	TopProcesses  []telemetry.ProcessInfo    `json:"topProcesses,omitempty"`
+	LoggedInUsers []string                   `json:"loggedInUsers,omitempty"`
 }
 
 type inboundMessage struct {
@@ -43,10 +63,11 @@ type inboundMessage struct {
 }
 
 // Run holds a persistent WebSocket connection to the server for as long as
-// stop is open, sending a heartbeat every heartbeatInterval and
+// stop is open, sending a heartbeat on every heartbeatInterval() tick and
 // reconnecting with exponential backoff + full jitter on any disconnect.
 func Run(cfg *config.Config, stop <-chan struct{}) {
 	backoff := minBackoff
+	collector := telemetry.NewCollector()
 
 	for {
 		select {
@@ -55,7 +76,7 @@ func Run(cfg *config.Config, stop <-chan struct{}) {
 		default:
 		}
 
-		connectedAt, err := runOnce(cfg, stop)
+		connectedAt, err := runOnce(cfg, collector, stop)
 		if err != nil {
 			log.Printf("[agent] connection error: %v", err)
 		}
@@ -76,7 +97,26 @@ func Run(cfg *config.Config, stop <-chan struct{}) {
 	}
 }
 
-func runOnce(cfg *config.Config, stop <-chan struct{}) (connectedAt time.Time, err error) {
+// heartbeatInterval lets an operator tune the reporting cadence without a
+// rebuild: NETMAN_HEARTBEAT_INTERVAL_SEC, clamped to
+// [minHeartbeatInterval, ...] so a typo can't turn this into a hammer.
+func heartbeatInterval() time.Duration {
+	raw := os.Getenv("NETMAN_HEARTBEAT_INTERVAL_SEC")
+	if raw == "" {
+		return defaultHeartbeatInterval
+	}
+	sec, err := strconv.Atoi(raw)
+	if err != nil || sec <= 0 {
+		return defaultHeartbeatInterval
+	}
+	d := time.Duration(sec) * time.Second
+	if d < minHeartbeatInterval {
+		return minHeartbeatInterval
+	}
+	return d
+}
+
+func runOnce(cfg *config.Config, collector *telemetry.Collector, stop <-chan struct{}) (connectedAt time.Time, err error) {
 	wsURL := toWebSocketURL(cfg.ServerURL) + "/api/agents/connect"
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -112,11 +152,11 @@ func runOnce(cfg *config.Config, stop <-chan struct{}) (connectedAt time.Time, e
 	done := make(chan struct{})
 	go readLoop(conn, tm, done)
 
-	ticker := time.NewTicker(heartbeatInterval)
+	ticker := time.NewTicker(heartbeatInterval())
 	defer ticker.Stop()
 
 	// Send one heartbeat immediately so telemetry shows up right away.
-	sendHeartbeat(conn, &writeMu)
+	sendHeartbeat(conn, collector, &writeMu)
 
 	for {
 		select {
@@ -128,7 +168,7 @@ func runOnce(cfg *config.Config, stop <-chan struct{}) (connectedAt time.Time, e
 		case <-done:
 			return connectedAt, nil
 		case <-ticker.C:
-			if err := sendHeartbeat(conn, &writeMu); err != nil {
+			if err := sendHeartbeat(conn, collector, &writeMu); err != nil {
 				return connectedAt, err
 			}
 		}
@@ -170,16 +210,28 @@ func readLoop(conn *websocket.Conn, tm *tunnelManager, done chan<- struct{}) {
 	}
 }
 
-func sendHeartbeat(conn *websocket.Conn, writeMu *sync.Mutex) error {
-	snap := telemetry.Collect()
+func sendHeartbeat(conn *websocket.Conn, collector *telemetry.Collector, writeMu *sync.Mutex) error {
+	snap := collector.Collect()
 	writeMu.Lock()
 	defer writeMu.Unlock()
 	return conn.WriteJSON(heartbeatMessage{
-		Type:        "heartbeat",
-		CPUPercent:  snap.CPUPercent,
-		MemPercent:  snap.MemPercent,
-		DiskPercent: snap.DiskPercent,
-		UptimeSec:   snap.UptimeSec,
+		Type:                 "heartbeat",
+		CPUPercent:           snap.CPUPercent,
+		CPUPerCore:           snap.CPUPerCore,
+		MemPercent:           snap.MemPercent,
+		SwapPercent:          snap.SwapPercent,
+		DiskPercent:          snap.DiskPercent,
+		UptimeSec:            snap.UptimeSec,
+		NetRxBytesPerSec:     snap.NetRxBytesPerSec,
+		NetTxBytesPerSec:     snap.NetTxBytesPerSec,
+		DiskReadBytesPerSec:  snap.DiskReadBytesPerSec,
+		DiskWriteBytesPerSec: snap.DiskWriteBytesPerSec,
+		LoadAvg1:             snap.LoadAvg1,
+		LoadAvg5:             snap.LoadAvg5,
+		LoadAvg15:            snap.LoadAvg15,
+		Partitions:           snap.Partitions,
+		TopProcesses:         snap.TopProcesses,
+		LoggedInUsers:        snap.LoggedInUsers,
 	})
 }
 

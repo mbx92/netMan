@@ -203,19 +203,50 @@ model Agent {
   lastSeen DateTime?
   lastIp   String?
 
-  // Latest telemetry snapshot (no history table for now — add one later if trend graphs are needed)
+  // Latest telemetry snapshot — scalar columns for the summary list/badges,
+  // lastMetrics for everything else (per-core CPU, I/O rates, partitions,
+  // top processes, logged-in users). History lives in AgentMetricSample.
   lastCpuPercent  Float?
   lastMemPercent  Float?
   lastDiskPercent Float?
   lastUptimeSec   Int?
+  lastMetrics     Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessions RemoteSession[]
+  sessions      RemoteSession[]
+  metricSamples AgentMetricSample[]
 
   @@index([status])
   @@index([deviceId])
+}
+
+// One row per heartbeat, retained for AGENT_METRIC_RETENTION_DAYS (default
+// 14) by the agent-metrics-retention plugin — this is what backs the
+// history charts on the agent detail page. Kept deliberately flat (not the
+// full lastMetrics JSON) so range queries for charting don't need to parse
+// JSON per row.
+model AgentMetricSample {
+  id      String @id @default(uuid())
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  recordedAt DateTime @default(now())
+
+  cpuPercent  Float
+  memPercent  Float
+  diskPercent Float
+  swapPercent Float?
+
+  netRxBytesPerSec     Float?
+  netTxBytesPerSec     Float?
+  diskReadBytesPerSec  Float?
+  diskWriteBytesPerSec Float?
+
+  loadAvg1 Float?
+
+  @@index([agentId, recordedAt])
 }
 
 enum AgentPlatform {

@@ -12,6 +12,7 @@ import { verifySecret } from '../../utils/agent-auth'
 import { agentManager } from '../../utils/agent-manager'
 import { publishNotification } from '../../utils/notification-bus'
 import { closeAllForAgent, handleTunnelControl, handleTunnelData } from '../../utils/agent-tunnel'
+import { checkResourceThresholds, clearBreachStreaks } from '../../utils/agent-alerts'
 
 interface HelloMessage {
     type: 'hello'
@@ -19,12 +20,27 @@ interface HelloMessage {
     authKey: string
 }
 
+interface PartitionUsage { mountpoint: string; percent: number }
+interface ProcessInfo { name: string; pid: number; cpuPercent: number; memPercent: number }
+
 interface HeartbeatMessage {
     type: 'heartbeat'
     cpuPercent?: number
     memPercent?: number
     diskPercent?: number
     uptimeSec?: number
+    cpuPerCore?: number[]
+    swapPercent?: number
+    netRxBytesPerSec?: number
+    netTxBytesPerSec?: number
+    diskReadBytesPerSec?: number
+    diskWriteBytesPerSec?: number
+    loadAvg1?: number
+    loadAvg5?: number
+    loadAvg15?: number
+    partitions?: PartitionUsage[]
+    topProcesses?: ProcessInfo[]
+    loggedInUsers?: string[]
 }
 
 type AgentMessage = HelloMessage | HeartbeatMessage | { type: string;[key: string]: unknown }
@@ -154,6 +170,21 @@ async function handleHeartbeat(peer: any, msg: HeartbeatMessage) {
         return
     }
 
+    const lastMetrics = {
+        cpuPerCore: msg.cpuPerCore,
+        swapPercent: msg.swapPercent,
+        netRxBytesPerSec: msg.netRxBytesPerSec,
+        netTxBytesPerSec: msg.netTxBytesPerSec,
+        diskReadBytesPerSec: msg.diskReadBytesPerSec,
+        diskWriteBytesPerSec: msg.diskWriteBytesPerSec,
+        loadAvg1: msg.loadAvg1,
+        loadAvg5: msg.loadAvg5,
+        loadAvg15: msg.loadAvg15,
+        partitions: msg.partitions,
+        topProcesses: msg.topProcesses,
+        loggedInUsers: msg.loggedInUsers,
+    }
+
     await prisma.agent.update({
         where: { id: connected.agentId },
         data: {
@@ -162,8 +193,32 @@ async function handleHeartbeat(peer: any, msg: HeartbeatMessage) {
             lastMemPercent: msg.memPercent,
             lastDiskPercent: msg.diskPercent,
             lastUptimeSec: msg.uptimeSec,
+            lastMetrics,
         },
     }).catch((e) => console.error('[AgentConnect] Failed to record heartbeat:', e))
+
+    if (msg.cpuPercent != null && msg.memPercent != null && msg.diskPercent != null) {
+        await prisma.agentMetricSample.create({
+            data: {
+                agentId: connected.agentId,
+                cpuPercent: msg.cpuPercent,
+                memPercent: msg.memPercent,
+                diskPercent: msg.diskPercent,
+                swapPercent: msg.swapPercent,
+                netRxBytesPerSec: msg.netRxBytesPerSec,
+                netTxBytesPerSec: msg.netTxBytesPerSec,
+                diskReadBytesPerSec: msg.diskReadBytesPerSec,
+                diskWriteBytesPerSec: msg.diskWriteBytesPerSec,
+                loadAvg1: msg.loadAvg1,
+            },
+        }).catch((e) => console.error('[AgentConnect] Failed to record metric sample:', e))
+    }
+
+    await checkResourceThresholds(connected.agentId, connected.hostname, {
+        cpuPercent: msg.cpuPercent,
+        memPercent: msg.memPercent,
+        diskPercent: msg.diskPercent,
+    }).catch((e) => console.error('[AgentConnect] Failed to check resource thresholds:', e))
 }
 
 async function handleDisconnect(peer: any) {
@@ -171,6 +226,7 @@ async function handleDisconnect(peer: any) {
     if (!agentId) return
 
     closeAllForAgent(agentId)
+    clearBreachStreaks(agentId)
 
     const agent = await prisma.agent.update({
         where: { id: agentId },

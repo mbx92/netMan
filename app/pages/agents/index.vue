@@ -250,7 +250,11 @@ async function submitCreate() {
     installModal.value?.showModal()
     await loadAgents()
   } catch (e: any) {
-    alert(e?.data?.statusMessage || 'Failed to create agent')
+    await alertDialog({
+      title: 'Failed to Create Agent',
+      message: e?.data?.statusMessage || 'Failed to create agent',
+      variant: 'danger',
+    })
   } finally {
     creating.value = false
   }
@@ -265,7 +269,13 @@ async function showInstall(agent: AgentSummary) {
 }
 
 async function confirmDelete(agent: AgentSummary) {
-  if (!confirm(`Delete agent "${agent.hostname}"? This does not remove it from the target machine.`)) return
+  const ok = await confirmDialog({
+    title: 'Delete Agent',
+    message: `Delete agent "${agent.hostname}"? This does not remove it from the target machine.`,
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  })
+  if (!ok) return
   await deleteAgent(agent.id)
   await loadAgents()
 }

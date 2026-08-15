@@ -327,7 +327,13 @@ async function showInstall() {
 
 async function confirmDelete() {
   if (!agent.value) return
-  if (!confirm(`Delete agent "${agent.value.hostname}"? This does not remove it from the target machine.`)) return
+  const ok = await confirmDialog({
+    title: 'Delete Agent',
+    message: `Delete agent "${agent.value.hostname}"? This does not remove it from the target machine.`,
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  })
+  if (!ok) return
   await deleteAgent(id)
   await navigateTo('/agents')
 }

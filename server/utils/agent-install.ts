@@ -35,5 +35,6 @@ export function buildInstallCommands(appUrl: string, token: string) {
     return {
         windows: `iwr -useb ${appUrl}/api/agents/install/windows.ps1 -OutFile install-agent.ps1; ./install-agent.ps1 -Token '${token}' -Server '${appUrl}'`,
         linux: `curl -fsSL ${appUrl}/api/agents/install/linux.sh | sudo bash -s -- --token '${token}' --server '${appUrl}'`,
+        macos: `curl -fsSL ${appUrl}/api/agents/install/macos.sh | sudo bash -s -- --token '${token}' --server '${appUrl}'`,
     }
 }

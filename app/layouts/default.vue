@@ -218,6 +218,7 @@ import {
   Video,
   Server,
   Bot,
+  Activity,
   PanelLeftOpen,
   PanelLeftClose,
 } from '@lucide/vue'
@@ -289,6 +290,7 @@ const configLinks = [
 
 const observeLinks = [
   { to: '/audit', label: 'Audit Logs', icon: ScrollText },
+  { to: '/settings/database', label: 'DB Pool', icon: Activity },
 ]
 
 const toggleSidebarCollapsed = () => {

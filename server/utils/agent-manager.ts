@@ -10,7 +10,7 @@ interface ConnectedAgent {
     agentId: string
     peer: any
     hostname: string
-    platform: 'WINDOWS' | 'LINUX'
+    platform: 'WINDOWS' | 'LINUX' | 'MACOS'
     connectedAt: Date
 }
 
@@ -18,7 +18,7 @@ class AgentConnectionManager {
     private byAgentId: Map<string, ConnectedAgent> = new Map()
     private peerIdToAgentId: Map<string, string> = new Map()
 
-    register(agentId: string, peer: any, meta: { hostname: string; platform: 'WINDOWS' | 'LINUX' }): void {
+    register(agentId: string, peer: any, meta: { hostname: string; platform: 'WINDOWS' | 'LINUX' | 'MACOS' }): void {
         this.byAgentId.set(agentId, {
             agentId,
             peer,

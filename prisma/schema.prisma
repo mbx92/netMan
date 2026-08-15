@@ -221,6 +221,7 @@ model Agent {
 enum AgentPlatform {
   WINDOWS
   LINUX
+  MACOS
 }
 
 enum AgentStatus {

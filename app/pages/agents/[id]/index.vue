@@ -17,7 +17,7 @@
               <span :class="['badge', getStatusBadgeClass(agent.status)]">{{ agent.status }}</span>
             </div>
             <p class="type-body-sm text-base-content/60 mt-1">
-              {{ agent.platform === 'WINDOWS' ? 'Windows' : 'Linux' }}
+              {{ platformLabel(agent.platform) }}
               <span v-if="agent.osVersion"> • {{ agent.osVersion }}</span>
               <span v-if="agent.agentVersion"> • agent v{{ agent.agentVersion }}</span>
             </p>
@@ -85,7 +85,7 @@
       <div class="bg-base-100 border border-base-300 rounded-none p-6">
         <h2 class="type-card-title mb-2">Remote Access</h2>
         <p class="type-body-sm text-base-content/60">
-          {{ agent.platform === 'LINUX' ? 'SSH-over-tunnel' : 'Remote Desktop (RDP)-over-tunnel' }} is not enabled yet
+          {{ agent.platform === 'WINDOWS' ? 'Remote Desktop (RDP)-over-tunnel' : 'SSH-over-tunnel' }} is not enabled yet
           for this agent build — telemetry/monitoring only in this release.
         </p>
       </div>
@@ -112,6 +112,13 @@
             <div class="flex items-start gap-2">
               <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ installCommands?.linux }}</pre>
               <button class="btn btn-ghost btn-xs" @click="copy(installCommands?.linux)"><Copy class="w-4 h-4" :stroke-width="2" /></button>
+            </div>
+          </div>
+          <div>
+            <div class="text-xs font-medium text-base-content/60 mb-1">macOS (root/sudo)</div>
+            <div class="flex items-start gap-2">
+              <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ installCommands?.macos }}</pre>
+              <button class="btn btn-ghost btn-xs" @click="copy(installCommands?.macos)"><Copy class="w-4 h-4" :stroke-width="2" /></button>
             </div>
           </div>
         </div>
@@ -175,5 +182,11 @@ function getStatusBadgeClass(status: string): string {
   if (status === 'ONLINE') return 'badge-success'
   if (status === 'PENDING') return 'badge-warning'
   return 'badge-error'
+}
+
+function platformLabel(platform: AgentSummary['platform']): string {
+  if (platform === 'WINDOWS') return 'Windows'
+  if (platform === 'MACOS') return 'macOS'
+  return 'Linux'
 }
 </script>

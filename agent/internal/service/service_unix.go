@@ -1,8 +1,9 @@
 //go:build !windows
 
 // Package service adapts main's run loop to the host OS's service model.
-// On Linux, systemd owns the process lifecycle (see scripts/netman-agent.service,
-// Restart=always) — the binary just needs to exit cleanly on SIGTERM.
+// On Linux, systemd owns the process lifecycle (see scripts/netman-agent.service);
+// on macOS, launchd does (KeepAlive in the installed LaunchDaemon plist).
+// Either way the binary just needs to exit cleanly on SIGTERM.
 package service
 
 import (

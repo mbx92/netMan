@@ -13,6 +13,7 @@ const deviceTypes = [
     { code: 'SERVER_WINDOWS', name: 'Windows Server', icon: 'server', color: '#3b82f6', isNetworkDevice: false, canHavePorts: false, topologyTier: 2, sortOrder: 6 },
     { code: 'PC_WINDOWS', name: 'Windows PC', icon: 'desktop', color: '#a855f7', isNetworkDevice: false, canHavePorts: false, topologyTier: 2, sortOrder: 7 },
     { code: 'PC_LINUX', name: 'Linux PC', icon: 'desktop', color: '#84cc16', isNetworkDevice: false, canHavePorts: false, topologyTier: 2, sortOrder: 8 },
+    { code: 'PC_MACOS', name: 'macOS PC', icon: 'desktop', color: '#94a3b8', isNetworkDevice: false, canHavePorts: false, topologyTier: 2, sortOrder: 12 },
     { code: 'VM', name: 'Virtual Machine', icon: 'cloud', color: '#8b5cf6', isNetworkDevice: false, canHavePorts: false, topologyTier: 2, sortOrder: 9 },
     { code: 'PRINTER', name: 'Printer', icon: 'printer', color: '#6b7280', isNetworkDevice: false, canHavePorts: false, topologyTier: 2, sortOrder: 10 },
     { code: 'SMART_TV', name: 'Smart TV', icon: 'tv', color: '#ec4899', isNetworkDevice: false, canHavePorts: false, topologyTier: 2, sortOrder: 11 },

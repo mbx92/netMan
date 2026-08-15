@@ -1,5 +1,5 @@
-// Command netman-agent is the phone-home agent installed on a Windows PC or
-// Linux server so it can be monitored (and, in a later release, remotely
+// Command netman-agent is the phone-home agent installed on a Windows PC,
+// Linux server, or Mac so it can be monitored (and, in a later release, remotely
 // accessed) from netMan even when it isn't directly reachable on the LAN.
 //
 // Usage:

@@ -59,8 +59,8 @@
               </td>
               <td>
                 <span class="badge badge-ghost gap-1">
-                  <component :is="agent.platform === 'WINDOWS' ? Monitor : Server" class="w-3 h-3" :stroke-width="2" />
-                  {{ agent.platform === 'WINDOWS' ? 'Windows' : 'Linux' }}
+                  <component :is="platformIcon(agent.platform)" class="w-3 h-3" :stroke-width="2" />
+                  {{ platformLabel(agent.platform) }}
                 </span>
               </td>
               <td class="text-sm">{{ formatPercent(agent.lastCpuPercent) }}</td>
@@ -96,25 +96,32 @@
 
     <!-- Add Agent Modal -->
     <dialog ref="createModal" class="modal">
-      <div class="modal-box max-w-lg">
+      <div class="modal-box max-w-xl">
         <h3 class="font-bold text-lg mb-4">Add Agent</h3>
         <form class="space-y-4" @submit.prevent="submitCreate">
           <div class="form-control">
             <label class="label"><span class="label-text">Platform</span></label>
-            <div class="join w-full">
+            <div class="join">
               <button
                 type="button"
-                :class="['btn join-item flex-1', form.platform === 'WINDOWS' ? 'btn-primary' : 'btn-outline']"
+                :class="['btn btn-sm join-item', form.platform === 'WINDOWS' ? 'btn-primary' : 'btn-outline']"
                 @click="form.platform = 'WINDOWS'"
               >
-                <Monitor class="w-4 h-4" :stroke-width="2" /> Windows PC
+                <Monitor class="w-4 h-4" :stroke-width="2" /> Windows
               </button>
               <button
                 type="button"
-                :class="['btn join-item flex-1', form.platform === 'LINUX' ? 'btn-primary' : 'btn-outline']"
+                :class="['btn btn-sm join-item', form.platform === 'LINUX' ? 'btn-primary' : 'btn-outline']"
                 @click="form.platform = 'LINUX'"
               >
-                <Server class="w-4 h-4" :stroke-width="2" /> Linux Server
+                <Server class="w-4 h-4" :stroke-width="2" /> Linux
+              </button>
+              <button
+                type="button"
+                :class="['btn btn-sm join-item', form.platform === 'MACOS' ? 'btn-primary' : 'btn-outline']"
+                @click="form.platform = 'MACOS'"
+              >
+                <Laptop class="w-4 h-4" :stroke-width="2" /> macOS
               </button>
             </div>
           </div>
@@ -174,6 +181,17 @@
               </button>
             </div>
           </div>
+          <div>
+            <div class="text-xs font-medium text-base-content/60 mb-1 flex items-center gap-1">
+              <Laptop class="w-3.5 h-3.5" :stroke-width="2" /> macOS (root/sudo)
+            </div>
+            <div class="flex items-start gap-2">
+              <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ installCommands?.macos }}</pre>
+              <button class="btn btn-ghost btn-xs" @click="copy(installCommands?.macos)">
+                <Copy class="w-4 h-4" :stroke-width="2" />
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="modal-action">
@@ -186,14 +204,14 @@
 </template>
 
 <script setup lang="ts">
-import { Copy, Download, Eye, Monitor, Plus, Server, Trash2 } from '@lucide/vue'
+import { Copy, Download, Eye, Laptop, Monitor, Plus, Server, Trash2 } from '@lucide/vue'
 import type { AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const { data: agents, pending, refresh: loadAgents } = await useFetch<AgentSummary[]>('/api/agents')
 
 interface Site { id: string; name: string }
-const { data: sitesData } = await useFetch<Site[]>('/api/sites')
-const sites = computed(() => sitesData.value || [])
+const { data: sitesData } = await useFetch<{ sites: Site[] }>('/api/sites')
+const sites = computed(() => sitesData.value?.sites || [])
 
 const { createAgent, deleteAgent, regenerateInstall } = useAgents()
 
@@ -203,7 +221,7 @@ const creating = ref(false)
 const installCommands = ref<InstallCommands | null>(null)
 const tokenExpiresAt = ref<string | null>(null)
 
-const form = reactive({ platform: 'WINDOWS' as 'WINDOWS' | 'LINUX', name: '', siteId: '' })
+const form = reactive({ platform: 'WINDOWS' as AgentSummary['platform'], name: '', siteId: '' })
 
 function openCreateModal() {
   form.platform = 'WINDOWS'
@@ -271,5 +289,17 @@ function getStatusBadgeClass(status: string): string {
   if (status === 'ONLINE') return 'badge-success'
   if (status === 'PENDING') return 'badge-warning'
   return 'badge-error'
+}
+
+function platformIcon(platform: AgentSummary['platform']) {
+  if (platform === 'WINDOWS') return Monitor
+  if (platform === 'MACOS') return Laptop
+  return Server
+}
+
+function platformLabel(platform: AgentSummary['platform']): string {
+  if (platform === 'WINDOWS') return 'Windows'
+  if (platform === 'MACOS') return 'macOS'
+  return 'Linux'
 }
 </script>

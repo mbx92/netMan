@@ -1,7 +1,7 @@
 export interface AgentSummary {
   id: string
   deviceId: string | null
-  platform: 'WINDOWS' | 'LINUX'
+  platform: 'WINDOWS' | 'LINUX' | 'MACOS'
   hostname: string
   osVersion: string | null
   agentVersion: string | null
@@ -20,10 +20,11 @@ export interface AgentSummary {
 export interface InstallCommands {
   windows: string
   linux: string
+  macos: string
 }
 
 export function useAgents() {
-  async function createAgent(payload: { platform: 'WINDOWS' | 'LINUX'; name?: string; siteId?: string }) {
+  async function createAgent(payload: { platform: 'WINDOWS' | 'LINUX' | 'MACOS'; name?: string; siteId?: string }) {
     return $fetch<{ agent: AgentSummary; install: InstallCommands; tokenExpiresAt: string }>('/api/agents', {
       method: 'POST',
       body: payload,

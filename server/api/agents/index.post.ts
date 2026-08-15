@@ -1,20 +1,29 @@
 import prisma from '../../utils/prisma'
 import { issueEnrollmentToken, buildInstallCommands } from '../../utils/agent-install'
 
-const TYPE_CODE_BY_PLATFORM: Record<'WINDOWS' | 'LINUX', string> = {
+type Platform = 'WINDOWS' | 'LINUX' | 'MACOS'
+
+const TYPE_CODE_BY_PLATFORM: Record<Platform, string> = {
     WINDOWS: 'PC_WINDOWS',
     LINUX: 'SERVER_LINUX',
+    MACOS: 'PC_MACOS',
+}
+
+const PLATFORM_LABEL: Record<Platform, string> = {
+    WINDOWS: 'Windows',
+    LINUX: 'Linux',
+    MACOS: 'macOS',
 }
 
 // POST /api/agents - Register a new pending agent and issue its one-time enrollment token
 export default defineEventHandler(async (event) => {
     const body = await readBody<{ platform?: string; name?: string; siteId?: string }>(event)
 
-    if (body.platform !== 'WINDOWS' && body.platform !== 'LINUX') {
-        throw createError({ statusCode: 400, statusMessage: 'platform must be WINDOWS or LINUX' })
+    if (body.platform !== 'WINDOWS' && body.platform !== 'LINUX' && body.platform !== 'MACOS') {
+        throw createError({ statusCode: 400, statusMessage: 'platform must be WINDOWS, LINUX, or MACOS' })
     }
 
-    const name = body.name?.trim() || `Pending ${body.platform === 'WINDOWS' ? 'Windows' : 'Linux'} Agent`
+    const name = body.name?.trim() || `Pending ${PLATFORM_LABEL[body.platform]} Agent`
 
     const device = await prisma.device.create({
         data: {

@@ -3,7 +3,7 @@
 // restarts the service. No token needed - the existing enrollment credentials in
 // ProgramData are untouched. Re-checking VNC here (not just at initial install) matters
 // for agents enrolled before that step existed, or whose TightVNC config was broken by
-// the missing SET_VNCPASSWORD1/AllowLoopback bug this fixed.
+// the missing SET_PASSWORD/AllowLoopback properties bug this fixed.
 export default defineEventHandler((event) => {
     setResponseHeader(event, 'Content-Type', 'text/plain; charset=utf-8')
     return `param(
@@ -47,8 +47,8 @@ Start-Process msiexec.exe -ArgumentList @(
     "SERVER_ADD_FIREWALL_EXCEPTION=0",
     "SET_USEVNCAUTHENTICATION=1",
     "VALUE_OF_USEVNCAUTHENTICATION=1",
-    "SET_VNCPASSWORD1=1",
-    "VALUE_OF_VNCPASSWORD1=$vncPassword"
+    "SET_PASSWORD=1",
+    "VALUE_OF_PASSWORD=$vncPassword"
 ) -Wait
 
 New-Item -Path "HKLM:\\SOFTWARE\\TightVNC\\Server" -Force | Out-Null

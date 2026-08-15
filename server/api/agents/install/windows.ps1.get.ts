@@ -46,8 +46,8 @@ Start-Process msiexec.exe -ArgumentList @(
     "SERVER_ADD_FIREWALL_EXCEPTION=0",
     "SET_USEVNCAUTHENTICATION=1",
     "VALUE_OF_USEVNCAUTHENTICATION=1",
-    "SET_VNCPASSWORD1=1",
-    "VALUE_OF_VNCPASSWORD1=$vncPassword"
+    "SET_PASSWORD=1",
+    "VALUE_OF_PASSWORD=$vncPassword"
 ) -Wait
 
 New-Item -Path "HKLM:\\SOFTWARE\\TightVNC\\Server" -Force | Out-Null

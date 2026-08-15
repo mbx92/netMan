@@ -45,6 +45,15 @@
         </button>
 
         <ClientOnly>
+          <UiNotificationBell />
+          <template #fallback>
+            <div class="btn btn-ghost btn-square btn-sm">
+              <div class="w-5 h-5"></div>
+            </div>
+          </template>
+        </ClientOnly>
+
+        <ClientOnly>
           <UiAppDropdown align="end">
             <template #trigger>
               <button type="button" class="btn btn-ghost btn-square btn-sm avatar" aria-haspopup="menu">

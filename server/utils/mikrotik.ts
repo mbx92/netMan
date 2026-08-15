@@ -33,6 +33,18 @@ export interface DhcpLeaseEntry {
     comment?: string
 }
 
+export interface HotspotActiveHostEntry {
+    id: string
+    address: string
+    mac: string
+    user?: string
+    server?: string
+    uptime?: string
+    loginBy?: string
+    bytesIn?: number
+    bytesOut?: number
+}
+
 // Common interface for both clients
 export interface IMikroTikClient {
     testConnection(): Promise<boolean>
@@ -54,6 +66,9 @@ export interface IMikroTikClient {
     }[]>
     /** Hotspot IP bindings (/ip/hotspot/ip-binding) — used for bypass/blocked/regular MAC+IP entries */
     getHotspotIpBindings(): Promise<HotspotIpBindingEntry[]>
+    /** Currently active/logged-in hotspot hosts (/ip/hotspot/active) — used to detect a device connected
+     *  to the hotspot that has no corresponding ip-binding entry. */
+    getActiveHotspotHosts(): Promise<HotspotActiveHostEntry[]>
     /** Add a hotspot IP binding, e.g. a "bypassed" entry to skip hotspot login for a known IP/MAC */
     addHotspotIpBinding(data: {
         address: string

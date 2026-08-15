@@ -1,18 +1,20 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-base-200 p-6">
-    <div class="feature-card w-full max-w-sm">
-      <div class="text-center">
+  <div class="min-h-screen flex items-center justify-center p-6 login-shell">
+    <div class="login-card relative w-full max-w-[24rem] p-10">
+      <div class="flex flex-col items-center text-center gap-4">
         <div
           v-if="!hasError"
           class="loading loading-spinner loading-lg text-primary"
         ></div>
 
-        <div v-else class="text-error mb-4">
-          <XCircle class="w-16 h-16 mx-auto" :stroke-width="2" />
-        </div>
+        <XCircle
+          v-else
+          class="w-16 h-16 text-error"
+          :stroke-width="2"
+        />
 
         <p
-          class="mt-4 type-body-lg"
+          class="type-body-lg break-words max-w-full"
           :class="hasError ? 'text-error' : 'text-base-content'"
         >
           {{ message }}
@@ -20,7 +22,7 @@
 
         <button
           v-if="hasError"
-          class="btn btn-primary mt-6"
+          class="btn btn-primary w-full mt-2"
           @click="handleRetry"
         >
           Back to login

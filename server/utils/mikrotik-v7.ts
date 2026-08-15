@@ -60,6 +60,18 @@ interface HotspotIpBindingRaw {
     disabled?: boolean | string
 }
 
+interface HotspotActiveRaw {
+    '.id': string
+    address: string
+    'mac-address': string
+    user?: string
+    server?: string
+    uptime?: string
+    'login-by'?: string
+    'bytes-in'?: string
+    'bytes-out'?: string
+}
+
 export class MikroTikClient {
     private config: MikroTikConfig
     private baseUrl: string
@@ -234,6 +246,41 @@ export class MikroTikClient {
             }))
         } catch (error) {
             console.error('[MikroTik] Failed to fetch hotspot IP bindings:', error)
+            return []
+        }
+    }
+
+    /**
+     * Get currently active hotspot hosts (/ip/hotspot/active)
+     * Used to detect a device connected to the hotspot with no matching ip-binding entry
+     */
+    async getActiveHotspotHosts(): Promise<{
+        id: string
+        address: string
+        mac: string
+        user?: string
+        server?: string
+        uptime?: string
+        loginBy?: string
+        bytesIn?: number
+        bytesOut?: number
+    }[]> {
+        try {
+            const entries = await this.request<HotspotActiveRaw[]>('/ip/hotspot/active')
+            console.log(`[MikroTik] Fetched ${entries.length} active hotspot hosts`)
+            return entries.map(e => ({
+                id: e['.id'],
+                address: e.address,
+                mac: e['mac-address'],
+                user: e.user,
+                server: e.server,
+                uptime: e.uptime,
+                loginBy: e['login-by'],
+                bytesIn: e['bytes-in'] ? Number(e['bytes-in']) : undefined,
+                bytesOut: e['bytes-out'] ? Number(e['bytes-out']) : undefined,
+            }))
+        } catch (error) {
+            console.error('[MikroTik] Failed to fetch active hotspot hosts:', error)
             return []
         }
     }

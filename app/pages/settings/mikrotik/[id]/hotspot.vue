@@ -23,6 +23,21 @@
         <span>{{ feedback.message }}</span>
       </div>
 
+      <div v-if="unboundActive.length" class="alert alert-warning rounded-none mb-6">
+        <div class="w-full">
+          <div class="font-medium mb-2">{{ unboundActive.length }} LG device(s) connected to the hotspot without a binding</div>
+          <ul class="space-y-1 max-h-64 overflow-y-auto">
+            <li v-for="h in unboundActive.slice(0, 20)" :key="h.id" class="flex items-center justify-between gap-3 text-sm">
+              <span class="font-mono">{{ h.address }} · {{ h.mac }}</span>
+              <button type="button" class="btn btn-xs btn-outline" @click="quickBind(h)">Bind now</button>
+            </li>
+          </ul>
+          <div v-if="unboundActive.length > 20" class="text-xs text-base-content/60 mt-2">
+            +{{ unboundActive.length - 20 }} more not shown
+          </div>
+        </div>
+      </div>
+
       <div class="space-y-6">
         <!-- Hotspot IP Bindings -->
         <div class="bg-base-100 border border-base-300 rounded-none p-6">
@@ -70,6 +85,25 @@
             </div>
           </form>
 
+          <!-- Filter bar -->
+          <div class="flex flex-wrap gap-3 mb-4">
+            <input
+              v-model="bindingSearch"
+              type="text"
+              placeholder="Search address, MAC, comment..."
+              class="input input-bordered input-sm w-56"
+            >
+            <select v-model="bindingTypeFilter" class="select select-bordered select-sm">
+              <option value="">All Types</option>
+              <option value="bypassed">Bypassed</option>
+              <option value="regular">Regular</option>
+              <option value="blocked">Blocked</option>
+            </select>
+            <button v-if="bindingSearch || bindingTypeFilter" type="button" class="btn btn-ghost btn-sm" @click="bindingSearch = ''; bindingTypeFilter = ''">
+              Clear filters
+            </button>
+          </div>
+
           <div class="overflow-x-auto">
             <table class="table table-zebra w-full">
               <thead>
@@ -82,12 +116,12 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-if="!bindings.length">
+                <tr v-if="!filteredBindings.length">
                   <td colspan="5" class="text-center text-base-content/60 py-6">
-                    {{ bindingsLoading ? 'Loading...' : 'No hotspot IP bindings on this router.' }}
+                    {{ bindingsLoading ? 'Loading...' : (bindings.length ? 'No bindings match your filters.' : 'No hotspot IP bindings on this router.') }}
                   </td>
                 </tr>
-                <tr v-for="b in bindings" :key="b.id">
+                <tr v-for="b in pagedBindings" :key="b.id">
                   <td class="font-mono">{{ b.address }}</td>
                   <td class="font-mono text-sm">{{ b.mac || '-' }}</td>
                   <td>
@@ -103,6 +137,16 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <div v-if="filteredBindings.length" class="pt-4 mt-2 border-t border-base-200 flex justify-between items-center">
+            <div class="text-sm text-base-content/60">
+              Showing {{ Math.min(filteredBindings.length, bindingsPage * PAGE_SIZE + 1) }}-{{ Math.min(filteredBindings.length, (bindingsPage + 1) * PAGE_SIZE) }} of {{ filteredBindings.length }}
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-ghost btn-sm" :disabled="bindingsPage === 0" @click="bindingsPage--">Previous</button>
+              <button class="btn btn-ghost btn-sm" :disabled="(bindingsPage + 1) * PAGE_SIZE >= filteredBindings.length" @click="bindingsPage++">Next</button>
+            </div>
           </div>
         </div>
 
@@ -121,6 +165,19 @@
             </button>
           </div>
 
+          <!-- Filter bar -->
+          <div class="flex flex-wrap gap-3 mb-4">
+            <input
+              v-model="leaseSearch"
+              type="text"
+              placeholder="Search address, MAC, hostname..."
+              class="input input-bordered input-sm w-56"
+            >
+            <button v-if="leaseSearch" type="button" class="btn btn-ghost btn-sm" @click="leaseSearch = ''">
+              Clear filters
+            </button>
+          </div>
+
           <div class="overflow-x-auto">
             <table class="table table-zebra w-full">
               <thead>
@@ -134,12 +191,12 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-if="!leases.length">
+                <tr v-if="!filteredLeases.length">
                   <td colspan="6" class="text-center text-base-content/60 py-6">
-                    {{ leasesLoading ? 'Loading...' : 'No DHCP leases on this router.' }}
+                    {{ leasesLoading ? 'Loading...' : (leases.length ? 'No leases match your filter.' : 'No DHCP leases on this router.') }}
                   </td>
                 </tr>
-                <tr v-for="lease in leases" :key="lease.id">
+                <tr v-for="lease in pagedLeases" :key="lease.id">
                   <td class="font-mono">{{ lease.address }}</td>
                   <td class="font-mono text-sm">{{ lease.mac }}</td>
                   <td class="text-sm">{{ lease.hostname || '-' }}</td>
@@ -166,6 +223,16 @@
               </tbody>
             </table>
           </div>
+
+          <div v-if="filteredLeases.length" class="pt-4 mt-2 border-t border-base-200 flex justify-between items-center">
+            <div class="text-sm text-base-content/60">
+              Showing {{ Math.min(filteredLeases.length, leasesPage * PAGE_SIZE + 1) }}-{{ Math.min(filteredLeases.length, (leasesPage + 1) * PAGE_SIZE) }} of {{ filteredLeases.length }}
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-ghost btn-sm" :disabled="leasesPage === 0" @click="leasesPage--">Previous</button>
+              <button class="btn btn-ghost btn-sm" :disabled="(leasesPage + 1) * PAGE_SIZE >= filteredLeases.length" @click="leasesPage++">Next</button>
+            </div>
+          </div>
         </div>
       </div>
     </template>
@@ -174,6 +241,7 @@
 
 <script setup lang="ts">
 import { ArrowLeft, Lock, Plus, RefreshCw, Trash2 } from '@lucide/vue'
+import { isLgDevice, parseMacPrefixList } from '~~/shared/utils/device-vendor'
 
 type BindingType = 'bypassed' | 'regular' | 'blocked'
 
@@ -198,6 +266,14 @@ interface DhcpLease {
   dynamic: boolean
 }
 
+interface ActiveHotspotHost {
+  id: string
+  address: string
+  mac: string
+  server?: string
+  uptime?: string
+}
+
 const route = useRoute()
 const id = route.params.id as string
 
@@ -214,6 +290,75 @@ const newBinding = reactive({ address: '', mac: '', type: 'bypassed' as BindingT
 const leases = ref<DhcpLease[]>([])
 const leasesLoading = ref(false)
 const makingStaticId = ref<string | null>(null)
+
+const PAGE_SIZE = 10
+
+const bindingSearch = ref('')
+const bindingTypeFilter = ref<'' | BindingType>('')
+const bindingsPage = ref(0)
+
+const leaseSearch = ref('')
+const leasesPage = ref(0)
+
+const activeHosts = ref<ActiveHotspotHost[]>([])
+const activeLoading = ref(false)
+
+const filteredBindings = computed(() => {
+  const q = bindingSearch.value.trim().toLowerCase()
+  return bindings.value.filter((b) => {
+    if (bindingTypeFilter.value && b.type !== bindingTypeFilter.value) return false
+    if (!q) return true
+    return [b.address, b.mac, b.comment].some((v) => v?.toLowerCase().includes(q))
+  })
+})
+const pagedBindings = computed(() =>
+  filteredBindings.value.slice(bindingsPage.value * PAGE_SIZE, (bindingsPage.value + 1) * PAGE_SIZE),
+)
+
+const filteredLeases = computed(() => {
+  const q = leaseSearch.value.trim().toLowerCase()
+  if (!q) return leases.value
+  return leases.value.filter((l) => [l.address, l.mac, l.hostname].some((v) => v?.toLowerCase().includes(q)))
+})
+const pagedLeases = computed(() =>
+  filteredLeases.value.slice(leasesPage.value * PAGE_SIZE, (leasesPage.value + 1) * PAGE_SIZE),
+)
+
+watch(bindingSearch, () => { bindingsPage.value = 0 })
+watch(bindingTypeFilter, () => { bindingsPage.value = 0 })
+watch(leaseSearch, () => { leasesPage.value = 0 })
+
+const lgMacPrefixes = parseMacPrefixList(useRuntimeConfig().public.lgMacPrefixes as string)
+
+const unboundActive = computed(() => {
+  const bound = new Set(bindings.value.map((b) => b.mac?.toLowerCase()).filter(Boolean))
+  const hostnameByMac = new Map(
+    leases.value.filter((l) => l.mac).map((l) => [l.mac.toLowerCase(), l.hostname]),
+  )
+  return activeHosts.value.filter((h) => {
+    if (!h.mac || bound.has(h.mac.toLowerCase())) return false
+    const hostname = hostnameByMac.get(h.mac.toLowerCase())
+    return isLgDevice(h.mac, hostname, lgMacPrefixes)
+  })
+})
+
+async function loadActiveHosts() {
+  activeLoading.value = true
+  try {
+    const result = await $fetch<{ hosts: ActiveHotspotHost[] }>(`/api/mikrotik/${id}/hotspot-active`)
+    activeHosts.value = result.hosts
+  } catch {
+    // non-fatal — the active-hosts alert is a bonus indicator, don't block the page on it
+  } finally {
+    activeLoading.value = false
+  }
+}
+
+function quickBind(host: ActiveHotspotHost) {
+  newBinding.address = host.address
+  newBinding.mac = host.mac
+  newBinding.type = 'bypassed'
+}
 
 function typeBadge(type: BindingType) {
   if (type === 'bypassed') return 'badge-success'
@@ -313,5 +458,5 @@ async function makeStatic(lease: DhcpLease) {
   }
 }
 
-await Promise.all([loadBindings(), loadLeases()])
+await Promise.all([loadBindings(), loadLeases(), loadActiveHosts()])
 </script>

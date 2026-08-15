@@ -79,6 +79,7 @@ export default defineNuxtConfig({
       appPort,
       ssoRedirectUri:
         process.env.SSO_REDIRECT_URI || `${appUrl}/api/auth/sso/callback`,
+      lgMacPrefixes: process.env.LG_MAC_PREFIXES || "",
     },
   },
 

@@ -72,7 +72,7 @@
           <Waypoints class="w-10 h-10 text-primary" :stroke-width="2" />
         </div>
         <h3 class="type-card-title mb-2">No Devices Found</h3>
-        <p class="type-body-sm text-base-content/60 max-w-md">
+        <p class="type-body-sm text-base-content/60 max-w-[28rem]">
           Add devices in the Devices page or configure MikroTik routers to see your network topology.
         </p>
       </div>

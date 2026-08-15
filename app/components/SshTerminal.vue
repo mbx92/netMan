@@ -2,7 +2,7 @@
   <div class="flex flex-col h-full">
     <!-- Connection Form (when not connected) -->
     <div v-if="!connected" class="flex-1 flex items-center justify-center p-6">
-      <div class="w-full max-w-md space-y-6">
+      <div class="w-full max-w-[28rem] space-y-6">
         <div class="text-center">
           <div class="w-16 h-16 mx-auto mb-4 rounded-none bg-success/20 flex items-center justify-center">
             <TerminalIcon class="w-8 h-8 text-success" :stroke-width="2" />

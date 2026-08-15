@@ -57,6 +57,18 @@ interface HotspotIpBindingRaw {
     disabled?: string
 }
 
+interface HotspotActiveRaw {
+    '.id': string
+    address: string
+    'mac-address': string
+    user?: string
+    server?: string
+    uptime?: string
+    'login-by'?: string
+    'bytes-in'?: string
+    'bytes-out'?: string
+}
+
 export class MikroTikV6Client {
     private config: MikroTikV6Config
     private api: RouterOSAPI | null = null
@@ -96,6 +108,19 @@ export class MikroTikV6Client {
         this.connecting = api.connect()
             .then(() => {
                 console.log(`[MikroTik-v6] Connected to ${this.config.host}:${this.config.port}`)
+                // node-routeros re-emits post-login socket errors (e.g. the router drops
+                // off the network mid-session) as an 'error' event on the RouterOSAPI
+                // instance itself. EventEmitter throws (crashing the whole process) if
+                // an 'error' event has no listener — this is the only thing standing
+                // between a flaky/offline router and an uncaughtException that takes
+                // down the server, so it must never be removed.
+                api.on('error', (error: unknown) => {
+                    const message = error instanceof Error ? error.message : String(error)
+                    console.error(`[MikroTik-v6] Connection error on ${this.config.host}:${this.config.port} — ${message}`)
+                    if (this.api === api) {
+                        this.api = null
+                    }
+                })
                 this.api = api
                 return api
             })
@@ -240,6 +265,42 @@ export class MikroTikV6Client {
             }))
         } catch (error) {
             console.error('[MikroTik-v6] Failed to fetch hotspot IP bindings:', error)
+            return []
+        }
+    }
+
+    /**
+     * Get currently active hotspot hosts (/ip/hotspot/active/print)
+     * Used to detect a device connected to the hotspot with no matching ip-binding entry
+     */
+    async getActiveHotspotHosts(): Promise<{
+        id: string
+        address: string
+        mac: string
+        user?: string
+        server?: string
+        uptime?: string
+        loginBy?: string
+        bytesIn?: number
+        bytesOut?: number
+    }[]> {
+        try {
+            const api = await this.connect()
+            const entries = await api.write('/ip/hotspot/active/print') as HotspotActiveRaw[]
+            console.log(`[MikroTik-v6] Fetched ${entries.length} active hotspot hosts`)
+            return entries.map(e => ({
+                id: e['.id'],
+                address: e.address,
+                mac: e['mac-address'],
+                user: e.user,
+                server: e.server,
+                uptime: e.uptime,
+                loginBy: e['login-by'],
+                bytesIn: e['bytes-in'] ? Number(e['bytes-in']) : undefined,
+                bytesOut: e['bytes-out'] ? Number(e['bytes-out']) : undefined,
+            }))
+        } catch (error) {
+            console.error('[MikroTik-v6] Failed to fetch active hotspot hosts:', error)
             return []
         }
     }

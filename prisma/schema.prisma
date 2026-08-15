@@ -188,6 +188,32 @@ model AuditLog {
 }
 
 // ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id         String    @id @default(uuid())
+  type       String
+  severity   String    @default("warning")
+  title      String
+  message    String
+  link       String?
+  dedupeKey  String?
+  routerId   String?
+  mac        String?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  resolvedAt DateTime?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([isRead])
+  @@index([dedupeKey])
+  @@index([routerId])
+  @@index([createdAt])
+}
+
+// ============================================
 // IP ADDRESS MANAGEMENT (IPAM)
 // ============================================
 

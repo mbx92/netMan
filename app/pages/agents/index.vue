@@ -96,7 +96,7 @@
 
     <!-- Add Agent Modal -->
     <dialog ref="createModal" class="modal">
-      <div class="modal-box max-w-xl">
+      <div class="modal-box max-w-[586px]">
         <h3 class="font-bold text-lg mb-4">Add Agent</h3>
         <form class="space-y-4" @submit.prevent="submitCreate">
           <div class="form-control">

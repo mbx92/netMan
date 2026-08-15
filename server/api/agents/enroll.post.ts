@@ -13,6 +13,7 @@ interface EnrollBody {
     hostname?: string
     osVersion?: string
     agentVersion?: string
+    macAddress?: string
 }
 
 export default defineEventHandler(async (event) => {
@@ -65,10 +66,21 @@ export default defineEventHandler(async (event) => {
     })
 
     if (agent.deviceId) {
+        const mac = body.macAddress?.trim().toLowerCase() || undefined
         await prisma.device.update({
             where: { id: agent.deviceId },
-            data: { name: body.hostname, hostname: body.hostname },
-        }).catch(() => { /* device may have been deleted independently; enrollment still succeeds */ })
+            data: { name: body.hostname, hostname: body.hostname, ip: ip !== 'unknown' ? ip : undefined, mac },
+        }).catch(async (e) => {
+            // mac is unique — if another device already claims it (e.g. a stale
+            // entry from network discovery for the same physical machine),
+            // retry without it rather than losing the hostname/ip update too.
+            if (mac) {
+                await prisma.device.update({
+                    where: { id: agent.deviceId! },
+                    data: { name: body.hostname, hostname: body.hostname, ip: ip !== 'unknown' ? ip : undefined },
+                }).catch(() => { /* device may have been deleted independently; enrollment still succeeds */ })
+            }
+        })
     }
 
     await prisma.auditLog.create({

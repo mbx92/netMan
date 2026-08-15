@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"runtime"
 
@@ -30,7 +31,7 @@ import (
 )
 
 const (
-	agentVersion = "0.2.2"
+	agentVersion = "0.3.0"
 	serviceName  = "netman-agent"
 )
 
@@ -72,8 +73,9 @@ func runEnroll(token, server string) {
 		hostname = "unknown-host"
 	}
 	osVersion := detectOSVersion()
+	macAddress := detectMACAddress()
 
-	agentID, authKey, err := client.Enroll(server, token, hostname, osVersion, agentVersion)
+	agentID, authKey, err := client.Enroll(server, token, hostname, osVersion, agentVersion, macAddress)
 	if err != nil {
 		log.Fatalf("[agent] enrollment failed: %v", err)
 	}
@@ -91,4 +93,50 @@ func detectOSVersion() string {
 		return runtime.GOOS
 	}
 	return fmt.Sprintf("%s %s", info.Platform, info.PlatformVersion)
+}
+
+// detectMACAddress picks the hardware address of the first active,
+// non-virtual network interface — the same heuristic a human would use to
+// answer "what's this machine's MAC": up, not loopback, has a real MAC, and
+// currently holds a routable IP (not just link-local) — this is what rules
+// out virtual adapters like macOS's Thunderbolt Bridge, which are "up" with
+// a real-looking MAC but only ever get a link-local address, and would
+// otherwise win by simply appearing first in the interface list.
+func detectMACAddress() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if len(iface.HardwareAddr) == 0 {
+			continue
+		}
+		if !hasRoutableAddr(iface) {
+			continue
+		}
+		return iface.HardwareAddr.String()
+	}
+	return ""
+}
+
+func hasRoutableAddr(iface net.Interface) bool {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		ipNet, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		if ipNet.IP.IsLinkLocalUnicast() || ipNet.IP.IsLoopback() {
+			continue
+		}
+		return true
+	}
+	return false
 }

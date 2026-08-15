@@ -149,7 +149,7 @@ async function handleHello(peer: any, msg: HelloMessage) {
     if (agent.deviceId) {
         await prisma.device.update({
             where: { id: agent.deviceId },
-            data: { status: 'ONLINE', lastSeen: new Date() },
+            data: { status: 'ONLINE', lastSeen: new Date(), ip: remoteIp || undefined },
         }).catch(() => { })
     }
 

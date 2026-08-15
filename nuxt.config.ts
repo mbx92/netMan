@@ -86,7 +86,7 @@ export default defineNuxtConfig({
       // Must match agentVersion in agent/cmd/netman-agent/main.go — bump both
       // together. Lets the agent detail page hide "Update Agent" once a
       // reconnected agent already reports this version.
-      agentLatestVersion: "0.3.1",
+      agentLatestVersion: "0.3.2",
     },
   },
 

@@ -49,12 +49,6 @@ if (-not (Get-Service -Name "tvnserver" -ErrorAction SilentlyContinue)) {
         "VALUE_OF_VNCPASSWORD1=$vncPassword"
     ) -Wait
 
-    # Belt-and-suspenders in case the MSI property names above don't match
-    # this exact TightVNC build: force loopback-only directly via registry.
-    New-Item -Path "HKLM:\\SOFTWARE\\TightVNC\\Server" -Force | Out-Null
-    Set-ItemProperty -Path "HKLM:\\SOFTWARE\\TightVNC\\Server" -Name "LoopbackOnly" -Value 1 -Type DWord
-    Restart-Service -Name "tvnserver" -ErrorAction SilentlyContinue
-
     Write-Host ""
     Write-Host "==============================================================="
     Write-Host " VNC password (save this now, it is not stored anywhere else):"
@@ -62,8 +56,18 @@ if (-not (Get-Service -Name "tvnserver" -ErrorAction SilentlyContinue)) {
     Write-Host "==============================================================="
     Write-Host ""
 } else {
-    Write-Host "A VNC server (tvnserver) is already installed, skipping VNC setup."
+    Write-Host "A VNC server (tvnserver) is already installed."
 }
+
+# Always re-verify these registry keys, even against an already-installed
+# TightVNC (e.g. one that predates the AllowLoopback fix) — LoopbackOnly
+# alone does NOT permit loopback connections; without AllowLoopback too, the
+# server rejects 127.0.0.1 with "loopback connections are not enabled" (the
+# two keys are independent, and only setting one was the original bug).
+New-Item -Path "HKLM:\\SOFTWARE\\TightVNC\\Server" -Force | Out-Null
+Set-ItemProperty -Path "HKLM:\\SOFTWARE\\TightVNC\\Server" -Name "LoopbackOnly" -Value 1 -Type DWord
+Set-ItemProperty -Path "HKLM:\\SOFTWARE\\TightVNC\\Server" -Name "AllowLoopback" -Value 1 -Type DWord
+Restart-Service -Name "tvnserver" -ErrorAction SilentlyContinue
 
 Write-Host "Installing netman-agent service..."
 sc.exe create netman-agent binPath= "\`"$exePath\`"" start= auto DisplayName= "netMan Agent" | Out-Null

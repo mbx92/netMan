@@ -4,8 +4,10 @@
 package telemetry
 
 import (
+	"os/exec"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -212,6 +214,22 @@ func collectTopProcesses(n int) []ProcessInfo {
 }
 
 func collectLoggedInUsers() []string {
+	if users := gopsutilLoggedInUsers(); len(users) > 0 {
+		return users
+	}
+	// gopsutil's host.Users() hand-parses /var/run/utmpx on macOS, but Apple's
+	// actual on-disk record format has drifted from what that parser expects
+	// — confirmed live: the file has real, current session data, gopsutil
+	// still returns zero entries. `who` is what the OS itself keeps correct,
+	// so fall back to shelling out to it. Windows doesn't have `who` (and
+	// gopsutil's own Windows implementation already works), so skip there.
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	return whoLoggedInUsers()
+}
+
+func gopsutilLoggedInUsers() []string {
 	users, err := host.Users()
 	if err != nil {
 		return nil
@@ -224,6 +242,28 @@ func collectLoggedInUsers() []string {
 		}
 		seen[u.User] = true
 		out = append(out, u.User)
+	}
+	return out
+}
+
+func whoLoggedInUsers() []string {
+	raw, err := exec.Command("who").Output()
+	if err != nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var out []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		name := fields[0]
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
 	}
 	return out
 }

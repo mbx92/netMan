@@ -67,8 +67,10 @@ export default defineEventHandler(async (event) => {
     })
 
     if (agent.deviceId) {
+        // device.name reflects the alias when one was set at "Add Agent" time —
+        // otherwise it's fine for it to track the machine's real hostname.
         await updateDeviceNetworkInfo(agent.deviceId, {
-            name: body.hostname,
+            name: agent.alias || body.hostname,
             hostname: body.hostname,
             ip: ip !== 'unknown' ? ip : undefined,
             mac: body.macAddress,

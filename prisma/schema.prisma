@@ -188,6 +188,10 @@ model Agent {
 
   platform     AgentPlatform
   hostname     String
+  // Operator-set friendly display name — survives regardless of what the
+  // machine reports as its hostname (which is often something auto-generated
+  // and meaningless, e.g. "DESKTOP-7F3K2A1"). Falls back to hostname when unset.
+  alias        String?
   osVersion    String?
   agentVersion String?
 

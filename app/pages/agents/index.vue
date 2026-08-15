@@ -54,7 +54,29 @@
                 </div>
               </td>
               <td>
-                <div class="font-medium">{{ agent.hostname }}</div>
+                <div v-if="renamingAgentId === agent.id" class="flex items-center gap-1" @click.stop>
+                  <input
+                    v-model="renameValue"
+                    type="text"
+                    autofocus
+                    class="input input-bordered input-xs w-40"
+                    placeholder="Alias"
+                    @keyup.enter="saveRename(agent)"
+                    @keyup.escape="cancelRename"
+                    @blur="saveRename(agent)"
+                    @focus="($event.target as HTMLInputElement).select()"
+                  />
+                </div>
+                <div v-else class="flex items-center gap-1.5 group">
+                  <div class="font-medium">{{ agent.alias || agent.hostname }}</div>
+                  <button
+                    class="btn btn-ghost btn-xs opacity-0 group-hover:opacity-100 shrink-0 px-1"
+                    @click.stop="startRename(agent)"
+                  >
+                    <Pencil class="w-3 h-3" :stroke-width="2" />
+                  </button>
+                </div>
+                <div v-if="agent.alias" class="text-xs text-base-content/60">{{ agent.hostname }}</div>
                 <div v-if="agent.agentVersion" class="text-xs text-base-content/60">v{{ agent.agentVersion }}</div>
               </td>
               <td>
@@ -204,7 +226,7 @@
 </template>
 
 <script setup lang="ts">
-import { Copy, Download, Eye, Laptop, Monitor, Plus, Server, Trash2 } from '@lucide/vue'
+import { Copy, Download, Eye, Laptop, Monitor, Pencil, Plus, Server, Trash2 } from '@lucide/vue'
 import type { AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const { data: agents, pending, refresh: loadAgents } = await useFetch<AgentSummary[]>('/api/agents')
@@ -213,7 +235,7 @@ interface Site { id: string; name: string }
 const { data: sitesData } = await useFetch<{ sites: Site[] }>('/api/sites')
 const sites = computed(() => sitesData.value?.sites || [])
 
-const { createAgent, deleteAgent, regenerateInstall } = useAgents()
+const { createAgent, deleteAgent, regenerateInstall, updateAgentAlias } = useAgents()
 
 const createModal = ref<HTMLDialogElement | null>(null)
 const installModal = ref<HTMLDialogElement | null>(null)
@@ -283,6 +305,27 @@ async function confirmDelete(agent: AgentSummary) {
 function copy(text: string | undefined) {
   if (!text) return
   navigator.clipboard.writeText(text)
+}
+
+const renamingAgentId = ref<string | null>(null)
+const renameValue = ref('')
+
+function startRename(agent: AgentSummary) {
+  renamingAgentId.value = agent.id
+  renameValue.value = agent.alias || agent.hostname
+}
+
+function cancelRename() {
+  renamingAgentId.value = null
+}
+
+async function saveRename(agent: AgentSummary) {
+  if (renamingAgentId.value !== agent.id) return // already saved or cancelled
+  renamingAgentId.value = null
+  const newAlias = renameValue.value.trim()
+  if (newAlias === (agent.alias || agent.hostname)) return
+  await updateAgentAlias(agent.id, newAlias || null)
+  await loadAgents()
 }
 
 function formatPercent(value: number | null): string {

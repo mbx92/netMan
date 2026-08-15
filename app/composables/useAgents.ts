@@ -18,6 +18,7 @@ export interface AgentSummary {
   deviceId: string | null
   platform: 'WINDOWS' | 'LINUX' | 'MACOS'
   hostname: string
+  alias: string | null
   osVersion: string | null
   agentVersion: string | null
   status: 'PENDING' | 'ONLINE' | 'OFFLINE'
@@ -57,5 +58,12 @@ export function useAgents() {
     })
   }
 
-  return { createAgent, deleteAgent, regenerateInstall }
+  async function updateAgentAlias(id: string, alias: string | null) {
+    return $fetch<{ success: boolean; alias: string | null }>(`/api/agents/${id}`, {
+      method: 'PUT',
+      body: { alias },
+    })
+  }
+
+  return { createAgent, deleteAgent, regenerateInstall, updateAgentAlias }
 }

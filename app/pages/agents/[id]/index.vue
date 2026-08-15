@@ -13,11 +13,29 @@
           </NuxtLink>
           <div>
             <div class="flex items-center gap-2">
-              <h1 class="type-headline">{{ agent.hostname }}</h1>
+              <input
+                v-if="renamingAgent"
+                v-model="renameValue"
+                type="text"
+                autofocus
+                class="input input-bordered input-sm w-64"
+                placeholder="Alias"
+                @keyup.enter="saveRename"
+                @keyup.escape="renamingAgent = false"
+                @blur="saveRename"
+                @focus="($event.target as HTMLInputElement).select()"
+              />
+              <template v-else>
+                <h1 class="type-headline">{{ agent.alias || agent.hostname }}</h1>
+                <button class="btn btn-ghost btn-xs btn-square" @click="startRename">
+                  <Pencil class="w-3.5 h-3.5" :stroke-width="2" />
+                </button>
+              </template>
               <span :class="['badge', getStatusBadgeClass(agent.status)]">{{ agent.status }}</span>
             </div>
             <p class="type-body-sm text-base-content/60 mt-1">
               {{ platformLabel(agent.platform) }}
+              <span v-if="agent.alias"> • {{ agent.hostname }}</span>
               <span v-if="agent.osVersion"> • {{ agent.osVersion }}</span>
               <span v-if="agent.agentVersion"> • agent v{{ agent.agentVersion }}</span>
             </p>
@@ -277,15 +295,15 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Copy, Cpu, Download, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, RefreshCw, Terminal, Trash2, X } from '@lucide/vue'
+import { ArrowLeft, Copy, Cpu, Download, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, RefreshCw, Terminal, Trash2, X } from '@lucide/vue'
 import type { AgentMetricsSnapshot, AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const route = useRoute()
 const id = route.params.id as string
 
-const { data: agent, pending } = await useFetch<AgentSummary>(`/api/agents/${id}`)
+const { data: agent, pending, refresh: refreshAgent } = await useFetch<AgentSummary>(`/api/agents/${id}`)
 
-const { deleteAgent, regenerateInstall } = useAgents()
+const { deleteAgent, regenerateInstall, updateAgentAlias } = useAgents()
 
 const installModal = ref<HTMLDialogElement | null>(null)
 const installCommands = ref<InstallCommands | null>(null)
@@ -323,6 +341,24 @@ async function showInstall() {
   installCommands.value = result.install
   tokenExpiresAt.value = result.tokenExpiresAt
   installModal.value?.showModal()
+}
+
+const renamingAgent = ref(false)
+const renameValue = ref('')
+
+function startRename() {
+  if (!agent.value) return
+  renameValue.value = agent.value.alias || agent.value.hostname
+  renamingAgent.value = true
+}
+
+async function saveRename() {
+  if (!renamingAgent.value || !agent.value) return
+  renamingAgent.value = false
+  const newAlias = renameValue.value.trim()
+  if (newAlias === (agent.value.alias || agent.value.hostname)) return
+  await updateAgentAlias(id, newAlias || null)
+  await refreshAgent()
 }
 
 async function confirmDelete() {

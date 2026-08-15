@@ -23,7 +23,8 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 400, statusMessage: 'platform must be WINDOWS, LINUX, or MACOS' })
     }
 
-    const name = body.name?.trim() || `Pending ${PLATFORM_LABEL[body.platform]} Agent`
+    const providedName = body.name?.trim() || undefined
+    const name = providedName || `Pending ${PLATFORM_LABEL[body.platform]} Agent`
 
     const device = await prisma.device.create({
         data: {
@@ -39,6 +40,10 @@ export default defineEventHandler(async (event) => {
         data: {
             platform: body.platform,
             hostname: name,
+            // Only persisted as an alias if the operator actually typed a name —
+            // an auto-generated "Pending X Agent" placeholder shouldn't survive
+            // as a permanent alias once the agent reports its real hostname.
+            alias: providedName,
             deviceId: device.id,
         },
     })

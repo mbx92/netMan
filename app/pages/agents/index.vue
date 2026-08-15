@@ -192,8 +192,8 @@ import type { AgentSummary, InstallCommands } from '~/composables/useAgents'
 const { data: agents, pending, refresh: loadAgents } = await useFetch<AgentSummary[]>('/api/agents')
 
 interface Site { id: string; name: string }
-const { data: sitesData } = await useFetch<Site[]>('/api/sites')
-const sites = computed(() => sitesData.value || [])
+const { data: sitesData } = await useFetch<{ sites: Site[] }>('/api/sites')
+const sites = computed(() => sitesData.value?.sites || [])
 
 const { createAgent, deleteAgent, regenerateInstall } = useAgents()
 

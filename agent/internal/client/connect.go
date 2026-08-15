@@ -1,9 +1,12 @@
 package client
 
 import (
+	"encoding/binary"
+	"encoding/json"
 	"log"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -33,8 +36,10 @@ type heartbeatMessage struct {
 }
 
 type inboundMessage struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
+	Type      string `json:"type"`
+	Message   string `json:"message"`
+	ChannelID uint32 `json:"channelId"`
+	Target    string `json:"target"`
 }
 
 // Run holds a persistent WebSocket connection to the server for as long as
@@ -80,8 +85,15 @@ func runOnce(cfg *config.Config, stop <-chan struct{}) (connectedAt time.Time, e
 	}
 	defer conn.Close()
 
-	if err := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey}); err != nil {
-		return time.Time{}, err
+	var writeMu sync.Mutex
+	tm := newTunnelManager(conn, &writeMu)
+	defer tm.closeAll()
+
+	writeMu.Lock()
+	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey})
+	writeMu.Unlock()
+	if helloErr != nil {
+		return time.Time{}, helloErr
 	}
 
 	// Wait for hello-ack before starting the heartbeat loop.
@@ -98,40 +110,70 @@ func runOnce(cfg *config.Config, stop <-chan struct{}) (connectedAt time.Time, e
 	log.Printf("[agent] connected (agentId=%s)", cfg.AgentID)
 
 	done := make(chan struct{})
-	go readLoop(conn, done)
+	go readLoop(conn, tm, done)
 
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 
 	// Send one heartbeat immediately so telemetry shows up right away.
-	sendHeartbeat(conn)
+	sendHeartbeat(conn, &writeMu)
 
 	for {
 		select {
 		case <-stop:
+			writeMu.Lock()
 			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			writeMu.Unlock()
 			return connectedAt, nil
 		case <-done:
 			return connectedAt, nil
 		case <-ticker.C:
-			if err := sendHeartbeat(conn); err != nil {
+			if err := sendHeartbeat(conn, &writeMu); err != nil {
 				return connectedAt, err
 			}
 		}
 	}
 }
 
-func readLoop(conn *websocket.Conn, done chan<- struct{}) {
+// readLoop is the connection's sole reader (gorilla/websocket requires this)
+// and dispatches every frame: binary = tunnel data, text = JSON control.
+func readLoop(conn *websocket.Conn, tm *tunnelManager, done chan<- struct{}) {
 	defer close(done)
 	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
+		msgType, data, err := conn.ReadMessage()
+		if err != nil {
 			return
+		}
+
+		switch msgType {
+		case websocket.BinaryMessage:
+			if len(data) < 4 {
+				continue
+			}
+			channelID := binary.BigEndian.Uint32(data[:4])
+			tm.data(channelID, data[4:])
+
+		case websocket.TextMessage:
+			var msg inboundMessage
+			if err := json.Unmarshal(data, &msg); err != nil {
+				continue
+			}
+			switch msg.Type {
+			case "tunnel-open":
+				tm.open(tunnelOpenControl{Type: msg.Type, ChannelID: msg.ChannelID, Target: msg.Target})
+			case "tunnel-close", "tunnel-error":
+				tm.remoteClose(msg.ChannelID)
+			case "error":
+				log.Printf("[agent] server error: %s", msg.Message)
+			}
 		}
 	}
 }
 
-func sendHeartbeat(conn *websocket.Conn) error {
+func sendHeartbeat(conn *websocket.Conn, writeMu *sync.Mutex) error {
 	snap := telemetry.Collect()
+	writeMu.Lock()
+	defer writeMu.Unlock()
 	return conn.WriteJSON(heartbeatMessage{
 		Type:        "heartbeat",
 		CPUPercent:  snap.CPUPercent,

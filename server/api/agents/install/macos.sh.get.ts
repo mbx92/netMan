@@ -35,6 +35,17 @@ echo "Enrolling..."
 mkdir -p /etc/netman-agent
 chmod 700 /etc/netman-agent
 
+# Remote Login (SSH) — needed so this agent's SSH tunnel has something to
+# dial on 127.0.0.1:22. Same "assume/enable, don't sandbox" treatment as the
+# Linux installer, which never touches sshd either: whatever LAN exposure
+# your normal SSH policy already implies applies here too.
+if [[ "$(systemsetup -getremotelogin 2>/dev/null)" != "Remote Login: On" ]]; then
+  echo "Enabling Remote Login (SSH)..."
+  systemsetup -setremotelogin on >/dev/null 2>&1 || echo "Warning: could not enable Remote Login automatically — enable it manually in System Settings > General > Sharing." >&2
+else
+  echo "Remote Login (SSH) is already on."
+fi
+
 PLIST_PATH="/Library/LaunchDaemons/com.netman.agent.plist"
 cat > "$PLIST_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

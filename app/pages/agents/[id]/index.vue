@@ -24,11 +24,17 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
+          <button v-if="agent.platform !== 'WINDOWS' && agent.status === 'ONLINE' && agent.deviceId" class="btn btn-success gap-2" @click="showSshModal = true">
+            <Terminal class="w-4 h-4" :stroke-width="2" /> SSH
+          </button>
+          <button v-if="agent.platform === 'WINDOWS' && agent.status === 'ONLINE' && agent.deviceId" class="btn btn-info gap-2" @click="showVncModal = true">
+            <Monitor class="w-4 h-4" :stroke-width="2" /> Remote Desktop
+          </button>
           <button v-if="agent.status !== 'ONLINE'" class="btn btn-outline gap-2" @click="showInstall">
             <Download class="w-4 h-4" :stroke-width="2" /> Install Command
           </button>
           <NuxtLink v-if="agent.deviceId" :to="`/devices/${agent.deviceId}`" class="btn btn-ghost gap-2">
-            <Monitor class="w-4 h-4" :stroke-width="2" /> View Device
+            <ExternalLink class="w-4 h-4" :stroke-width="2" /> View Device
           </NuxtLink>
           <button class="btn btn-ghost text-error gap-2" @click="confirmDelete">
             <Trash2 class="w-4 h-4" :stroke-width="2" /> Delete
@@ -81,15 +87,60 @@
         </dl>
       </div>
 
-      <!-- Remote access placeholder — wired up once tunnel support (Phase 2/3) ships -->
+      <!-- Remote Access -->
       <div class="bg-base-100 border border-base-300 rounded-none p-6">
         <h2 class="type-card-title mb-2">Remote Access</h2>
-        <p class="type-body-sm text-base-content/60">
-          {{ agent.platform === 'WINDOWS' ? 'Remote Desktop (RDP)-over-tunnel' : 'SSH-over-tunnel' }} is not enabled yet
-          for this agent build — telemetry/monitoring only in this release.
+        <p v-if="agent.status === 'ONLINE'" class="type-body-sm text-base-content/60">
+          {{ agent.platform === 'WINDOWS' ? 'VNC' : 'SSH' }} is relayed through this agent's own tunnel — no direct
+          network path to the machine is needed.
+        </p>
+        <p v-else class="type-body-sm text-base-content/60">
+          Agent must be online to open a remote session.
         </p>
       </div>
     </template>
+
+    <!-- SSH Terminal Modal (Linux agents) -->
+    <div v-if="showSshModal" class="modal modal-open" role="dialog" aria-modal="true">
+      <div class="modal-box max-w-4xl h-[80vh] p-0 flex flex-col rounded-none">
+        <div class="flex items-center justify-between p-4 border-b border-base-200">
+          <h3 class="type-card-title">SSH Terminal - {{ agent?.hostname }}</h3>
+          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="showSshModal = false">
+            <X class="w-5 h-5" :stroke-width="2" />
+          </button>
+        </div>
+        <div class="flex-1 overflow-hidden">
+          <SshTerminal
+            v-if="agent?.deviceId"
+            :device-id="agent.deviceId"
+            :device-name="agent.hostname"
+            device-ip="agent-tunnel"
+          />
+        </div>
+      </div>
+      <button type="button" class="modal-backdrop" aria-label="Close" @click="showSshModal = false" />
+    </div>
+
+    <!-- VNC Viewer Modal (Windows agents) -->
+    <div v-if="showVncModal" class="modal modal-open" role="dialog" aria-modal="true">
+      <div class="modal-box max-w-6xl h-[85vh] p-0 flex flex-col rounded-none">
+        <div class="flex items-center justify-between p-4 border-b border-base-200">
+          <h3 class="type-card-title">Remote Desktop - {{ agent?.hostname }}</h3>
+          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="showVncModal = false">
+            <X class="w-5 h-5" :stroke-width="2" />
+          </button>
+        </div>
+        <div class="flex-1 overflow-hidden">
+          <VncViewer
+            v-if="agent?.deviceId"
+            :device-id="agent.deviceId"
+            :device-name="agent.hostname"
+            device-ip="agent-tunnel"
+          />
+        </div>
+      </div>
+      <button type="button" class="modal-backdrop" aria-label="Close" @click="showVncModal = false" />
+    </div>
 
     <!-- Install Command Modal -->
     <dialog ref="installModal" class="modal">
@@ -132,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Copy, Cpu, Download, HardDrive, MemoryStick, Monitor, Trash2 } from '@lucide/vue'
+import { ArrowLeft, Copy, Cpu, Download, ExternalLink, HardDrive, MemoryStick, Monitor, Terminal, Trash2, X } from '@lucide/vue'
 import type { AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const route = useRoute()
@@ -145,6 +196,8 @@ const { deleteAgent, regenerateInstall } = useAgents()
 const installModal = ref<HTMLDialogElement | null>(null)
 const installCommands = ref<InstallCommands | null>(null)
 const tokenExpiresAt = ref<string | null>(null)
+const showSshModal = ref(false)
+const showVncModal = ref(false)
 
 async function showInstall() {
   const result = await regenerateInstall(id)

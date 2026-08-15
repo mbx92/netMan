@@ -6,6 +6,8 @@
  */
 import { Socket } from 'net'
 import { remoteManager } from '../../utils/remote-manager'
+import { agentManager } from '../../utils/agent-manager'
+import { openTunnel, type OpenTunnelResult } from '../../utils/agent-tunnel'
 import prisma from '../../utils/prisma'
 
 export default defineWebSocketHandler({
@@ -81,6 +83,7 @@ export default defineWebSocketHandler({
 
 // Store VNC sockets by peer ID
 const vncSockets = new Map<string, Socket>()
+const vncTunnels = new Map<string, OpenTunnelResult>()
 
 interface ConnectParams {
     host: string
@@ -105,16 +108,33 @@ async function startConnection(peer: any, params: ConnectParams) {
         return
     }
 
-    // Get device info
+    // Get device info, and — if it's backed by an online Windows agent rather
+    // than being directly reachable on the LAN — relay through its tunnel
+    // (dialing its own VNC server on 127.0.0.1:5900) instead of params.host/port.
     let deviceName = 'Unknown'
+    let connectHost = params.host
+    let connectPort = params.port
+    let viaAgentId: string | undefined
+
     try {
         const device = await prisma.device.findUnique({
             where: { id: params.deviceId },
-            select: { name: true }
+            select: { name: true, agent: { select: { id: true, platform: true } } },
         })
         if (device) deviceName = device.name
+
+        const agent = device?.agent
+        if (agent && agent.platform === 'WINDOWS' && agentManager.isOnline(agent.id)) {
+            const tunnel = await openTunnel(agent.id, 'vnc')
+            vncTunnels.set(peer.id, tunnel)
+            connectHost = '127.0.0.1'
+            connectPort = tunnel.localPort
+            viaAgentId = agent.id
+        }
     } catch (e) {
         console.error('[VNC] Failed to get device info:', e)
+        peer.send(JSON.stringify({ type: 'error', message: 'Failed to prepare connection' }))
+        return
     }
 
     const connectionId = `vnc-${peer.id}`
@@ -124,7 +144,7 @@ async function startConnection(peer: any, params: ConnectParams) {
     vncSockets.set(peer.id, socket)
 
     socket.on('connect', async () => {
-        console.log(`[VNC] TCP connected to ${params.host}:${params.port}`)
+        console.log(`[VNC] TCP connected to ${connectHost}:${connectPort}${viaAgentId ? ' (via agent tunnel)' : ''}`)
 
         // Disable timeout after successful connection
         socket.setTimeout(0)
@@ -137,6 +157,7 @@ async function startConnection(peer: any, params: ConnectParams) {
                     user: 'vnc-user',
                     targetId: params.deviceId,
                     protocol: 'VNC',
+                    viaAgentId,
                 }
             })
             sessionId = session.id
@@ -151,8 +172,8 @@ async function startConnection(peer: any, params: ConnectParams) {
             type: 'vnc',
             deviceId: params.deviceId,
             deviceName,
-            targetIp: params.host,
-            targetPort: params.port,
+            targetIp: connectHost,
+            targetPort: connectPort,
             user: 'vnc-user',
             startedAt: new Date(),
             sessionId
@@ -212,9 +233,9 @@ async function startConnection(peer: any, params: ConnectParams) {
     })
 
     // Connect with 30 second timeout
-    console.log(`[VNC] Connecting to ${params.host}:${params.port}...`)
+    console.log(`[VNC] Connecting to ${connectHost}:${connectPort}...`)
     socket.setTimeout(30000)
-    socket.connect(params.port, params.host)
+    socket.connect(connectPort, connectHost)
 }
 
 // Track client packets per connection
@@ -279,6 +300,13 @@ async function cleanup(peerId: string, connectionId: string, sessionId?: string)
 
     // Remove from connection manager
     remoteManager.remove(connectionId)
+
+    // Tear down the agent tunnel relay, if this session used one
+    const tunnel = vncTunnels.get(peerId)
+    if (tunnel) {
+        tunnel.close()
+        vncTunnels.delete(peerId)
+    }
 
     // Update session end time
     if (sessionId) {

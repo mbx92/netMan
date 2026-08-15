@@ -217,6 +217,7 @@ import {
   Users,
   Video,
   Server,
+  Bot,
   PanelLeftOpen,
   PanelLeftClose,
 } from '@lucide/vue'
@@ -270,6 +271,7 @@ const userInitials = computed(() => {
 const opsLinks = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/devices', label: 'Devices', icon: Monitor },
+  { to: '/agents', label: 'Agents', icon: Bot },
   { to: '/topology', label: 'Topology', icon: Waypoints },
   { to: '/ipam', label: 'IPAM', icon: Grid2x2 },
   { to: '/discovery', label: 'Discovery', icon: Radar },

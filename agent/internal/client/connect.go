@@ -30,6 +30,7 @@ type helloMessage struct {
 	AuthKey      string `json:"authKey"`
 	AgentVersion string `json:"agentVersion,omitempty"`
 	MACAddress   string `json:"macAddress,omitempty"`
+	LocalIP      string `json:"localIp,omitempty"`
 	VNCPassword  string `json:"vncPassword,omitempty"`
 }
 
@@ -133,7 +134,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 	defer tm.closeAll()
 
 	writeMu.Lock()
-	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey, AgentVersion: version, MACAddress: DetectMACAddress(), VNCPassword: ReadVNCPassword()})
+	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey, AgentVersion: version, MACAddress: DetectMACAddress(), LocalIP: DetectLocalIP(), VNCPassword: ReadVNCPassword()})
 	writeMu.Unlock()
 	if helloErr != nil {
 		return time.Time{}, helloErr

@@ -20,6 +20,7 @@ interface HelloMessage {
     agentId: string
     authKey: string
     macAddress?: string
+    localIp?: string
     vncPassword?: string
     agentVersion?: string
 }
@@ -133,7 +134,13 @@ async function handleHello(peer: any, msg: HelloMessage) {
         return
     }
 
-    const remoteIp = peer.request?.headers?.get?.('x-forwarded-for')?.split(',')[0]?.trim()
+    // Agent traffic arrives over the Cloudflare Tunnel, so the socket/header
+    // IP is always the client's public IP, never its LAN address. Prefer
+    // the LAN IP the agent detected and reported itself; fall back to the
+    // request-derived IP for agents running an older build that doesn't
+    // send localIp yet.
+    const remoteIp = msg.localIp
+        || peer.request?.headers?.get?.('x-forwarded-for')?.split(',')[0]?.trim()
         || peer.remoteAddress
         || null
 

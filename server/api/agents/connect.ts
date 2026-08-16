@@ -14,7 +14,13 @@ import { publishNotification } from '../../utils/notification-bus'
 import { closeAllForAgent, handleTunnelControl, handleTunnelData } from '../../utils/agent-tunnel'
 import { checkResourceThresholds, clearBreachStreaks } from '../../utils/agent-alerts'
 import { updateDeviceNetworkInfo } from '../../utils/device-network-info'
-import { resolveKillProcess } from '../../utils/agent-commands'
+import { resolveAgentCommand } from '../../utils/agent-commands'
+
+interface HardwareDisk { model?: string; vendor?: string }
+interface HardwareInfo {
+    disks?: HardwareDisk[]
+    memory?: { slotsTotal?: number; slotsUsed?: number; type?: string }
+}
 
 interface HelloMessage {
     type: 'hello'
@@ -24,6 +30,7 @@ interface HelloMessage {
     localIp?: string
     vncPassword?: string
     agentVersion?: string
+    hardware?: HardwareInfo
 }
 
 interface PartitionUsage { mountpoint: string; percent: number }
@@ -88,9 +95,10 @@ export default defineWebSocketHandler({
             case 'heartbeat':
                 await handleHeartbeat(peer, data as HeartbeatMessage)
                 break
-            case 'kill-process-result': {
+            case 'kill-process-result':
+            case 'power-action-result': {
                 const msg = data as { requestId: string; success: boolean; error?: string }
-                resolveKillProcess(msg.requestId, { success: !!msg.success, error: msg.error })
+                resolveAgentCommand(msg.requestId, { success: !!msg.success, error: msg.error })
                 break
             }
             case 'tunnel-ready':
@@ -160,6 +168,10 @@ async function handleHello(peer: any, msg: HelloMessage) {
             lastIp: remoteIp || undefined,
             agentVersion: msg.agentVersion || undefined,
             vncPassword: msg.vncPassword || undefined,
+            diskInfo: msg.hardware?.disks ?? undefined,
+            memorySlotsTotal: msg.hardware?.memory?.slotsTotal ?? undefined,
+            memorySlotsUsed: msg.hardware?.memory?.slotsUsed ?? undefined,
+            memoryType: msg.hardware?.memory?.type ?? undefined,
         },
     })
 

@@ -8,21 +8,20 @@
 import { randomUUID } from 'node:crypto'
 import { agentManager } from './agent-manager'
 
-export interface KillProcessResult {
+export interface CommandResult {
     success: boolean
     error?: string
 }
 
-interface PendingKill {
-    resolve: (result: KillProcessResult) => void
+interface PendingCommand {
+    resolve: (result: CommandResult) => void
     timeout: NodeJS.Timeout
 }
 
-const pendingKills = new Map<string, PendingKill>()
+const pending = new Map<string, PendingCommand>()
+const DEFAULT_TIMEOUT_MS = 10_000
 
-const KILL_TIMEOUT_MS = 10_000
-
-export function killProcess(agentId: string, pid: number): Promise<KillProcessResult> {
+function sendCommand(agentId: string, message: Record<string, unknown>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<CommandResult> {
     const connected = agentManager.get(agentId)
     if (!connected) {
         return Promise.reject(new Error('Agent is not connected'))
@@ -32,27 +31,37 @@ export function killProcess(agentId: string, pid: number): Promise<KillProcessRe
 
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-            pendingKills.delete(requestId)
+            pending.delete(requestId)
             reject(new Error('Agent did not respond in time'))
-        }, KILL_TIMEOUT_MS)
+        }, timeoutMs)
 
-        pendingKills.set(requestId, { resolve, timeout })
+        pending.set(requestId, { resolve, timeout })
 
         try {
-            connected.peer.send(JSON.stringify({ type: 'kill-process', requestId, pid }))
+            connected.peer.send(JSON.stringify({ ...message, requestId }))
         } catch (err) {
             clearTimeout(timeout)
-            pendingKills.delete(requestId)
-            reject(err instanceof Error ? err : new Error('Failed to send kill-process command'))
+            pending.delete(requestId)
+            reject(err instanceof Error ? err : new Error('Failed to send command'))
         }
     })
 }
 
-/** Called by connect.ts's message handler when a kill-process-result frame arrives. */
-export function resolveKillProcess(requestId: string, result: KillProcessResult): void {
-    const entry = pendingKills.get(requestId)
+export function killProcess(agentId: string, pid: number): Promise<CommandResult> {
+    return sendCommand(agentId, { type: 'kill-process', pid })
+}
+
+export type PowerAction = 'restart' | 'shutdown'
+
+export function sendPowerAction(agentId: string, action: PowerAction): Promise<CommandResult> {
+    return sendCommand(agentId, { type: 'power-action', action })
+}
+
+/** Called by connect.ts's message handler when a *-result control frame arrives. */
+export function resolveAgentCommand(requestId: string, result: CommandResult): void {
+    const entry = pending.get(requestId)
     if (!entry) return
     clearTimeout(entry.timeout)
-    pendingKills.delete(requestId)
+    pending.delete(requestId)
     entry.resolve(result)
 }

@@ -48,6 +48,26 @@
           <button v-if="agent.platform === 'WINDOWS' && agent.status === 'ONLINE' && agent.deviceId" class="btn btn-info gap-2" @click="showVncModal = true">
             <Monitor class="w-4 h-4" :stroke-width="2" /> Remote Desktop
           </button>
+          <button
+            v-if="agent.status === 'ONLINE'"
+            class="btn btn-outline btn-warning gap-2"
+            :disabled="powerActionPending !== null"
+            @click="confirmPowerAction('restart')"
+          >
+            <span v-if="powerActionPending === 'restart'" class="loading loading-spinner loading-sm"></span>
+            <RotateCcw v-else class="w-4 h-4" :stroke-width="2" />
+            Restart
+          </button>
+          <button
+            v-if="agent.status === 'ONLINE'"
+            class="btn btn-outline btn-error gap-2"
+            :disabled="powerActionPending !== null"
+            @click="confirmPowerAction('shutdown')"
+          >
+            <span v-if="powerActionPending === 'shutdown'" class="loading loading-spinner loading-sm"></span>
+            <Power v-else class="w-4 h-4" :stroke-width="2" />
+            Shut Down
+          </button>
           <button v-if="agent.status !== 'PENDING' && !isUpToDate" class="btn btn-outline gap-2" @click="showUpdateModal = true">
             <RefreshCw class="w-4 h-4" :stroke-width="2" /> Update Agent
           </button>
@@ -115,6 +135,23 @@
           <div>
             <dt class="text-base-content/60">Linked device</dt>
             <dd class="font-medium">{{ agent.device?.name || '-' }}</dd>
+          </div>
+          <div v-if="agent.diskInfo?.length">
+            <dt class="text-base-content/60">Disk drive{{ agent.diskInfo.length > 1 ? 's' : '' }}</dt>
+            <dd class="font-medium">
+              <div v-for="(disk, i) in agent.diskInfo" :key="i">
+                {{ [disk.vendor, disk.model].filter(Boolean).join(' ') || 'Unknown' }}
+              </div>
+            </dd>
+          </div>
+          <div v-if="agent.memoryType || agent.memorySlotsTotal">
+            <dt class="text-base-content/60">Memory</dt>
+            <dd class="font-medium">
+              {{ agent.memoryType || 'Unknown type' }}
+              <span v-if="agent.memorySlotsTotal" class="text-base-content/60">
+                · {{ agent.memorySlotsUsed ?? '?' }}/{{ agent.memorySlotsTotal }} slots used
+              </span>
+            </dd>
           </div>
           <div v-if="agent.vncPassword">
             <dt class="text-base-content/60">VNC Password</dt>
@@ -320,7 +357,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Copy, Cpu, Download, Eye, EyeOff, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, RefreshCw, Terminal, Trash2, X, XCircle } from '@lucide/vue'
+import { ArrowLeft, Copy, Cpu, Download, Eye, EyeOff, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, Power, RefreshCw, RotateCcw, Terminal, Trash2, X, XCircle } from '@lucide/vue'
 import type { AgentMetricsSnapshot, AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const route = useRoute()
@@ -328,7 +365,7 @@ const id = route.params.id as string
 
 const { data: agent, pending, refresh: refreshAgent } = await useFetch<AgentSummary>(`/api/agents/${id}`)
 
-const { deleteAgent, regenerateInstall, updateAgentAlias, killProcess } = useAgents()
+const { deleteAgent, regenerateInstall, updateAgentAlias, killProcess, sendPowerAction } = useAgents()
 
 const installModal = ref<HTMLDialogElement | null>(null)
 const installCommands = ref<InstallCommands | null>(null)
@@ -407,6 +444,31 @@ function copy(text: string | undefined) {
 
 function formatPercent(value: number | null | undefined): string {
   return value == null ? '-' : `${Math.round(value)}%`
+}
+
+const powerActionPending = ref<'restart' | 'shutdown' | null>(null)
+
+async function confirmPowerAction(action: 'restart' | 'shutdown') {
+  if (!agent.value) return
+  const label = action === 'restart' ? 'Restart' : 'Shut Down'
+  const ok = await confirmDialog({
+    title: `${label} Machine`,
+    message: `${label} "${agent.value.alias || agent.value.hostname}" now? Any unsaved work on that machine will be lost, and it will drop offline until it comes back up.`,
+    confirmLabel: label,
+    variant: 'danger',
+  })
+  if (!ok) return
+
+  powerActionPending.value = action
+  try {
+    await sendPowerAction(id, action)
+    alertDialog(`${label} command sent — the machine will go offline shortly.`)
+    await refreshAgent()
+  } catch (err: any) {
+    alertDialog(err?.data?.statusMessage || err?.message || `Failed to ${action} the machine`)
+  } finally {
+    powerActionPending.value = null
+  }
 }
 
 const killingPid = ref<number | null>(null)

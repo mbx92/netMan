@@ -54,20 +54,6 @@
       background: #f87171;
     }
 
-    #status-bar button {
-      background: #dc2626;
-      color: white;
-      border: none;
-      padding: 4px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-    }
-
-    #status-bar button:hover {
-      background: #b91c1c;
-    }
-
     #screen {
       position: fixed;
       top: 36px;
@@ -114,7 +100,6 @@
       <div id="status-dot" class="dot"></div>
       <span id="status-text">Initializing...</span>
     </div>
-    <button id="disconnect-btn" onclick="doDisconnect()">Disconnect</button>
   </div>
   <div id="screen">
     <div class="loading" id="loading">
@@ -237,16 +222,6 @@
         loadingText.textContent = `Error: ${err.message}`;
       }
     }
-
-    window.doDisconnect = function () {
-      if (rfb) {
-        rfb.disconnect();
-        rfb = null;
-      }
-      window.close();
-      // If can't close, redirect
-      window.location.href = '/';
-    };
 
     // Start connection
     connect();

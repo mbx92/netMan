@@ -117,7 +117,7 @@
     <button id="disconnect-btn" onclick="doDisconnect()">Disconnect</button>
   </div>
   <div id="screen">
-    <div class="loading">
+    <div class="loading" id="loading">
       <div class="spinner"></div>
       <div id="loading-text">Connecting...</div>
     </div>
@@ -137,8 +137,26 @@
     const statusText = document.getElementById('status-text');
     const screen = document.getElementById('screen');
     const loadingText = document.getElementById('loading-text');
+    const loading = document.getElementById('loading');
 
     let rfb = null;
+    // securityfailure is always followed by disconnect; keep the specific auth
+    // reason on screen instead of letting the generic message clobber it.
+    let hadTerminalError = false;
+
+    // #screen is a centered flex container that noVNC appends its canvas to.
+    // The overlay is a sibling of that canvas, not a layer on top of it, so it
+    // has to be taken out of the layout on connect - otherwise the spinner just
+    // sits next to the remote desktop, still spinning, which reads as "never
+    // finished connecting" even though the session is live.
+    function hideOverlay() {
+      loading.style.display = 'none';
+    }
+
+    function showOverlay(text) {
+      loadingText.textContent = text;
+      loading.style.display = '';
+    }
 
     function setStatus(text, state = 'connecting') {
       statusText.textContent = text;
@@ -178,14 +196,17 @@
         rfb.addEventListener('connect', () => {
           setStatus(`Connected to ${host}:${port}`, 'connected');
           document.title = `VNC - ${host}`;
+          hideOverlay();
         });
 
         rfb.addEventListener('disconnect', (e) => {
           const clean = e.detail.clean;
           if (clean) {
             setStatus('Disconnected', 'error');
+            if (!hadTerminalError) showOverlay('Disconnected');
           } else {
             setStatus('Connection lost', 'error');
+            if (!hadTerminalError) showOverlay('Connection lost');
           }
         });
 
@@ -200,11 +221,14 @@
 
         rfb.addEventListener('securityfailure', (e) => {
           setStatus(`Auth failed: ${e.detail.reason}`, 'error');
+          hadTerminalError = true;
+          showOverlay(`Auth failed: ${e.detail.reason}`);
         });
 
         rfb.addEventListener('desktopname', (e) => {
           document.title = `VNC - ${e.detail.name}`;
           setStatus(`Connected: ${e.detail.name}`, 'connected');
+          hideOverlay();
         });
 
       } catch (err) {

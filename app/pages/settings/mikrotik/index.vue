@@ -107,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { Eye, Pencil, Plus, RefreshCw, Trash2 } from '@lucide/vue'
+import { CheckCircle2, Eye, Pencil, Plus, RefreshCw, Trash2 } from '@lucide/vue'
 
 interface Site {
   id: string

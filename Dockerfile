@@ -1,3 +1,15 @@
+# Build stage - Agent binaries (cross-compiled; served by
+# server/api/agents/download/[platform].get.ts for the install scripts)
+FROM golang:1.22-alpine AS agent-builder
+WORKDIR /agent
+COPY agent/go.mod agent/go.sum ./
+RUN go mod download
+COPY agent/ ./
+RUN mkdir -p /agent/dist \
+    && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /agent/dist/netman-agent-windows.exe ./cmd/netman-agent \
+    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /agent/dist/netman-agent-linux ./cmd/netman-agent \
+    && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /agent/dist/netman-agent-macos ./cmd/netman-agent
+
 # Build stage - Dependencies
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -44,6 +56,7 @@ COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/server ./server
+COPY --from=agent-builder /agent/dist ./agent/dist
 COPY package*.json ./
 COPY packages ./packages
 COPY docker-entrypoint.sh ./

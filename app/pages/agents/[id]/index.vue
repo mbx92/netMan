@@ -176,6 +176,7 @@
                 <th>PID</th>
                 <th>CPU</th>
                 <th>Memory</th>
+                <th v-if="agent.status === 'ONLINE'"></th>
               </tr>
             </thead>
             <tbody>
@@ -184,6 +185,17 @@
                 <td class="text-base-content/60">{{ proc.pid }}</td>
                 <td>{{ formatPercent(proc.cpuPercent) }}</td>
                 <td>{{ formatPercent(proc.memPercent) }}</td>
+                <td v-if="agent.status === 'ONLINE'" class="text-right">
+                  <button
+                    class="btn btn-ghost btn-xs text-error gap-1"
+                    :disabled="killingPid === proc.pid"
+                    @click="confirmKillProcess(proc.pid, proc.name)"
+                  >
+                    <span v-if="killingPid === proc.pid" class="loading loading-spinner loading-xs"></span>
+                    <XCircle v-else class="w-3.5 h-3.5" :stroke-width="2" />
+                    Kill
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -308,7 +320,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Copy, Cpu, Download, Eye, EyeOff, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, RefreshCw, Terminal, Trash2, X } from '@lucide/vue'
+import { ArrowLeft, Copy, Cpu, Download, Eye, EyeOff, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, RefreshCw, Terminal, Trash2, X, XCircle } from '@lucide/vue'
 import type { AgentMetricsSnapshot, AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const route = useRoute()
@@ -316,7 +328,7 @@ const id = route.params.id as string
 
 const { data: agent, pending, refresh: refreshAgent } = await useFetch<AgentSummary>(`/api/agents/${id}`)
 
-const { deleteAgent, regenerateInstall, updateAgentAlias } = useAgents()
+const { deleteAgent, regenerateInstall, updateAgentAlias, killProcess } = useAgents()
 
 const installModal = ref<HTMLDialogElement | null>(null)
 const installCommands = ref<InstallCommands | null>(null)
@@ -395,6 +407,28 @@ function copy(text: string | undefined) {
 
 function formatPercent(value: number | null | undefined): string {
   return value == null ? '-' : `${Math.round(value)}%`
+}
+
+const killingPid = ref<number | null>(null)
+
+async function confirmKillProcess(pid: number, name: string) {
+  const ok = await confirmDialog({
+    title: 'Kill Process',
+    message: `Kill "${name}" (PID ${pid}) on ${agent.value?.alias || agent.value?.hostname}? This cannot be undone.`,
+    confirmLabel: 'Kill',
+    variant: 'danger',
+  })
+  if (!ok) return
+
+  killingPid.value = pid
+  try {
+    await killProcess(id, pid, name)
+    await refreshAgent()
+  } catch (err: any) {
+    alertDialog(err?.data?.statusMessage || err?.message || 'Failed to kill process')
+  } finally {
+    killingPid.value = null
+  }
 }
 
 function formatRate(bytesPerSec: number | null | undefined): string {

@@ -64,6 +64,8 @@ type inboundMessage struct {
 	Message   string `json:"message"`
 	ChannelID uint32 `json:"channelId"`
 	Target    string `json:"target"`
+	RequestID string `json:"requestId"`
+	PID       int32  `json:"pid"`
 }
 
 // Run holds a persistent WebSocket connection to the server for as long as
@@ -154,7 +156,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 	log.Printf("[agent] connected (agentId=%s)", cfg.AgentID)
 
 	done := make(chan struct{})
-	go readLoop(conn, tm, done)
+	go readLoop(conn, tm, &writeMu, done)
 
 	ticker := time.NewTicker(heartbeatInterval())
 	defer ticker.Stop()
@@ -181,7 +183,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 
 // readLoop is the connection's sole reader (gorilla/websocket requires this)
 // and dispatches every frame: binary = tunnel data, text = JSON control.
-func readLoop(conn *websocket.Conn, tm *tunnelManager, done chan<- struct{}) {
+func readLoop(conn *websocket.Conn, tm *tunnelManager, writeMu *sync.Mutex, done chan<- struct{}) {
 	defer close(done)
 	for {
 		msgType, data, err := conn.ReadMessage()
@@ -207,6 +209,11 @@ func readLoop(conn *websocket.Conn, tm *tunnelManager, done chan<- struct{}) {
 				tm.open(tunnelOpenControl{Type: msg.Type, ChannelID: msg.ChannelID, Target: msg.Target})
 			case "tunnel-close", "tunnel-error":
 				tm.remoteClose(msg.ChannelID)
+			case "kill-process":
+				// Runs off the read goroutine so a slow/hung kill (e.g. a
+				// process wedged in uninterruptible I/O) can't stall
+				// heartbeats or tunnel data.
+				go handleKillProcess(conn, writeMu, msg.RequestID, msg.PID)
 			case "error":
 				log.Printf("[agent] server error: %s", msg.Message)
 			}

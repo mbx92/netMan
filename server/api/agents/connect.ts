@@ -14,6 +14,7 @@ import { publishNotification } from '../../utils/notification-bus'
 import { closeAllForAgent, handleTunnelControl, handleTunnelData } from '../../utils/agent-tunnel'
 import { checkResourceThresholds, clearBreachStreaks } from '../../utils/agent-alerts'
 import { updateDeviceNetworkInfo } from '../../utils/device-network-info'
+import { resolveKillProcess } from '../../utils/agent-commands'
 
 interface HelloMessage {
     type: 'hello'
@@ -87,6 +88,11 @@ export default defineWebSocketHandler({
             case 'heartbeat':
                 await handleHeartbeat(peer, data as HeartbeatMessage)
                 break
+            case 'kill-process-result': {
+                const msg = data as { requestId: string; success: boolean; error?: string }
+                resolveKillProcess(msg.requestId, { success: !!msg.success, error: msg.error })
+                break
+            }
             case 'tunnel-ready':
             case 'tunnel-error':
             case 'tunnel-close': {

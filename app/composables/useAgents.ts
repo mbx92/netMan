@@ -67,5 +67,12 @@ export function useAgents() {
     })
   }
 
-  return { createAgent, deleteAgent, regenerateInstall, updateAgentAlias }
+  async function killProcess(id: string, pid: number, name?: string) {
+    return $fetch<{ success: boolean }>(`/api/agents/${id}/kill-process`, {
+      method: 'POST',
+      body: { pid, name },
+    })
+  }
+
+  return { createAgent, deleteAgent, regenerateInstall, updateAgentAlias, killProcess }
 }

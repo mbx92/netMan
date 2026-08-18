@@ -42,7 +42,10 @@ export default defineEventHandler(async (event) => {
 
     const portsWithStatus = device.ports.map((port) => ({
         ...port,
-        pingStatus: agentReachability(port.connectedDevice?.agent),
+        pingStatus: agentReachability(
+            port.connectedDevice?.agent,
+            port.connectedDevice?.status,
+        ),
     }))
 
     return {

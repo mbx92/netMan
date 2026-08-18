@@ -1,5 +1,5 @@
 import prisma, { withPrismaRetry } from '../../utils/prisma'
-import { deviceStatusWithAgent } from '../../utils/device-presence'
+import { loadConfigManagedHosts, resolveDeviceStatus } from '../../utils/device-presence'
 
 interface DeviceStatus {
     id: string
@@ -32,16 +32,21 @@ export default defineEventHandler((event) => {
         if (!isConnected) return
 
         try {
-            const devices = await withPrismaRetry(() =>
-                prisma.device.findMany({
-                    select: {
-                        id: true,
-                        status: true,
-                        lastSeen: true,
-                        agent: { select: { id: true, status: true } },
-                    },
-                }),
-            )
+            const [devices, configHosts] = await Promise.all([
+                withPrismaRetry(() =>
+                    prisma.device.findMany({
+                        select: {
+                            id: true,
+                            ip: true,
+                            isApiActive: true,
+                            status: true,
+                            lastSeen: true,
+                            agent: { select: { id: true, status: true } },
+                        },
+                    }),
+                ),
+                loadConfigManagedHosts(),
+            ])
 
             const now = new Date()
             const results: DeviceStatus[] = []
@@ -49,8 +54,14 @@ export default defineEventHandler((event) => {
             for (const device of devices) {
                 if (!isConnected) break
 
-                const status = deviceStatusWithAgent(device.status, device.agent)
-                const lastSeen = status === 'ONLINE' ? now : device.lastSeen
+                const status = resolveDeviceStatus({
+                    status: device.status,
+                    agent: device.agent,
+                    isApiActive: device.isApiActive,
+                    ip: device.ip,
+                    configHosts,
+                })
+                const lastSeen = status === 'ONLINE' && device.agent ? now : device.lastSeen
 
                 if (device.agent && status !== device.status) {
                     await prisma.device.update({

@@ -70,7 +70,10 @@ export default defineEventHandler((event) => {
                 connectedDeviceId: port.connectedDeviceId,
                 connectedDeviceName: port.connectedDevice?.name,
                 connectedDeviceIp: port.connectedDevice?.ip,
-                pingStatus: agentReachability(port.connectedDevice?.agent),
+                pingStatus: agentReachability(
+                    port.connectedDevice?.agent,
+                    port.connectedDevice?.status,
+                ),
             }))
 
             if (!isConnected) return

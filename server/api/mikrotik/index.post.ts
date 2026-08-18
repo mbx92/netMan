@@ -152,7 +152,7 @@ export default defineEventHandler(async (event) => {
             hostname: routerInfo.identity || null,
             portCount: routerInfo.portCount || null,
             siteId: body.siteId || null,
-            status: 'UNKNOWN',
+            status: 'ONLINE',
             isManaged: true,
             notes: notes || null,
             // Store MikroTik API credentials in Device table too

@@ -1,5 +1,5 @@
 import prisma from '../../utils/prisma'
-import { deviceStatusWithAgent } from '../../utils/device-presence'
+import { loadConfigManagedHosts, resolveDeviceStatus } from '../../utils/device-presence'
 
 // GET /api/devices/[id] - Get single device with full details
 export default defineEventHandler(async (event) => {
@@ -42,8 +42,16 @@ export default defineEventHandler(async (event) => {
         })
     }
 
+    const configHosts = await loadConfigManagedHosts()
+
     return {
         ...device,
-        status: deviceStatusWithAgent(device.status, device.agent),
+        status: resolveDeviceStatus({
+            status: device.status,
+            agent: device.agent,
+            isApiActive: device.isApiActive,
+            ip: device.ip,
+            configHosts,
+        }),
     }
 })

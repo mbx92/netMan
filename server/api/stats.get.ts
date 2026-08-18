@@ -1,5 +1,5 @@
 import prisma, { withPrismaRetry } from '../utils/prisma'
-import { deviceStatusWithAgent } from '../utils/device-presence'
+import { loadConfigManagedHosts, resolveDeviceStatus } from '../utils/device-presence'
 
 const STALE_MS = 24 * 60 * 60 * 1000
 const IPAM_HOT_PERCENT = 80
@@ -87,6 +87,7 @@ export default defineEventHandler(async (event) => {
     return withPrismaRetry(async () => {
         const [
             devicesForPresence,
+            configHosts,
             typeCounts,
             deviceTypes,
             totalDevices,
@@ -111,8 +112,10 @@ export default defineEventHandler(async (event) => {
                     lastSeen: true,
                     status: true,
                     agent: { select: { id: true, status: true } },
+                    isApiActive: true,
                 },
             }),
+            loadConfigManagedHosts(),
             prisma.device.groupBy({
                 by: ['typeCode'],
                 where: whereSite,
@@ -187,11 +190,23 @@ export default defineEventHandler(async (event) => {
         const typeMeta = Object.fromEntries(deviceTypes.map(t => [t.code, t]))
         const byStatus: Record<string, number> = {}
         for (const device of devicesForPresence) {
-            const status = deviceStatusWithAgent(device.status, device.agent)
+            const status = resolveDeviceStatus({
+                status: device.status,
+                agent: device.agent,
+                isApiActive: device.isApiActive,
+                ip: device.ip,
+                configHosts,
+            })
             byStatus[status] = (byStatus[status] || 0) + 1
         }
         const offlineDevices = devicesForPresence
-            .filter(d => deviceStatusWithAgent(d.status, d.agent) === 'OFFLINE')
+            .filter(d => resolveDeviceStatus({
+                status: d.status,
+                agent: d.agent,
+                isApiActive: d.isApiActive,
+                ip: d.ip,
+                configHosts,
+            }) === 'OFFLINE')
             .sort((a, b) => (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0))
             .slice(0, 8)
         const byType = typeCounts

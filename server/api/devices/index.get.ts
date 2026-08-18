@@ -1,5 +1,5 @@
 import prisma from '../../utils/prisma'
-import { deviceStatusWithAgent } from '../../utils/device-presence'
+import { loadConfigManagedHosts, resolveDeviceStatus } from '../../utils/device-presence'
 
 // GET /api/devices - List all devices with optional filters
 export default defineEventHandler(async (event) => {
@@ -26,25 +26,34 @@ export default defineEventHandler(async (event) => {
         ]
     }
 
-    const devices = await prisma.device.findMany({
-        where,
-        orderBy: [
-            { status: 'asc' },
-            { name: 'asc' },
-        ],
-        include: {
-            deviceType: true,
-            site: { select: { id: true, name: true } },
-            agent: { select: { id: true, status: true } },
-            _count: {
-                select: { ports: true, sessions: true }
+    const [devices, configHosts] = await Promise.all([
+        prisma.device.findMany({
+            where,
+            orderBy: [
+                { status: 'asc' },
+                { name: 'asc' },
+            ],
+            include: {
+                deviceType: true,
+                site: { select: { id: true, name: true } },
+                agent: { select: { id: true, status: true } },
+                _count: {
+                    select: { ports: true, sessions: true }
+                }
             }
-        }
-    })
+        }),
+        loadConfigManagedHosts(),
+    ])
 
     const withPresence = devices.map((device) => ({
         ...device,
-        status: deviceStatusWithAgent(device.status, device.agent),
+        status: resolveDeviceStatus({
+            status: device.status,
+            agent: device.agent,
+            isApiActive: device.isApiActive,
+            ip: device.ip,
+            configHosts,
+        }),
     }))
 
     const statusFilter = typeof query.status === 'string' ? query.status : ''

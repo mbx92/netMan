@@ -253,8 +253,12 @@
       <div class="modal-box max-w-2xl">
         <h3 class="font-bold text-lg mb-1">Update Agent</h3>
         <p class="type-body-sm text-base-content/60 mb-4">
-          Re-downloads the latest agent binary and restarts the service. No token needed —
-          this machine's enrollment credentials are untouched, it just picks up new code.
+          Agents v0.6.0 and later check this server automatically. On Windows a
+          tray notification appears; the user clicks Update and the service
+          replaces the binary silently (credentials and VNC password stay put).
+          Linux and macOS apply the same update without a prompt. Use the
+          command below for agents still on an older build — after that, they
+          self-update.
         </p>
         <div class="flex items-start gap-2">
           <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ updateCommand }}</pre>

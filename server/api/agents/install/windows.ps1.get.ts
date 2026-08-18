@@ -70,6 +70,15 @@ sc.exe description netman-agent "netMan monitoring & remote-access agent" | Out-
 sc.exe failure netman-agent reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Null
 Start-Service netman-agent
 
+Write-Host "Installing tray helper for update notifications..."
+$vbsPath = Join-Path $installDir "start-tray.vbs"
+Set-Content -Path $vbsPath -Value @"
+Set sh = CreateObject("Wscript.Shell")
+sh.Run """$exePath"" -tray", 0, False
+"@
+reg.exe add "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v NetManAgentTray /t REG_SZ /d "wscript.exe //nologo `"$vbsPath`"" /f | Out-Null
+Start-Process -FilePath "wscript.exe" -ArgumentList "//nologo `"$vbsPath`"" -ErrorAction SilentlyContinue
+
 Write-Host "netMan agent installed and running. VNC password is visible on the agent's page in netMan."
 `
 })

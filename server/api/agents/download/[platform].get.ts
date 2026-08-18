@@ -7,24 +7,17 @@
  * `netman-agent-macos`.
  */
 import { createReadStream, existsSync } from 'node:fs'
-import { join } from 'node:path'
-
-const FILENAME_BY_PLATFORM: Record<string, string> = {
-    windows: 'netman-agent-windows.exe',
-    linux: 'netman-agent-linux',
-    macos: 'netman-agent-macos',
-}
+import { AGENT_BINARY_FILES, agentBinaryPath, getAgentLatestForPlatform, isAgentDownloadPlatform } from '../../../utils/agent-release'
 
 export default defineEventHandler((event) => {
     const platform = getRouterParam(event, 'platform')
-    const filename = platform ? FILENAME_BY_PLATFORM[platform] : undefined
 
-    if (!filename) {
+    if (!platform || !isAgentDownloadPlatform(platform)) {
         throw createError({ statusCode: 400, statusMessage: 'platform must be "windows", "linux", or "macos"' })
     }
 
-    const dir = process.env.AGENT_BINARY_DIR || join(process.cwd(), 'agent', 'dist')
-    const filePath = join(dir, filename)
+    const filename = AGENT_BINARY_FILES[platform]
+    const filePath = agentBinaryPath(platform)
 
     if (!existsSync(filePath)) {
         throw createError({
@@ -33,7 +26,11 @@ export default defineEventHandler((event) => {
         })
     }
 
+    const latest = getAgentLatestForPlatform(platform)
     setResponseHeader(event, 'Content-Type', 'application/octet-stream')
     setResponseHeader(event, 'Content-Disposition', `attachment; filename="${filename}"`)
+    if (latest.sha256) {
+        setResponseHeader(event, 'X-Checksum-SHA256', latest.sha256)
+    }
     return sendStream(event, createReadStream(filePath))
 })

@@ -14,6 +14,7 @@ import { publishNotification } from '../../utils/notification-bus'
 import { closeAllForAgent, handleTunnelControl, handleTunnelData } from '../../utils/agent-tunnel'
 import { checkResourceThresholds, clearBreachStreaks } from '../../utils/agent-alerts'
 import { updateDeviceNetworkInfo } from '../../utils/device-network-info'
+import { agentDownloadPlatformFromDb, getAgentLatestForPlatform } from '../../utils/agent-release'
 
 interface HelloMessage {
     type: 'hello'
@@ -181,7 +182,9 @@ async function handleHello(peer: any, msg: HelloMessage) {
         publishNotification(note)
     }
 
-    peer.send(JSON.stringify({ type: 'hello-ack', agentId: agent.id }))
+    const downloadPlatform = agentDownloadPlatformFromDb(agent.platform)
+    const latest = downloadPlatform ? getAgentLatestForPlatform(downloadPlatform) : undefined
+    peer.send(JSON.stringify({ type: 'hello-ack', agentId: agent.id, latest }))
 }
 
 async function handleHeartbeat(peer: any, msg: HeartbeatMessage) {

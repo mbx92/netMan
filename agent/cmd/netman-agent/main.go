@@ -9,10 +9,15 @@
 //	  install command, persists the resulting credentials, then exits.
 //	  Run this once before installing/starting the service.
 //
+//	netman-agent -tray
+//	  Windows only: user-session tray icon for update notifications. Started
+//	  at logon via HKLM Run; talks to the service over a named pipe.
+//
 //	netman-agent
 //	  Normal run mode: loads the saved config and holds a persistent
 //	  connection to the server, sending a heartbeat every 30s. This is what
-//	  the Windows Service / systemd unit invokes.
+//	  the Windows Service / systemd unit invokes. Also polls the server for
+//	  a newer binary (silent apply on Linux/macOS; tray confirmation on Windows).
 package main
 
 import (
@@ -27,10 +32,12 @@ import (
 	"github.com/netman/agent/internal/client"
 	"github.com/netman/agent/internal/config"
 	"github.com/netman/agent/internal/service"
+	"github.com/netman/agent/internal/tray"
+	"github.com/netman/agent/internal/traylaunch"
 )
 
 const (
-	agentVersion = "0.5.0"
+	agentVersion = "0.6.0"
 	serviceName  = "netman-agent"
 )
 
@@ -39,10 +46,18 @@ func main() {
 	token := flag.String("token", "", "One-time enrollment token (required with -enroll)")
 	server := flag.String("server", "", "netMan server base URL, e.g. https://netman.example.com (required with -enroll)")
 	version := flag.Bool("version", false, "Print the agent version and exit")
+	trayMode := flag.Bool("tray", false, "Run the Windows system-tray helper (user session; not the service)")
 	flag.Parse()
 
 	if *version {
 		fmt.Println(agentVersion)
+		return
+	}
+
+	if *trayMode {
+		if err := tray.Run(); err != nil {
+			log.Fatalf("[agent] tray: %v", err)
+		}
 		return
 	}
 
@@ -57,6 +72,7 @@ func main() {
 	}
 
 	service.Run(serviceName, func(stop <-chan struct{}) {
+		traylaunch.TryStart()
 		client.Run(cfg, agentVersion, stop)
 	})
 }
@@ -93,4 +109,3 @@ func detectOSVersion() string {
 	}
 	return fmt.Sprintf("%s %s", info.Platform, info.PlatformVersion)
 }
-

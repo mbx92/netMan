@@ -15,6 +15,7 @@ import (
 
 	"github.com/netman/agent/internal/config"
 	"github.com/netman/agent/internal/telemetry"
+	"github.com/netman/agent/internal/update"
 )
 
 const (
@@ -59,10 +60,11 @@ type heartbeatMessage struct {
 }
 
 type inboundMessage struct {
-	Type      string `json:"type"`
-	Message   string `json:"message"`
-	ChannelID uint32 `json:"channelId"`
-	Target    string `json:"target"`
+	Type      string         `json:"type"`
+	Message   string         `json:"message"`
+	ChannelID uint32         `json:"channelId"`
+	Target    string         `json:"target"`
+	Latest    *update.Latest `json:"latest"`
 }
 
 // Run holds a persistent WebSocket connection to the server for as long as
@@ -71,17 +73,27 @@ type inboundMessage struct {
 func Run(cfg *config.Config, version string, stop <-chan struct{}) {
 	backoff := minBackoff
 	collector := telemetry.NewCollector()
+	upd := update.New(cfg, version)
+	go upd.Loop(stop)
 
 	for {
 		select {
 		case <-stop:
 			return
+		case <-upd.ExitRequested():
+			return
 		default:
 		}
 
-		connectedAt, err := runOnce(cfg, version, collector, stop)
+		connectedAt, err := runOnce(cfg, version, collector, stop, upd)
 		if err != nil {
 			log.Printf("[agent] connection error: %v", err)
+		}
+
+		select {
+		case <-upd.ExitRequested():
+			return
+		default:
 		}
 
 		// A connection that stayed up a while resets backoff — only a
@@ -94,6 +106,8 @@ func Run(cfg *config.Config, version string, stop <-chan struct{}) {
 
 		select {
 		case <-stop:
+			return
+		case <-upd.ExitRequested():
 			return
 		case <-time.After(withJitter(backoff)):
 		}
@@ -119,7 +133,7 @@ func heartbeatInterval() time.Duration {
 	return d
 }
 
-func runOnce(cfg *config.Config, version string, collector *telemetry.Collector, stop <-chan struct{}) (connectedAt time.Time, err error) {
+func runOnce(cfg *config.Config, version string, collector *telemetry.Collector, stop <-chan struct{}, upd *update.Manager) (connectedAt time.Time, err error) {
 	wsURL := toWebSocketURL(cfg.ServerURL) + "/api/agents/connect"
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -148,6 +162,9 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 	if ack.Type == "error" {
 		return time.Time{}, &authError{ack.Message}
 	}
+	if ack.Latest != nil {
+		upd.HandleLatest(*ack.Latest)
+	}
 	conn.SetReadDeadline(time.Time{})
 	connectedAt = time.Now()
 	log.Printf("[agent] connected (agentId=%s)", cfg.AgentID)
@@ -167,6 +184,8 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 			writeMu.Lock()
 			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			writeMu.Unlock()
+			return connectedAt, nil
+		case <-upd.ExitRequested():
 			return connectedAt, nil
 		case <-done:
 			return connectedAt, nil

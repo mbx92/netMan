@@ -1,9 +1,10 @@
 import prisma, { withPrismaRetry } from '../../utils/prisma'
 import { pingHost } from '../../utils/discovery'
+import { isLinkedAgentOnline } from '../../utils/device-presence'
 
 interface DeviceStatus {
     id: string
-    status: 'ONLINE' | 'OFFLINE'
+    status: 'ONLINE' | 'OFFLINE' | 'MAINTENANCE'
     lastSeen: string | null
     responseTime?: number
 }
@@ -36,17 +37,20 @@ export default defineEventHandler((event) => {
         if (!isConnected) return
 
         try {
-            // Get all devices with IP addresses
             const devices = await withPrismaRetry(() =>
                 prisma.device.findMany({
                     where: {
-                        ip: { not: null },
+                        OR: [
+                            { ip: { not: null } },
+                            { agent: { isNot: null } },
+                        ],
                     },
                     select: {
                         id: true,
                         ip: true,
                         status: true,
                         lastSeen: true,
+                        agent: { select: { id: true, status: true } },
                     },
                 }),
             )
@@ -62,10 +66,22 @@ export default defineEventHandler((event) => {
 
                 const batchResults = await Promise.all(
                     batch.map(async (device) => {
+                        if (device.status === 'MAINTENANCE') {
+                            return {
+                                id: device.id,
+                                status: 'MAINTENANCE' as const,
+                                lastSeen: device.lastSeen?.toISOString() ?? null,
+                            }
+                        }
+
                         let status: 'ONLINE' | 'OFFLINE' = 'OFFLINE'
                         let responseTime: number | undefined
 
-                        if (device.ip) {
+                        // Agent WebSocket is authoritative: ICMP often fails for
+                        // NAT / host-firewall PCs even while the agent is online.
+                        if (isLinkedAgentOnline(device.agent)) {
+                            status = 'ONLINE'
+                        } else if (device.ip) {
                             try {
                                 const result = await pingHost(device.ip, 2000)
                                 status = result.alive ? 'ONLINE' : 'OFFLINE'

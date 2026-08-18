@@ -326,7 +326,7 @@
         </p>
         <div class="space-y-3">
           <div>
-            <div class="text-xs font-medium text-base-content/60 mb-1">Windows (PowerShell, run as Administrator)</div>
+            <div class="text-xs font-medium text-base-content/60 mb-1">Windows (PowerShell as Administrator — paste as-is, do not save a .ps1)</div>
             <div class="flex items-start gap-2">
               <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ installCommands?.windows }}</pre>
               <button class="btn btn-ghost btn-xs" @click="copy(installCommands?.windows)"><Copy class="w-4 h-4" :stroke-width="2" /></button>
@@ -384,9 +384,9 @@ const updateCommand = computed(() => {
   if (!agent.value) return ''
   const appUrl = useRuntimeConfig().public.appUrl as string
   const script = UPDATE_SCRIPT_BY_PLATFORM[agent.value.platform]
-  if (agent.value.platform === 'WINDOWS') {
-    return `iwr -useb ${appUrl}/api/agents/install/${script} -OutFile update-agent.ps1; ./update-agent.ps1 -Server '${appUrl}'`
-  }
+    if (agent.value.platform === 'WINDOWS') {
+      return `& ([scriptblock]::Create((irm -useb '${appUrl}/api/agents/install/${script}'))) -Server '${appUrl}'`
+    }
   return `curl -fsSL ${appUrl}/api/agents/install/${script} | sudo bash -s -- --server '${appUrl}'`
 })
 

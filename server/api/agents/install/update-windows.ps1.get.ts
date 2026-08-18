@@ -3,6 +3,7 @@
 // repairs an already-installed TightVNC), and restarts the service. No token needed - the
 // existing enrollment credentials in ProgramData are untouched.
 import { VNC_CONFIGURE_PS } from '../../../utils/vnc-setup-powershell'
+import { WINDOWS_SERVICE_PS } from '../../../utils/windows-service-powershell'
 
 export default defineEventHandler((event) => {
     setResponseHeader(event, 'Content-Type', 'text/plain; charset=utf-8')
@@ -12,6 +13,7 @@ export default defineEventHandler((event) => {
 )
 
 $ErrorActionPreference = "Stop"
+${WINDOWS_SERVICE_PS}
 $exePath = "$env:ProgramFiles\\netMan Agent\\netman-agent.exe"
 
 Write-Host "Stopping netman-agent service..."
@@ -19,7 +21,9 @@ Stop-Service -Name netman-agent -ErrorAction SilentlyContinue
 
 Write-Host "Downloading latest netman-agent..."
 Invoke-WebRequest -Uri "$Server/api/agents/download/windows" -OutFile "$exePath.new"
+Unblock-NetManFile "$exePath.new"
 Move-Item -Force "$exePath.new" $exePath
+Unblock-NetManFile $exePath
 
 # Regenerate and re-apply the VNC password on every update. The new value is
 # written to the registry directly (see vnc-setup-powershell.ts) rather than
@@ -31,6 +35,7 @@ if (-not (Get-Service -Name "tvnserver" -ErrorAction SilentlyContinue)) {
     $vncMsi = Join-Path $env:TEMP "tightvnc-setup.msi"
     Write-Host "Downloading TightVNC server..."
     Invoke-WebRequest -Uri "https://www.tightvnc.com/download/2.8.85/tightvnc-2.8.85-gpl-setup-64bit.msi" -OutFile $vncMsi
+    Unblock-NetManFile $vncMsi
 
     Write-Host "Installing TightVNC server..."
     $msi = Start-Process msiexec.exe -ArgumentList @(
@@ -50,11 +55,15 @@ if (-not (Get-Service -Name "tvnserver" -ErrorAction SilentlyContinue)) {
 
 ${VNC_CONFIGURE_PS}
 
-New-Item -ItemType Directory -Force -Path "$env:ProgramData\\netMan-agent" | Out-Null
+Grant-NetManDataAcl "$env:ProgramData\\netMan-agent"
 Set-Content -Path "$env:ProgramData\\netMan-agent\\vnc-password.txt" -Value $vncPassword -NoNewline
 
 Write-Host "Starting netman-agent service..."
-Start-Service netman-agent
+if (Get-Service -Name netman-agent -ErrorAction SilentlyContinue) {
+    Repair-NetManService $exePath
+} else {
+    Install-NetManService $exePath
+}
 
 $version = & $exePath -version
 Write-Host "netMan agent updated to v$version and running. New VNC password is visible on the agent's page in netMan."

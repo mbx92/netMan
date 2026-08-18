@@ -1,5 +1,6 @@
 // GET /api/agents/install/windows.ps1 - Installer script the "Add Agent" install command downloads and runs.
 import { VNC_CONFIGURE_PS } from '../../../utils/vnc-setup-powershell'
+import { WINDOWS_SERVICE_PS } from '../../../utils/windows-service-powershell'
 
 export default defineEventHandler((event) => {
     setResponseHeader(event, 'Content-Type', 'text/plain; charset=utf-8')
@@ -14,6 +15,7 @@ export default defineEventHandler((event) => {
 )
 
 $ErrorActionPreference = "Stop"
+${WINDOWS_SERVICE_PS}
 
 $installDir = "$env:ProgramFiles\\netMan Agent"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
@@ -21,6 +23,7 @@ New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 $exePath = Join-Path $installDir "netman-agent.exe"
 Write-Host "Downloading netman-agent..."
 Invoke-WebRequest -Uri "$Server/api/agents/download/windows" -OutFile $exePath
+Unblock-NetManFile $exePath
 
 # --- VNC server (remote desktop over the agent tunnel) ---
 # Windows has no built-in VNC server (unlike RDP), so remote desktop access
@@ -36,6 +39,7 @@ if (-not (Get-Service -Name "tvnserver" -ErrorAction SilentlyContinue)) {
     $vncMsi = Join-Path $env:TEMP "tightvnc-setup.msi"
     Write-Host "Downloading TightVNC server..."
     Invoke-WebRequest -Uri "https://www.tightvnc.com/download/2.8.85/tightvnc-2.8.85-gpl-setup-64bit.msi" -OutFile $vncMsi
+    Unblock-NetManFile $vncMsi
 
     Write-Host "Installing TightVNC server..."
     $msi = Start-Process msiexec.exe -ArgumentList @(
@@ -57,18 +61,16 @@ if (-not (Get-Service -Name "tvnserver" -ErrorAction SilentlyContinue)) {
 
 ${VNC_CONFIGURE_PS}
 
-New-Item -ItemType Directory -Force -Path "$env:ProgramData\\netMan-agent" | Out-Null
+Grant-NetManDataAcl "$env:ProgramData\\netMan-agent"
 Set-Content -Path "$env:ProgramData\\netMan-agent\\vnc-password.txt" -Value $vncPassword -NoNewline
 
 Write-Host "Enrolling..."
 & $exePath -enroll -token $Token -server $Server
 if ($LASTEXITCODE -ne 0) { throw "Enrollment failed" }
+Grant-NetManDataAcl "$env:ProgramData\\netMan-agent"
 
 Write-Host "Installing netman-agent service..."
-sc.exe create netman-agent binPath= "\`"$exePath\`"" start= auto DisplayName= "netMan Agent" | Out-Null
-sc.exe description netman-agent "netMan monitoring & remote-access agent" | Out-Null
-sc.exe failure netman-agent reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Null
-Start-Service netman-agent
+Install-NetManService $exePath
 
 Write-Host "netMan agent installed and running. VNC password is visible on the agent's page in netMan."
 `

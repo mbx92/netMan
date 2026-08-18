@@ -1,4 +1,5 @@
 import prisma from '../../utils/prisma'
+import { deviceStatusWithAgent } from '../../utils/device-presence'
 
 // GET /api/devices/[id] - Get single device with full details
 export default defineEventHandler(async (event) => {
@@ -16,6 +17,7 @@ export default defineEventHandler(async (event) => {
         include: {
             deviceType: true,
             site: true,
+            agent: { select: { id: true, status: true } },
             parentDevice: { select: { id: true, name: true, ip: true, typeCode: true } },  // Parent host for VMs
             childDevices: { select: { id: true, name: true, ip: true, typeCode: true } },  // Child VMs
             ports: {
@@ -40,5 +42,8 @@ export default defineEventHandler(async (event) => {
         })
     }
 
-    return device
+    return {
+        ...device,
+        status: deviceStatusWithAgent(device.status, device.agent),
+    }
 })

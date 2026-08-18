@@ -4,6 +4,7 @@
  * (re-issue after expiry).
  */
 import { generateSecret, hashSecret } from './agent-auth'
+import { windowsScriptCommand } from './windows-service-powershell'
 
 const ENROLL_TOKEN_TTL_MS = 15 * 60 * 1000 // 15 minutes
 
@@ -33,7 +34,7 @@ export function parseEnrollmentToken(token: string): { agentId: string; secret: 
 
 export function buildInstallCommands(appUrl: string, token: string) {
     return {
-        windows: `iwr -useb ${appUrl}/api/agents/install/windows.ps1 -OutFile install-agent.ps1; ./install-agent.ps1 -Token '${token}' -Server '${appUrl}'`,
+        windows: windowsScriptCommand(appUrl, 'windows.ps1', `-Token '${token}' -Server '${appUrl}'`),
         linux: `curl -fsSL ${appUrl}/api/agents/install/linux.sh | sudo bash -s -- --token '${token}' --server '${appUrl}'`,
         macos: `curl -fsSL ${appUrl}/api/agents/install/macos.sh | sudo bash -s -- --token '${token}' --server '${appUrl}'`,
     }

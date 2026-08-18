@@ -158,7 +158,7 @@ async function handleHello(peer: any, msg: HelloMessage) {
         || peer.remoteAddress
         || null
 
-    agentManager.register(agent.id, peer, { hostname: agent.hostname, platform: agent.platform })
+    agentManager.register(agent.id, peer, { hostname: agent.hostname, platform: agent.platform, deviceId: agent.deviceId })
 
     await prisma.agent.update({
         where: { id: agent.id },
@@ -183,7 +183,7 @@ async function handleHello(peer: any, msg: HelloMessage) {
         // Separate from the status/lastSeen update above so a mac unique-
         // collision (handled inside updateDeviceNetworkInfo) can never affect
         // the online-status write.
-        await updateDeviceNetworkInfo(agent.deviceId, { ip: remoteIp || undefined, mac: msg.macAddress })
+        await updateDeviceNetworkInfo(agent.deviceId, { ip: msg.localIp || remoteIp || undefined, mac: msg.macAddress })
     }
 
     // Resolve any outstanding "agent offline" alert raised by the offline-watcher plugin.
@@ -242,6 +242,13 @@ async function handleHeartbeat(peer: any, msg: HeartbeatMessage) {
             lastMetrics,
         },
     }).catch((e) => console.error('[AgentConnect] Failed to record heartbeat:', e))
+
+    if (connected.deviceId) {
+        await prisma.device.update({
+            where: { id: connected.deviceId },
+            data: { status: 'ONLINE', lastSeen: new Date() },
+        }).catch((e) => console.error('[AgentConnect] Failed to mark device online:', e))
+    }
 
     if (msg.cpuPercent != null && msg.memPercent != null && msg.diskPercent != null) {
         await prisma.agentMetricSample.create({

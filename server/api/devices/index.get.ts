@@ -1,4 +1,5 @@
 import prisma from '../../utils/prisma'
+import { deviceStatusWithAgent } from '../../utils/device-presence'
 
 // GET /api/devices - List all devices with optional filters
 export default defineEventHandler(async (event) => {
@@ -9,11 +10,6 @@ export default defineEventHandler(async (event) => {
     // Filter by type code
     if (query.type && typeof query.type === 'string') {
         where.typeCode = query.type
-    }
-
-    // Filter by status
-    if (query.status && typeof query.status === 'string') {
-        where.status = query.status
     }
 
     // Filter by location
@@ -39,14 +35,25 @@ export default defineEventHandler(async (event) => {
         include: {
             deviceType: true,
             site: { select: { id: true, name: true } },
+            agent: { select: { id: true, status: true } },
             _count: {
                 select: { ports: true, sessions: true }
             }
         }
     })
 
+    const withPresence = devices.map((device) => ({
+        ...device,
+        status: deviceStatusWithAgent(device.status, device.agent),
+    }))
+
+    const statusFilter = typeof query.status === 'string' ? query.status : ''
+    const filtered = statusFilter
+        ? withPresence.filter((device) => device.status === statusFilter)
+        : withPresence
+
     return {
-        devices,
-        total: devices.length,
+        devices: filtered,
+        total: filtered.length,
     }
 })

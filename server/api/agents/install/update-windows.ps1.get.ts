@@ -65,14 +65,7 @@ if (Get-Service -Name netman-agent -ErrorAction SilentlyContinue) {
     Install-NetManService $exePath
 }
 
-$installDir = Split-Path $exePath
-$vbsPath = Join-Path $installDir "start-tray.vbs"
-Set-Content -Path $vbsPath -Value @"
-Set sh = CreateObject("Wscript.Shell")
-sh.Run """$exePath"" -tray", 0, False
-"@
-reg.exe add "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v NetManAgentTray /t REG_SZ /d "wscript.exe //nologo `"$vbsPath`"" /f | Out-Null
-Start-Process -FilePath "wscript.exe" -ArgumentList "//nologo `"$vbsPath`"" -ErrorAction SilentlyContinue
+Install-NetManTray $exePath
 
 $version = & $exePath -version
 Write-Host "netMan agent updated to v$version and running. New VNC password is visible on the agent's page in netMan."

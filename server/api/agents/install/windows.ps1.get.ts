@@ -73,13 +73,7 @@ Write-Host "Installing netman-agent service..."
 Install-NetManService $exePath
 
 Write-Host "Installing tray helper for update notifications..."
-$vbsPath = Join-Path $installDir "start-tray.vbs"
-Set-Content -Path $vbsPath -Value @"
-Set sh = CreateObject("Wscript.Shell")
-sh.Run """$exePath"" -tray", 0, False
-"@
-reg.exe add "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v NetManAgentTray /t REG_SZ /d "wscript.exe //nologo `"$vbsPath`"" /f | Out-Null
-Start-Process -FilePath "wscript.exe" -ArgumentList "//nologo `"$vbsPath`"" -ErrorAction SilentlyContinue
+Install-NetManTray $exePath
 
 Write-Host "netMan agent installed and running. VNC password is visible on the agent's page in netMan."
 `

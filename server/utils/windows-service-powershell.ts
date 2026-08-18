@@ -65,6 +65,18 @@ function Repair-NetManService([string]$ExePath) {
         throw "netman-agent service failed to start (status: $($svc.Status))"
     }
 }
+
+function Install-NetManTray([string]$ExePath) {
+    $installDir = Split-Path $ExePath
+    $vbsPath = Join-Path $installDir "start-tray.vbs"
+    Set-Content -Path $vbsPath -Value @"
+Set sh = CreateObject("Wscript.Shell")
+sh.Run """$ExePath"" -tray", 0, False
+"@
+    $runCmd = 'wscript.exe //nologo "' + $vbsPath + '"'
+    reg.exe add "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v NetManAgentTray /t REG_SZ /d $runCmd /f | Out-Null
+    Start-Process -FilePath "wscript.exe" -ArgumentList @("//nologo", $vbsPath) -ErrorAction SilentlyContinue
+}
 `
 
 /** In-memory PowerShell invoke: no .ps1 on disk, so no ExecutionPolicy / MOTW prompt. */

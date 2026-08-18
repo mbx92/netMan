@@ -48,6 +48,26 @@
           <button v-if="agent.platform === 'WINDOWS' && agent.status === 'ONLINE' && agent.deviceId" class="btn btn-info gap-2" @click="showVncModal = true">
             <Monitor class="w-4 h-4" :stroke-width="2" /> Remote Desktop
           </button>
+          <button
+            v-if="agent.status === 'ONLINE'"
+            class="btn btn-outline btn-warning gap-2"
+            :disabled="powerActionPending !== null"
+            @click="confirmPowerAction('restart')"
+          >
+            <span v-if="powerActionPending === 'restart'" class="loading loading-spinner loading-sm"></span>
+            <RotateCcw v-else class="w-4 h-4" :stroke-width="2" />
+            Restart
+          </button>
+          <button
+            v-if="agent.status === 'ONLINE'"
+            class="btn btn-outline btn-error gap-2"
+            :disabled="powerActionPending !== null"
+            @click="confirmPowerAction('shutdown')"
+          >
+            <span v-if="powerActionPending === 'shutdown'" class="loading loading-spinner loading-sm"></span>
+            <Power v-else class="w-4 h-4" :stroke-width="2" />
+            Shut Down
+          </button>
           <button v-if="agent.status !== 'PENDING' && !isUpToDate" class="btn btn-outline gap-2" @click="showUpdateModal = true">
             <RefreshCw class="w-4 h-4" :stroke-width="2" /> Update Agent
           </button>
@@ -116,6 +136,23 @@
             <dt class="text-base-content/60">Linked device</dt>
             <dd class="font-medium">{{ agent.device?.name || '-' }}</dd>
           </div>
+          <div v-if="agent.diskInfo?.length">
+            <dt class="text-base-content/60">Disk drive{{ agent.diskInfo.length > 1 ? 's' : '' }}</dt>
+            <dd class="font-medium">
+              <div v-for="(disk, i) in agent.diskInfo" :key="i">
+                {{ [disk.vendor, disk.model].filter(Boolean).join(' ') || 'Unknown' }}
+              </div>
+            </dd>
+          </div>
+          <div v-if="agent.memoryType || agent.memorySlotsTotal">
+            <dt class="text-base-content/60">Memory</dt>
+            <dd class="font-medium">
+              {{ agent.memoryType || 'Unknown type' }}
+              <span v-if="agent.memorySlotsTotal" class="text-base-content/60">
+                · {{ agent.memorySlotsUsed ?? '?' }}/{{ agent.memorySlotsTotal }} slots used
+              </span>
+            </dd>
+          </div>
           <div v-if="agent.vncPassword">
             <dt class="text-base-content/60">VNC Password</dt>
             <dd class="font-mono font-medium flex items-center gap-1">
@@ -176,6 +213,7 @@
                 <th>PID</th>
                 <th>CPU</th>
                 <th>Memory</th>
+                <th v-if="agent.status === 'ONLINE'"></th>
               </tr>
             </thead>
             <tbody>
@@ -184,6 +222,17 @@
                 <td class="text-base-content/60">{{ proc.pid }}</td>
                 <td>{{ formatPercent(proc.cpuPercent) }}</td>
                 <td>{{ formatPercent(proc.memPercent) }}</td>
+                <td v-if="agent.status === 'ONLINE'" class="text-right">
+                  <button
+                    class="btn btn-ghost btn-xs text-error gap-1"
+                    :disabled="killingPid === proc.pid"
+                    @click="confirmKillProcess(proc.pid, proc.name)"
+                  >
+                    <span v-if="killingPid === proc.pid" class="loading loading-spinner loading-xs"></span>
+                    <XCircle v-else class="w-3.5 h-3.5" :stroke-width="2" />
+                    Kill
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -281,7 +330,7 @@
         </p>
         <div class="space-y-3">
           <div>
-            <div class="text-xs font-medium text-base-content/60 mb-1">Windows (PowerShell, run as Administrator)</div>
+            <div class="text-xs font-medium text-base-content/60 mb-1">Windows (PowerShell as Administrator — paste as-is, do not save a .ps1)</div>
             <div class="flex items-start gap-2">
               <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ installCommands?.windows }}</pre>
               <button class="btn btn-ghost btn-xs" @click="copy(installCommands?.windows)"><Copy class="w-4 h-4" :stroke-width="2" /></button>
@@ -312,7 +361,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Copy, Cpu, Download, Eye, EyeOff, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, RefreshCw, Terminal, Trash2, X } from '@lucide/vue'
+import { ArrowLeft, Copy, Cpu, Download, Eye, EyeOff, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, Power, RefreshCw, RotateCcw, Terminal, Trash2, X, XCircle } from '@lucide/vue'
 import type { AgentMetricsSnapshot, AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const route = useRoute()
@@ -320,7 +369,7 @@ const id = route.params.id as string
 
 const { data: agent, pending, refresh: refreshAgent } = await useFetch<AgentSummary>(`/api/agents/${id}`)
 
-const { deleteAgent, regenerateInstall, updateAgentAlias } = useAgents()
+const { deleteAgent, regenerateInstall, updateAgentAlias, killProcess, sendPowerAction } = useAgents()
 
 const installModal = ref<HTMLDialogElement | null>(null)
 const installCommands = ref<InstallCommands | null>(null)
@@ -339,9 +388,9 @@ const updateCommand = computed(() => {
   if (!agent.value) return ''
   const appUrl = useRuntimeConfig().public.appUrl as string
   const script = UPDATE_SCRIPT_BY_PLATFORM[agent.value.platform]
-  if (agent.value.platform === 'WINDOWS') {
-    return `iwr -useb ${appUrl}/api/agents/install/${script} -OutFile update-agent.ps1; ./update-agent.ps1 -Server '${appUrl}'`
-  }
+    if (agent.value.platform === 'WINDOWS') {
+      return `& ([scriptblock]::Create((irm -useb '${appUrl}/api/agents/install/${script}'))) -Server '${appUrl}'`
+    }
   return `curl -fsSL ${appUrl}/api/agents/install/${script} | sudo bash -s -- --server '${appUrl}'`
 })
 
@@ -399,6 +448,53 @@ function copy(text: string | undefined) {
 
 function formatPercent(value: number | null | undefined): string {
   return value == null ? '-' : `${Math.round(value)}%`
+}
+
+const powerActionPending = ref<'restart' | 'shutdown' | null>(null)
+
+async function confirmPowerAction(action: 'restart' | 'shutdown') {
+  if (!agent.value) return
+  const label = action === 'restart' ? 'Restart' : 'Shut Down'
+  const ok = await confirmDialog({
+    title: `${label} Machine`,
+    message: `${label} "${agent.value.alias || agent.value.hostname}" now? Any unsaved work on that machine will be lost, and it will drop offline until it comes back up.`,
+    confirmLabel: label,
+    variant: 'danger',
+  })
+  if (!ok) return
+
+  powerActionPending.value = action
+  try {
+    await sendPowerAction(id, action)
+    alertDialog(`${label} command sent — the machine will go offline shortly.`)
+    await refreshAgent()
+  } catch (err: any) {
+    alertDialog(err?.data?.statusMessage || err?.message || `Failed to ${action} the machine`)
+  } finally {
+    powerActionPending.value = null
+  }
+}
+
+const killingPid = ref<number | null>(null)
+
+async function confirmKillProcess(pid: number, name: string) {
+  const ok = await confirmDialog({
+    title: 'Kill Process',
+    message: `Kill "${name}" (PID ${pid}) on ${agent.value?.alias || agent.value?.hostname}? This cannot be undone.`,
+    confirmLabel: 'Kill',
+    variant: 'danger',
+  })
+  if (!ok) return
+
+  killingPid.value = pid
+  try {
+    await killProcess(id, pid, name)
+    await refreshAgent()
+  } catch (err: any) {
+    alertDialog(err?.data?.statusMessage || err?.message || 'Failed to kill process')
+  } finally {
+    killingPid.value = null
+  }
 }
 
 function formatRate(bytesPerSec: number | null | undefined): string {

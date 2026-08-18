@@ -23,8 +23,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/shirou/gopsutil/v3/host"
@@ -66,6 +68,8 @@ func main() {
 		return
 	}
 
+	initServiceLog()
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("[agent] %v", err)
@@ -100,6 +104,25 @@ func runEnroll(token, server string) {
 	}
 
 	fmt.Printf("Enrolled successfully as agent %s. Install/start the %s service to begin sending heartbeats.\n", agentID, serviceName)
+}
+
+func initServiceLog() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	base := os.Getenv("ProgramData")
+	if base == "" {
+		base = `C:\ProgramData`
+	}
+	dir := filepath.Join(base, "netMan-agent")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "agent.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return
+	}
+	log.SetOutput(io.MultiWriter(os.Stderr, f))
 }
 
 func detectOSVersion() string {

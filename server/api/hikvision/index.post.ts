@@ -113,7 +113,7 @@ export default defineEventHandler(async (event) => {
                 mac: deviceInfo.macAddress || null,
                 hostname: deviceInfo.deviceName || null,
                 siteId: body.siteId || null,
-                status: 'UNKNOWN',
+                status: 'ONLINE',
                 isManaged: true,
                 notes: `Hikvision ${deviceInfo.deviceType || body.deviceType || 'NVR'} - ${deviceInfo.model || 'unknown model'}`,
             },

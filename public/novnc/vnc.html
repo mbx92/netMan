@@ -39,6 +39,27 @@
       gap: 8px;
     }
 
+    #cad-button {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #eef;
+      font: inherit;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: none;
+    }
+
+    #cad-button:hover {
+      background: rgba(255, 255, 255, 0.16);
+    }
+
+    #cad-button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
     #status-bar .dot {
       width: 8px;
       height: 8px;
@@ -100,6 +121,7 @@
       <div id="status-dot" class="dot"></div>
       <span id="status-text">Initializing...</span>
     </div>
+    <button id="cad-button" type="button" title="Send Ctrl+Alt+Del to the remote machine">Ctrl+Alt+Del</button>
   </div>
   <div id="screen">
     <div class="loading" id="loading">
@@ -123,6 +145,11 @@
     const screen = document.getElementById('screen');
     const loadingText = document.getElementById('loading-text');
     const loading = document.getElementById('loading');
+    const cadButton = document.getElementById('cad-button');
+
+    cadButton.addEventListener('click', () => {
+      if (rfb) rfb.sendCtrlAltDel();
+    });
 
     let rfb = null;
     // securityfailure is always followed by disconnect; keep the specific auth
@@ -182,9 +209,11 @@
           setStatus(`Connected to ${host}:${port}`, 'connected');
           document.title = `VNC - ${host}`;
           hideOverlay();
+          cadButton.style.display = '';
         });
 
         rfb.addEventListener('disconnect', (e) => {
+          cadButton.style.display = 'none';
           const clean = e.detail.clean;
           if (clean) {
             setStatus('Disconnected', 'error');

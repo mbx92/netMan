@@ -31,6 +31,10 @@ export interface AgentSummary {
   lastDiskPercent: number | null
   lastUptimeSec: number | null
   lastMetrics: AgentMetricsSnapshot | null
+  diskInfo: { model?: string; vendor?: string }[] | null
+  memorySlotsTotal: number | null
+  memorySlotsUsed: number | null
+  memoryType: string | null
   enrollExpiresAt: string | null
   isConnected: boolean
   device: { id: string; name: string; ip: string | null; siteId: string | null } | null
@@ -67,5 +71,19 @@ export function useAgents() {
     })
   }
 
-  return { createAgent, deleteAgent, regenerateInstall, updateAgentAlias }
+  async function killProcess(id: string, pid: number, name?: string) {
+    return $fetch<{ success: boolean }>(`/api/agents/${id}/kill-process`, {
+      method: 'POST',
+      body: { pid, name },
+    })
+  }
+
+  async function sendPowerAction(id: string, action: 'restart' | 'shutdown') {
+    return $fetch<{ success: boolean }>(`/api/agents/${id}/power`, {
+      method: 'POST',
+      body: { action },
+    })
+  }
+
+  return { createAgent, deleteAgent, regenerateInstall, updateAgentAlias, killProcess, sendPowerAction }
 }

@@ -183,7 +183,7 @@
         <div class="space-y-3">
           <div>
             <div class="text-xs font-medium text-base-content/60 mb-1 flex items-center gap-1">
-              <Monitor class="w-3.5 h-3.5" :stroke-width="2" /> Windows (PowerShell, run as Administrator)
+              <Monitor class="w-3.5 h-3.5" :stroke-width="2" /> Windows (PowerShell as Administrator — paste as-is, do not save a .ps1)
             </div>
             <div class="flex items-start gap-2">
               <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ installCommands?.windows }}</pre>

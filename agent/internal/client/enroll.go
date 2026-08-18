@@ -16,6 +16,7 @@ type enrollRequest struct {
 	OSVersion    string `json:"osVersion"`
 	AgentVersion string `json:"agentVersion"`
 	MACAddress   string `json:"macAddress,omitempty"`
+	LocalIP      string `json:"localIp,omitempty"`
 	VNCPassword  string `json:"vncPassword,omitempty"`
 }
 
@@ -36,6 +37,7 @@ func Enroll(serverURL, token, hostname, osVersion, agentVersion, macAddress stri
 		OSVersion:    osVersion,
 		AgentVersion: agentVersion,
 		MACAddress:   macAddress,
+		LocalIP:      DetectLocalIP(),
 		VNCPassword:  ReadVNCPassword(),
 	})
 	if err != nil {

@@ -15,6 +15,7 @@ interface EnrollBody {
     osVersion?: string
     agentVersion?: string
     macAddress?: string
+    localIp?: string
     vncPassword?: string
 }
 
@@ -50,6 +51,13 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 401, statusMessage: 'Invalid enrollment token' })
     }
 
+    // Agent traffic arrives over the Cloudflare Tunnel, so the request's
+    // source IP (`ip`, used below only for rate-limiting/audit) is always
+    // the client's public IP — never its LAN address. The agent binary
+    // detects and reports its own local IP instead; that's what we want to
+    // show as the device's address.
+    const reportedIp = body.localIp || (ip !== 'unknown' ? ip : undefined)
+
     const authKey = generateSecret()
     const authKeyHash = await hashSecret(authKey)
 
@@ -63,7 +71,7 @@ export default defineEventHandler(async (event) => {
             enrolledAt: new Date(),
             enrollTokenHash: null,
             enrollExpiresAt: null,
-            lastIp: ip,
+            lastIp: reportedIp,
             vncPassword: body.vncPassword || undefined,
         },
     })
@@ -74,7 +82,7 @@ export default defineEventHandler(async (event) => {
         await updateDeviceNetworkInfo(agent.deviceId, {
             name: agent.alias || body.hostname,
             hostname: body.hostname,
-            ip: ip !== 'unknown' ? ip : undefined,
+            ip: reportedIp,
             mac: body.macAddress,
         })
     }

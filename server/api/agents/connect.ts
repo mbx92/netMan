@@ -15,14 +15,23 @@ import { closeAllForAgent, handleTunnelControl, handleTunnelData } from '../../u
 import { checkResourceThresholds, clearBreachStreaks } from '../../utils/agent-alerts'
 import { updateDeviceNetworkInfo } from '../../utils/device-network-info'
 import { agentDownloadPlatformFromDb, getAgentLatestForPlatform } from '../../utils/agent-release'
+import { resolveAgentCommand } from '../../utils/agent-commands'
+
+interface HardwareDisk { model?: string; vendor?: string }
+interface HardwareInfo {
+    disks?: HardwareDisk[]
+    memory?: { slotsTotal?: number; slotsUsed?: number; type?: string }
+}
 
 interface HelloMessage {
     type: 'hello'
     agentId: string
     authKey: string
     macAddress?: string
+    localIp?: string
     vncPassword?: string
     agentVersion?: string
+    hardware?: HardwareInfo
 }
 
 interface PartitionUsage { mountpoint: string; percent: number }
@@ -87,6 +96,12 @@ export default defineWebSocketHandler({
             case 'heartbeat':
                 await handleHeartbeat(peer, data as HeartbeatMessage)
                 break
+            case 'kill-process-result':
+            case 'power-action-result': {
+                const msg = data as { requestId: string; success: boolean; error?: string }
+                resolveAgentCommand(msg.requestId, { success: !!msg.success, error: msg.error })
+                break
+            }
             case 'tunnel-ready':
             case 'tunnel-error':
             case 'tunnel-close': {
@@ -134,11 +149,17 @@ async function handleHello(peer: any, msg: HelloMessage) {
         return
     }
 
-    const remoteIp = peer.request?.headers?.get?.('x-forwarded-for')?.split(',')[0]?.trim()
+    // Agent traffic arrives over the Cloudflare Tunnel, so the socket/header
+    // IP is always the client's public IP, never its LAN address. Prefer
+    // the LAN IP the agent detected and reported itself; fall back to the
+    // request-derived IP for agents running an older build that doesn't
+    // send localIp yet.
+    const remoteIp = msg.localIp
+        || peer.request?.headers?.get?.('x-forwarded-for')?.split(',')[0]?.trim()
         || peer.remoteAddress
         || null
 
-    agentManager.register(agent.id, peer, { hostname: agent.hostname, platform: agent.platform })
+    agentManager.register(agent.id, peer, { hostname: agent.hostname, platform: agent.platform, deviceId: agent.deviceId })
 
     await prisma.agent.update({
         where: { id: agent.id },
@@ -148,6 +169,10 @@ async function handleHello(peer: any, msg: HelloMessage) {
             lastIp: remoteIp || undefined,
             agentVersion: msg.agentVersion || undefined,
             vncPassword: msg.vncPassword || undefined,
+            diskInfo: msg.hardware?.disks ?? undefined,
+            memorySlotsTotal: msg.hardware?.memory?.slotsTotal ?? undefined,
+            memorySlotsUsed: msg.hardware?.memory?.slotsUsed ?? undefined,
+            memoryType: msg.hardware?.memory?.type ?? undefined,
         },
     })
 
@@ -159,7 +184,7 @@ async function handleHello(peer: any, msg: HelloMessage) {
         // Separate from the status/lastSeen update above so a mac unique-
         // collision (handled inside updateDeviceNetworkInfo) can never affect
         // the online-status write.
-        await updateDeviceNetworkInfo(agent.deviceId, { ip: remoteIp || undefined, mac: msg.macAddress })
+        await updateDeviceNetworkInfo(agent.deviceId, { ip: msg.localIp || remoteIp || undefined, mac: msg.macAddress })
     }
 
     // Resolve any outstanding "agent offline" alert raised by the offline-watcher plugin.
@@ -220,6 +245,13 @@ async function handleHeartbeat(peer: any, msg: HeartbeatMessage) {
             lastMetrics,
         },
     }).catch((e) => console.error('[AgentConnect] Failed to record heartbeat:', e))
+
+    if (connected.deviceId) {
+        await prisma.device.update({
+            where: { id: connected.deviceId },
+            data: { status: 'ONLINE', lastSeen: new Date() },
+        }).catch((e) => console.error('[AgentConnect] Failed to mark device online:', e))
+    }
 
     if (msg.cpuPercent != null && msg.memPercent != null && msg.diskPercent != null) {
         await prisma.agentMetricSample.create({

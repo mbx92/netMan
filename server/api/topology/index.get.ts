@@ -1,4 +1,5 @@
 import prisma from '../../utils/prisma'
+import { loadConfigManagedHosts, resolveDeviceStatus } from '../../utils/device-presence'
 
 interface TopologyNode {
     id: string
@@ -40,18 +41,22 @@ export default defineEventHandler(async (event) => {
         if (floor) deviceWhere.floor = floor
         if (location) deviceWhere.location = { contains: location, mode: 'insensitive' }
 
-        const devices = await prisma.device.findMany({
-            where: deviceWhere,
-            include: {
-                site: { select: { id: true, name: true } },
-                ports: {
-                    include: {
-                        connectedDevice: { select: { id: true, name: true } }
-                    }
-                },
-                parentDevice: { select: { id: true, name: true } }  // For VM-host relationship
-            }
-        })
+        const [devices, configHosts] = await Promise.all([
+            prisma.device.findMany({
+                where: deviceWhere,
+                include: {
+                    site: { select: { id: true, name: true } },
+                    agent: { select: { id: true, status: true } },
+                    ports: {
+                        include: {
+                            connectedDevice: { select: { id: true, name: true } }
+                        }
+                    },
+                    parentDevice: { select: { id: true, name: true } }  // For VM-host relationship
+                }
+            }),
+            loadConfigManagedHosts(),
+        ])
 
         // Add devices as nodes
         for (const device of devices) {
@@ -95,7 +100,13 @@ export default defineEventHandler(async (event) => {
                 mac: device.mac || undefined,
                 siteId: device.siteId || undefined,
                 siteName: device.site?.name,
-                status: device.status.toLowerCase() as 'online' | 'offline' | 'unknown',
+                status: resolveDeviceStatus({
+                    status: device.status,
+                    agent: device.agent,
+                    isApiActive: device.isApiActive,
+                    ip: device.ip,
+                    configHosts,
+                }).toLowerCase() as 'online' | 'offline' | 'unknown',
                 ports: device.ports.length || device.portCount || 0,
                 tier,
             })

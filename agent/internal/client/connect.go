@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/netman/agent/internal/config"
+	"github.com/netman/agent/internal/hardware"
 	"github.com/netman/agent/internal/telemetry"
 	"github.com/netman/agent/internal/update"
 )
@@ -26,12 +27,14 @@ const (
 )
 
 type helloMessage struct {
-	Type         string `json:"type"`
-	AgentID      string `json:"agentId"`
-	AuthKey      string `json:"authKey"`
-	AgentVersion string `json:"agentVersion,omitempty"`
-	MACAddress   string `json:"macAddress,omitempty"`
-	VNCPassword  string `json:"vncPassword,omitempty"`
+	Type         string         `json:"type"`
+	AgentID      string         `json:"agentId"`
+	AuthKey      string         `json:"authKey"`
+	AgentVersion string         `json:"agentVersion,omitempty"`
+	MACAddress   string         `json:"macAddress,omitempty"`
+	LocalIP      string         `json:"localIp,omitempty"`
+	VNCPassword  string         `json:"vncPassword,omitempty"`
+	Hardware     *hardware.Info `json:"hardware,omitempty"`
 }
 
 type heartbeatMessage struct {
@@ -65,6 +68,9 @@ type inboundMessage struct {
 	ChannelID uint32         `json:"channelId"`
 	Target    string         `json:"target"`
 	Latest    *update.Latest `json:"latest"`
+	RequestID string         `json:"requestId"`
+	PID       int32          `json:"pid"`
+	Action    string         `json:"action"`
 }
 
 // Run holds a persistent WebSocket connection to the server for as long as
@@ -75,6 +81,9 @@ func Run(cfg *config.Config, version string, stop <-chan struct{}) {
 	collector := telemetry.NewCollector()
 	upd := update.New(cfg, version)
 	go upd.Loop(stop)
+	// Collected once — it shells out to slow platform inventory tools and
+	// essentially never changes for the life of the process.
+	hw := hardware.Collect()
 
 	for {
 		select {
@@ -85,7 +94,7 @@ func Run(cfg *config.Config, version string, stop <-chan struct{}) {
 		default:
 		}
 
-		connectedAt, err := runOnce(cfg, version, collector, stop, upd)
+		connectedAt, err := runOnce(cfg, version, collector, &hw, stop, upd)
 		if err != nil {
 			log.Printf("[agent] connection error: %v", err)
 		}
@@ -133,7 +142,7 @@ func heartbeatInterval() time.Duration {
 	return d
 }
 
-func runOnce(cfg *config.Config, version string, collector *telemetry.Collector, stop <-chan struct{}, upd *update.Manager) (connectedAt time.Time, err error) {
+func runOnce(cfg *config.Config, version string, collector *telemetry.Collector, hw *hardware.Info, stop <-chan struct{}, upd *update.Manager) (connectedAt time.Time, err error) {
 	wsURL := toWebSocketURL(cfg.ServerURL) + "/api/agents/connect"
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -147,7 +156,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 	defer tm.closeAll()
 
 	writeMu.Lock()
-	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey, AgentVersion: version, MACAddress: DetectMACAddress(), VNCPassword: ReadVNCPassword()})
+	helloErr := conn.WriteJSON(helloMessage{Type: "hello", AgentID: cfg.AgentID, AuthKey: cfg.AuthKey, AgentVersion: version, MACAddress: DetectMACAddress(), LocalIP: DetectLocalIP(), VNCPassword: ReadVNCPassword(), Hardware: hw})
 	writeMu.Unlock()
 	if helloErr != nil {
 		return time.Time{}, helloErr
@@ -170,7 +179,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 	log.Printf("[agent] connected (agentId=%s)", cfg.AgentID)
 
 	done := make(chan struct{})
-	go readLoop(conn, tm, done)
+	go readLoop(conn, tm, &writeMu, done)
 
 	ticker := time.NewTicker(heartbeatInterval())
 	defer ticker.Stop()
@@ -199,7 +208,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 
 // readLoop is the connection's sole reader (gorilla/websocket requires this)
 // and dispatches every frame: binary = tunnel data, text = JSON control.
-func readLoop(conn *websocket.Conn, tm *tunnelManager, done chan<- struct{}) {
+func readLoop(conn *websocket.Conn, tm *tunnelManager, writeMu *sync.Mutex, done chan<- struct{}) {
 	defer close(done)
 	for {
 		msgType, data, err := conn.ReadMessage()
@@ -225,6 +234,13 @@ func readLoop(conn *websocket.Conn, tm *tunnelManager, done chan<- struct{}) {
 				tm.open(tunnelOpenControl{Type: msg.Type, ChannelID: msg.ChannelID, Target: msg.Target})
 			case "tunnel-close", "tunnel-error":
 				tm.remoteClose(msg.ChannelID)
+			case "kill-process":
+				// Runs off the read goroutine so a slow/hung kill (e.g. a
+				// process wedged in uninterruptible I/O) can't stall
+				// heartbeats or tunnel data.
+				go handleKillProcess(conn, writeMu, msg.RequestID, msg.PID)
+			case "power-action":
+				go handlePowerAction(conn, writeMu, msg.RequestID, msg.Action)
 			case "error":
 				log.Printf("[agent] server error: %s", msg.Message)
 			}

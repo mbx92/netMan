@@ -1,4 +1,5 @@
 import prisma, { withPrismaRetry } from '../utils/prisma'
+import { loadConfigManagedHosts, resolveDeviceStatus } from '../utils/device-presence'
 
 const STALE_MS = 24 * 60 * 60 * 1000
 const IPAM_HOT_PERCENT = 80
@@ -85,7 +86,8 @@ export default defineEventHandler(async (event) => {
 
     return withPrismaRetry(async () => {
         const [
-            statusCounts,
+            devicesForPresence,
+            configHosts,
             typeCounts,
             deviceTypes,
             totalDevices,
@@ -93,7 +95,6 @@ export default defineEventHandler(async (event) => {
             portsAssigned,
             unassignedByDevice,
             recentLogs,
-            offlineDevices,
             ipRanges,
             mikrotikDevices,
             proxmoxNodes,
@@ -101,11 +102,20 @@ export default defineEventHandler(async (event) => {
             hikvisionDevices,
             failedSyncs,
         ] = await Promise.all([
-            prisma.device.groupBy({
-                by: ['status'],
+            prisma.device.findMany({
                 where: whereSite,
-                _count: { id: true },
+                select: {
+                    id: true,
+                    name: true,
+                    typeCode: true,
+                    ip: true,
+                    lastSeen: true,
+                    status: true,
+                    agent: { select: { id: true, status: true } },
+                    isApiActive: true,
+                },
             }),
+            loadConfigManagedHosts(),
             prisma.device.groupBy({
                 by: ['typeCode'],
                 where: whereSite,
@@ -127,18 +137,6 @@ export default defineEventHandler(async (event) => {
             prisma.auditLog.findMany({
                 orderBy: { createdAt: 'desc' },
                 take: 8,
-            }),
-            prisma.device.findMany({
-                where: { ...whereSite, status: 'OFFLINE' },
-                orderBy: { lastSeen: 'desc' },
-                take: 8,
-                select: {
-                    id: true,
-                    name: true,
-                    typeCode: true,
-                    ip: true,
-                    lastSeen: true,
-                },
             }),
             prisma.iPRange.findMany({
                 where: whereSite,
@@ -190,7 +188,27 @@ export default defineEventHandler(async (event) => {
         ])
 
         const typeMeta = Object.fromEntries(deviceTypes.map(t => [t.code, t]))
-        const byStatus = Object.fromEntries(statusCounts.map(s => [s.status, s._count.id]))
+        const byStatus: Record<string, number> = {}
+        for (const device of devicesForPresence) {
+            const status = resolveDeviceStatus({
+                status: device.status,
+                agent: device.agent,
+                isApiActive: device.isApiActive,
+                ip: device.ip,
+                configHosts,
+            })
+            byStatus[status] = (byStatus[status] || 0) + 1
+        }
+        const offlineDevices = devicesForPresence
+            .filter(d => resolveDeviceStatus({
+                status: d.status,
+                agent: d.agent,
+                isApiActive: d.isApiActive,
+                ip: d.ip,
+                configHosts,
+            }) === 'OFFLINE')
+            .sort((a, b) => (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0))
+            .slice(0, 8)
         const byType = typeCounts
             .map(t => ({
                 code: t.typeCode,

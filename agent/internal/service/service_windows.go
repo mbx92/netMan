@@ -17,6 +17,8 @@ type winService struct {
 }
 
 func (s *winService) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (svcSpecificEC bool, exitCode uint32) {
+	changes <- svc.Status{State: svc.StartPending}
+
 	stop := make(chan struct{})
 	done := make(chan struct{})
 

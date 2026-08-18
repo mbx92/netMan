@@ -13,7 +13,7 @@
         </div>
         <p class="type-body-sm text-base-content/60 mt-1">
           Manage all infrastructure devices
-          <span v-if="lastUpdate" class="text-xs ml-2">• Last update: {{ formatTimeAgo(lastUpdate) }}</span>
+          <span class="text-xs ml-2">• Agent for PCs · config for integrations</span>
         </p>
       </div>
       <NuxtLink to="/devices/create" class="btn btn-primary gap-2">

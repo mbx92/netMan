@@ -1,7 +1,7 @@
 import prisma, { withPrismaRetry } from '../../../../utils/prisma'
-import { pingHost } from '../../../../utils/discovery'
+import { agentReachability } from '../../../../utils/device-presence'
 
-// GET /api/devices/[id]/ports/stream - SSE endpoint for real-time port status
+// GET /api/devices/[id]/ports/stream - SSE of connected-device agent presence (no ICMP).
 export default defineEventHandler((event) => {
     const id = getRouterParam(event, 'id')
 
@@ -12,7 +12,6 @@ export default defineEventHandler((event) => {
         })
     }
 
-    // Set SSE headers
     setHeader(event, 'Content-Type', 'text/event-stream')
     setHeader(event, 'Cache-Control', 'no-cache')
     setHeader(event, 'Connection', 'keep-alive')
@@ -23,7 +22,6 @@ export default defineEventHandler((event) => {
     let intervalId: ReturnType<typeof setInterval> | null = null
     let heartbeatId: ReturnType<typeof setInterval> | null = null
 
-    // Handle client disconnect
     event.node.req.on('close', () => {
         isConnected = false
         if (intervalId) clearInterval(intervalId)
@@ -33,12 +31,10 @@ export default defineEventHandler((event) => {
 
     console.log(`[SSE] Client connected to port stream for device ${id}`)
 
-    // Send port status updates
     const sendPortStatus = async () => {
         if (!isConnected) return
 
         try {
-            // Get device with ports
             const device = await withPrismaRetry(() =>
                 prisma.device.findUnique({
                     where: { id },
@@ -52,6 +48,7 @@ export default defineEventHandler((event) => {
                                         ip: true,
                                         typeCode: true,
                                         status: true,
+                                        agent: { select: { id: true, status: true } },
                                     },
                                 },
                             },
@@ -66,46 +63,23 @@ export default defineEventHandler((event) => {
                 return
             }
 
-            // Ping all connected devices in parallel
-            const portsWithStatus = await Promise.all(
-                device.ports.map(async (port) => {
-                    let pingStatus: 'online' | 'offline' | 'unknown' = 'unknown'
-                    let responseTime: number | undefined
-
-                    if (port.connectedDevice?.ip) {
-                        try {
-                            const result = await pingHost(port.connectedDevice.ip, 2000)
-                            pingStatus = result.alive ? 'online' : 'offline'
-                            responseTime = result.responseTime
-                        } catch {
-                            pingStatus = 'offline'
-                        }
-                    }
-
-                    return {
-                        id: port.id,
-                        portNumber: port.portNumber,
-                        portName: port.portName,
-                        connectedDeviceId: port.connectedDeviceId,
-                        connectedDeviceName: port.connectedDevice?.name,
-                        connectedDeviceIp: port.connectedDevice?.ip,
-                        pingStatus,
-                        responseTime,
-                    }
-                })
-            )
+            const portsWithStatus = device.ports.map((port) => ({
+                id: port.id,
+                portNumber: port.portNumber,
+                portName: port.portName,
+                connectedDeviceId: port.connectedDeviceId,
+                connectedDeviceName: port.connectedDevice?.name,
+                connectedDeviceIp: port.connectedDevice?.ip,
+                pingStatus: agentReachability(port.connectedDevice?.agent),
+            }))
 
             if (!isConnected) return
 
-            // Send SSE event
-            const data = {
+            response.write(`event: portStatus\ndata: ${JSON.stringify({
                 timestamp: new Date().toISOString(),
                 deviceId: id,
                 ports: portsWithStatus,
-            }
-
-            response.write(`event: portStatus\ndata: ${JSON.stringify(data)}\n\n`)
-
+            })}\n\n`)
         } catch (error) {
             console.error('[SSE] Error fetching port status:', error)
             if (isConnected) {
@@ -114,19 +88,16 @@ export default defineEventHandler((event) => {
         }
     }
 
-    // Start sending data
     sendPortStatus()
 
-    // Set up interval for continuous pinging (every 20 seconds)
     intervalId = setInterval(() => {
         if (!isConnected) {
             if (intervalId) clearInterval(intervalId)
             return
         }
         sendPortStatus()
-    }, 20000)
+    }, 5000)
 
-    // Keep connection alive with heartbeat
     heartbeatId = setInterval(() => {
         if (!isConnected) {
             if (heartbeatId) clearInterval(heartbeatId)
@@ -135,6 +106,5 @@ export default defineEventHandler((event) => {
         response.write(`: heartbeat\n\n`)
     }, 30000)
 
-    // Return nothing - connection stays open
     event._handled = true
 })

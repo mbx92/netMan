@@ -1,4 +1,5 @@
 import prisma from '../../utils/prisma'
+import { deviceStatusWithAgent } from '../../utils/device-presence'
 
 interface TopologyNode {
     id: string
@@ -44,6 +45,7 @@ export default defineEventHandler(async (event) => {
             where: deviceWhere,
             include: {
                 site: { select: { id: true, name: true } },
+                agent: { select: { id: true, status: true } },
                 ports: {
                     include: {
                         connectedDevice: { select: { id: true, name: true } }
@@ -95,7 +97,7 @@ export default defineEventHandler(async (event) => {
                 mac: device.mac || undefined,
                 siteId: device.siteId || undefined,
                 siteName: device.site?.name,
-                status: device.status.toLowerCase() as 'online' | 'offline' | 'unknown',
+                status: deviceStatusWithAgent(device.status, device.agent).toLowerCase() as 'online' | 'offline' | 'unknown',
                 ports: device.ports.length || device.portCount || 0,
                 tier,
             })

@@ -1,17 +1,14 @@
 import prisma, { withPrismaRetry } from '../../utils/prisma'
-import { pingHost } from '../../utils/discovery'
-import { isLinkedAgentOnline } from '../../utils/device-presence'
+import { deviceStatusWithAgent } from '../../utils/device-presence'
 
 interface DeviceStatus {
     id: string
-    status: 'ONLINE' | 'OFFLINE' | 'MAINTENANCE'
+    status: string
     lastSeen: string | null
-    responseTime?: number
 }
 
-// GET /api/devices/stream - SSE endpoint for real-time device status
+// GET /api/devices/stream - SSE of agent-backed device presence (no ICMP).
 export default defineEventHandler((event) => {
-    // Set SSE headers
     setHeader(event, 'Content-Type', 'text/event-stream')
     setHeader(event, 'Cache-Control', 'no-cache')
     setHeader(event, 'Connection', 'keep-alive')
@@ -22,7 +19,6 @@ export default defineEventHandler((event) => {
     let intervalId: ReturnType<typeof setInterval> | null = null
     let heartbeatId: ReturnType<typeof setInterval> | null = null
 
-    // Handle client disconnect
     event.node.req.on('close', () => {
         isConnected = false
         if (intervalId) clearInterval(intervalId)
@@ -32,22 +28,14 @@ export default defineEventHandler((event) => {
 
     console.log('[SSE] Client connected to device status stream')
 
-    // Send device status updates
     const sendDeviceStatus = async () => {
         if (!isConnected) return
 
         try {
             const devices = await withPrismaRetry(() =>
                 prisma.device.findMany({
-                    where: {
-                        OR: [
-                            { ip: { not: null } },
-                            { agent: { isNot: null } },
-                        ],
-                    },
                     select: {
                         id: true,
-                        ip: true,
                         status: true,
                         lastSeen: true,
                         agent: { select: { id: true, status: true } },
@@ -55,82 +43,40 @@ export default defineEventHandler((event) => {
                 }),
             )
 
-            // Ping all devices in parallel (with concurrency limit)
-            const batchSize = 10
+            const now = new Date()
             const results: DeviceStatus[] = []
 
-            for (let i = 0; i < devices.length; i += batchSize) {
+            for (const device of devices) {
                 if (!isConnected) break
 
-                const batch = devices.slice(i, i + batchSize)
+                const status = deviceStatusWithAgent(device.status, device.agent)
+                const lastSeen = status === 'ONLINE' ? now : device.lastSeen
 
-                const batchResults = await Promise.all(
-                    batch.map(async (device) => {
-                        if (device.status === 'MAINTENANCE') {
-                            return {
-                                id: device.id,
-                                status: 'MAINTENANCE' as const,
-                                lastSeen: device.lastSeen?.toISOString() ?? null,
-                            }
-                        }
+                if (device.agent && status !== device.status) {
+                    await prisma.device.update({
+                        where: { id: device.id },
+                        data: {
+                            status: status as 'ONLINE' | 'OFFLINE' | 'UNKNOWN' | 'MAINTENANCE',
+                            lastSeen: status === 'ONLINE' ? now : device.lastSeen,
+                        },
+                    }).catch(() => { })
+                }
 
-                        let status: 'ONLINE' | 'OFFLINE' = 'OFFLINE'
-                        let responseTime: number | undefined
-
-                        // Agent WebSocket is authoritative: ICMP often fails for
-                        // NAT / host-firewall PCs even while the agent is online.
-                        if (isLinkedAgentOnline(device.agent)) {
-                            status = 'ONLINE'
-                        } else if (device.ip) {
-                            try {
-                                const result = await pingHost(device.ip, 2000)
-                                status = result.alive ? 'ONLINE' : 'OFFLINE'
-                                responseTime = result.responseTime
-                            } catch {
-                                status = 'OFFLINE'
-                            }
-                        }
-
-                        // Update device status in database if changed
-                        const now = new Date()
-                        if (status !== device.status || status === 'ONLINE') {
-                            try {
-                                await prisma.device.update({
-                                    where: { id: device.id },
-                                    data: {
-                                        status,
-                                        lastSeen: status === 'ONLINE' ? now : device.lastSeen,
-                                    },
-                                })
-                            } catch (e) {
-                                // Ignore update errors
-                            }
-                        }
-
-                        return {
-                            id: device.id,
-                            status,
-                            lastSeen: status === 'ONLINE' ? now.toISOString() : device.lastSeen?.toISOString() ?? null,
-                            responseTime,
-                        }
-                    })
-                )
-
-                results.push(...batchResults)
+                results.push({
+                    id: device.id,
+                    status,
+                    lastSeen: lastSeen ? lastSeen.toISOString() : null,
+                })
             }
 
             if (!isConnected) return
 
-            // Send SSE event
-            const data = {
-                timestamp: new Date().toISOString(),
+            response.write(`event: deviceStatus\ndata: ${JSON.stringify({
+                timestamp: now.toISOString(),
                 devices: results,
                 totalOnline: results.filter(d => d.status === 'ONLINE').length,
                 totalOffline: results.filter(d => d.status === 'OFFLINE').length,
-            }
-
-            response.write(`event: deviceStatus\ndata: ${JSON.stringify(data)}\n\n`)
-
+            })}\n\n`)
         } catch (error) {
             console.error('[SSE] Error fetching device status:', error)
             if (isConnected) {
@@ -139,19 +85,16 @@ export default defineEventHandler((event) => {
         }
     }
 
-    // Start sending data
     sendDeviceStatus()
 
-    // Set up interval for continuous pinging (every 30 seconds)
     intervalId = setInterval(() => {
         if (!isConnected) {
             if (intervalId) clearInterval(intervalId)
             return
         }
         sendDeviceStatus()
-    }, 30000)
+    }, 5000)
 
-    // Keep connection alive with heartbeat
     heartbeatId = setInterval(() => {
         if (!isConnected) {
             if (heartbeatId) clearInterval(heartbeatId)
@@ -160,6 +103,5 @@ export default defineEventHandler((event) => {
         response.write(`: heartbeat\n\n`)
     }, 30000)
 
-    // Return nothing - connection stays open
     event._handled = true
 })

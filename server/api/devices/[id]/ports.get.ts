@@ -1,5 +1,5 @@
 import prisma from '../../../utils/prisma'
-import { pingHost } from '../../../utils/discovery'
+import { agentReachability } from '../../../utils/device-presence'
 
 // GET /api/devices/[id]/ports - Get all ports for a device with connected device info and status
 export default defineEventHandler(async (event) => {
@@ -12,7 +12,6 @@ export default defineEventHandler(async (event) => {
         })
     }
 
-    // Get device with its ports and connected devices
     const device = await prisma.device.findUnique({
         where: { id },
         include: {
@@ -25,6 +24,7 @@ export default defineEventHandler(async (event) => {
                             ip: true,
                             typeCode: true,
                             status: true,
+                            agent: { select: { id: true, status: true } },
                         },
                     },
                 },
@@ -40,26 +40,10 @@ export default defineEventHandler(async (event) => {
         })
     }
 
-    // Check ping status for each connected device
-    const portsWithStatus = await Promise.all(
-        device.ports.map(async (port) => {
-            let pingStatus: 'online' | 'offline' | 'unknown' = 'unknown'
-
-            if (port.connectedDevice?.ip) {
-                try {
-                    const result = await pingHost(port.connectedDevice.ip, 1000)
-                    pingStatus = result.alive ? 'online' : 'offline'
-                } catch {
-                    pingStatus = 'offline'
-                }
-            }
-
-            return {
-                ...port,
-                pingStatus,
-            }
-        })
-    )
+    const portsWithStatus = device.ports.map((port) => ({
+        ...port,
+        pingStatus: agentReachability(port.connectedDevice?.agent),
+    }))
 
     return {
         device: {

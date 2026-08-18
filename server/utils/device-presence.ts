@@ -1,9 +1,6 @@
 /**
- * Device presence for agent-backed machines.
- *
- * ICMP ping (devices/stream) cannot see PCs behind NAT or a host firewall.
- * The agent's outbound WebSocket is the authoritative "this machine is up"
- * signal — ping must not overwrite that with OFFLINE.
+ * Device presence is agent WebSocket only — ICMP ping is not used.
+ * Machines without an agent stay UNKNOWN (or MAINTENANCE if set).
  */
 import { agentManager } from './agent-manager'
 
@@ -15,7 +12,12 @@ export function isLinkedAgentOnline(agent: LinkedAgent): boolean {
 }
 
 export function deviceStatusWithAgent(deviceStatus: string, agent: LinkedAgent): string {
-    if (deviceStatus === 'MAINTENANCE') return deviceStatus
-    if (isLinkedAgentOnline(agent)) return 'ONLINE'
-    return deviceStatus
+    if (deviceStatus === 'MAINTENANCE') return 'MAINTENANCE'
+    if (!agent) return 'UNKNOWN'
+    return isLinkedAgentOnline(agent) ? 'ONLINE' : 'OFFLINE'
+}
+
+export function agentReachability(agent: LinkedAgent): 'online' | 'offline' | 'unknown' {
+    if (!agent) return 'unknown'
+    return isLinkedAgentOnline(agent) ? 'online' : 'offline'
 }

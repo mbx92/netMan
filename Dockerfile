@@ -8,14 +8,20 @@ COPY agent/ ./
 RUN mkdir -p /agent/dist \
     && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /agent/dist/netman-agent-windows.exe ./cmd/netman-agent \
     && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /agent/dist/netman-agent-linux ./cmd/netman-agent \
-    && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /agent/dist/netman-agent-macos ./cmd/netman-agent
+    && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /agent/dist/netman-agent-macos ./cmd/netman-agent \
+    && touch /agent/dist/.built
 
 # Node stages use Debian slim (glibc). Do not apk/apt in any stage: Coolify
 # build hosts often cannot reach Alpine or Debian package mirrors (apk exit 3,
 # apt exit 2). node:20-bookworm-slim already ships libssl + ca-certificates
 # for Prisma; the HEALTHCHECK uses Node fetch instead of curl.
+#
+# COPY --from=agent-builder runs first so BuildKit cannot finalize the Go
+# stage and the Node deps stage at the same time. Parallel commits on Coolify
+# hit "snapshot does not exist: not found".
 FROM node:20-bookworm-slim AS deps
 WORKDIR /app
+COPY --from=agent-builder /agent/dist/.built /tmp/.agent-built
 COPY package*.json ./
 COPY packages ./packages
 RUN npm ci

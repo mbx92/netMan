@@ -87,7 +87,7 @@ export default defineNuxtConfig({
       // together. Served at GET /api/agents/latest and used by the agent
       // detail page to hide "Update Agent" once a reconnected agent reports
       // this version.
-      agentLatestVersion: "0.6.1",
+      agentLatestVersion: "0.6.2",
     },
   },
 

@@ -31,3 +31,9 @@ func restartProcess() {
 func notifyUpdateReady(version string) {
 	log.Printf("[agent] update %s ready (will apply automatically)", version)
 }
+
+func afterApply(m *Manager, version string) {
+	log.Printf("[agent] update %s applied; exiting so the supervisor starts the new binary", version)
+	m.signalExit()
+	restartProcess()
+}

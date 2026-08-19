@@ -75,6 +75,10 @@ func serveTrayConn(m *Manager, conn net.Conn) {
 		switch msg["type"] {
 		case "apply":
 			m.RequestApply()
+		case "restart":
+			m.RequestRestart()
+		case "progress-ack":
+			m.RequestProgressAck()
 		case "check":
 			go func() {
 				m.CheckNow()
@@ -122,4 +126,14 @@ func writeJSON(w io.Writer, msg any) {
 
 func pushTrayStatus(m *Manager) {
 	broadcastToTrays(snapshotMessage(m))
+}
+
+func notifyProgress(phase string, percent int, message string) {
+	msg := map[string]any{
+		"type":    "progress",
+		"phase":   phase,
+		"percent": percent,
+		"message": message,
+	}
+	broadcastToTrays(msg)
 }

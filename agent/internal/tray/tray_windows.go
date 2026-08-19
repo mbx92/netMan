@@ -183,21 +183,34 @@ func trayWndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr 
 		case wmLButtonUp, wmRButtonUp:
 			showMenu(hwnd)
 		case ninBalloonUserClick:
+			beginUpdateUI()
 			request("apply")
 		}
 		return 0
 	case wmCommand:
 		switch uint16(wParam) {
 		case cmdUpdate:
+			beginUpdateUI()
 			request("apply")
 		case cmdCheck:
 			request("check")
 		case cmdQuit:
+			progMu.Lock()
+			phase := progPhase
+			can := progCanClose
+			progMu.Unlock()
+			if can && phase == "complete" {
+				finishUpdateAndQuit(phase)
+				return 0
+			}
 			procPostQuit.Call(0)
 		}
 		return 0
 	case wmDestroy:
 		procPostQuit.Call(0)
+		return 0
+	case wmShowProgress:
+		ensureProgressWindow()
 		return 0
 	}
 	r, _, _ := procDefWindowProc.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
@@ -336,7 +349,7 @@ func handleIPC(msg map[string]any) {
 			p := pending
 			pendingMu.Unlock()
 			if p != "" {
-				_ = notify(nimModify, "Update available", "netMan Agent v"+p+" is ready. Click to install silently.")
+				_ = notify(nimModify, "Update available", "netMan Agent v"+p+" is ready. Click to install.")
 			}
 		}
 	case "update-available":
@@ -347,7 +360,19 @@ func handleIPC(msg map[string]any) {
 		pendingMu.Lock()
 		pending = ver
 		pendingMu.Unlock()
-		_ = notify(nimModify, "Update available", "netMan Agent v"+ver+" is ready. Click to install silently.")
+		_ = notify(nimModify, "Update available", "netMan Agent v"+ver+" is ready. Click to install.")
+	case "progress":
+		phase, _ := msg["phase"].(string)
+		text, _ := msg["message"].(string)
+		percent := -1
+		switch v := msg["percent"].(type) {
+		case float64:
+			percent = int(v)
+		}
+		if phase == "" {
+			return
+		}
+		postProgress(phase, percent, text)
 	}
 }
 

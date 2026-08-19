@@ -17,7 +17,7 @@
 //	  Normal run mode: loads the saved config and holds a persistent
 //	  connection to the server, sending a heartbeat every 30s. This is what
 //	  the Windows Service / systemd unit invokes. Also polls the server for
-//	  a newer binary (silent apply on Linux/macOS; tray confirmation on Windows).
+//	  a newer binary (progress window on Windows, then restart on close; auto-apply on Linux/macOS).
 package main
 
 import (
@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	agentVersion = "0.6.1"
+	agentVersion = "0.6.2"
 	serviceName  = "netman-agent"
 )
 

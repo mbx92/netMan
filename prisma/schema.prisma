@@ -231,6 +231,7 @@ model Agent {
   // Best-effort: agent shells out to platform tools (dmidecode / WMI /
   // system_profiler) to get this, so any field can be null.
   diskInfo         Json? // [{ model, vendor?, sizeBytes? }] — one entry per physical drive
+  printerInfo      Json? // [{ name, driver?, port?, host?, default?, shared?, network?, status? }]
   memorySlotsTotal Int? // total DIMM slots on the motherboard
   memorySlotsUsed  Int? // slots currently populated
   memoryType       String? // e.g. "DDR3", "DDR4", "DDR5"

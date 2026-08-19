@@ -1,6 +1,7 @@
 import prisma from '../../utils/prisma'
 import { agentManager } from '../../utils/agent-manager'
 import { serializeAgentBigints } from '../../utils/serialize-agent'
+import { attachPrinterDeviceIds } from '../../utils/attach-printer-devices'
 
 // GET /api/agents/[id]
 export default defineEventHandler(async (event) => {
@@ -14,5 +15,9 @@ export default defineEventHandler(async (event) => {
     if (!agent) throw createError({ statusCode: 404, statusMessage: 'Agent not found' })
 
     const { enrollTokenHash, authKeyHash, ...safeAgent } = agent
-    return { ...serializeAgentBigints(safeAgent), isConnected: agentManager.isOnline(agent.id) }
+    return {
+        ...serializeAgentBigints(safeAgent),
+        printerInfo: await attachPrinterDeviceIds(safeAgent.printerInfo),
+        isConnected: agentManager.isOnline(agent.id),
+    }
 })

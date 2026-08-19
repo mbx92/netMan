@@ -18,8 +18,19 @@ import { agentDownloadPlatformFromDb, getAgentLatestForPlatform } from '../../ut
 import { resolveAgentCommand } from '../../utils/agent-commands'
 
 interface HardwareDisk { model?: string; vendor?: string; sizeBytes?: number }
+interface HardwarePrinter {
+    name?: string
+    driver?: string
+    port?: string
+    host?: string
+    default?: boolean
+    shared?: boolean
+    network?: boolean
+    status?: string
+}
 interface HardwareInfo {
     disks?: HardwareDisk[]
+    printers?: HardwarePrinter[]
     memory?: { slotsTotal?: number; slotsUsed?: number; type?: string; totalBytes?: number }
 }
 
@@ -174,6 +185,7 @@ async function handleHello(peer: any, msg: HelloMessage) {
             agentVersion: msg.agentVersion || undefined,
             vncPassword: msg.vncPassword || undefined,
             diskInfo: msg.hardware?.disks ?? undefined,
+            printerInfo: msg.hardware?.printers ?? undefined,
             memorySlotsTotal: msg.hardware?.memory?.slotsTotal ?? undefined,
             memorySlotsUsed: msg.hardware?.memory?.slotsUsed ?? undefined,
             memoryType: msg.hardware?.memory?.type ?? undefined,

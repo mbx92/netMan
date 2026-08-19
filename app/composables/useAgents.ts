@@ -36,6 +36,17 @@ export interface AgentSummary {
   lastUptimeSec: number | null
   lastMetrics: AgentMetricsSnapshot | null
   diskInfo: { model?: string; vendor?: string; sizeBytes?: number }[] | null
+  printerInfo: {
+    name?: string
+    driver?: string
+    port?: string
+    host?: string
+    default?: boolean
+    shared?: boolean
+    network?: boolean
+    status?: string
+    deviceId?: string
+  }[] | null
   memorySlotsTotal: number | null
   memorySlotsUsed: number | null
   memoryType: string | null

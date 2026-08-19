@@ -1,13 +1,15 @@
 // Package hardware collects a best-effort, mostly-static hardware
-// inventory — disk models/capacity and RAM size/slot count/type — for
+// inventory — disk models/capacity, RAM, and OS print queues — for
 // display on the agent detail page. Go has no portable way to read
 // DMI/SMBIOS data, so every platform file here shells out to that OS's
-// own inventory tool (dmidecode / PowerShell CIM / system_profiler).
-// Soft-fail throughout: a missing tool, insufficient privilege, or
-// unparseable output just means an empty field, never an agent crash.
+// own inventory tool (dmidecode / PowerShell CIM / system_profiler /
+// lpstat). Soft-fail throughout: a missing tool, insufficient privilege,
+// or unparseable output just means an empty field, never an agent crash.
 package hardware
 
 import (
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -29,10 +31,23 @@ type Memory struct {
 	TotalBytes uint64 `json:"totalBytes,omitempty"`
 }
 
+// Printer is one OS-configured print queue (USB, network, or shared).
+type Printer struct {
+	Name    string `json:"name"`
+	Driver  string `json:"driver,omitempty"`
+	Port    string `json:"port,omitempty"`
+	Host    string `json:"host,omitempty"` // IP or hostname when the queue is networked
+	Default bool   `json:"default,omitempty"`
+	Shared  bool   `json:"shared,omitempty"`
+	Network bool   `json:"network,omitempty"`
+	Status  string `json:"status,omitempty"` // idle, printing, offline, paused, unknown
+}
+
 // Info is the full inventory sent to the server.
 type Info struct {
-	Disks  []Disk  `json:"disks,omitempty"`
-	Memory *Memory `json:"memory,omitempty"`
+	Disks    []Disk    `json:"disks,omitempty"`
+	Memory   *Memory   `json:"memory,omitempty"`
+	Printers []Printer `json:"printers,omitempty"`
 }
 
 // Collect gathers the inventory. It shells out to slow platform tools, so
@@ -40,8 +55,9 @@ type Info struct {
 // calling it on every reconnect.
 func Collect() Info {
 	info := Info{
-		Disks:  collectDisks(),
-		Memory: collectMemory(),
+		Disks:    collectDisks(),
+		Memory:   collectMemory(),
+		Printers: collectPrinters(),
 	}
 	// OS-visible RAM is the number operators actually care about (and is
 	// available without dmidecode / admin CIM). Fill it in when the
@@ -84,4 +100,57 @@ func parseCapacityBytes(s string) uint64 {
 	default:
 		return uint64(n)
 	}
+}
+
+func isSoftwarePrinter(name, port, driver string) bool {
+	blob := strings.ToLower(strings.Join([]string{name, port, driver}, " "))
+	for _, n := range []string{
+		"microsoft print to pdf",
+		"microsoft xps",
+		"xps document writer",
+		"onenote",
+		"fax",
+		"adobe pdf",
+		"foxit reader pdf printer",
+		"cups-pdf",
+		"print to pdf",
+	} {
+		if strings.Contains(blob, n) {
+			return true
+		}
+	}
+	p := strings.ToUpper(strings.TrimSpace(port))
+	return p == "FILE:" || p == "NUL:" || p == "PORTPROMPT:" || strings.HasPrefix(p, "XPS")
+}
+
+func hostFromPrinterURI(uri string) string {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return ""
+	}
+	upper := strings.ToUpper(uri)
+	if strings.HasPrefix(upper, "IP_") {
+		return strings.TrimSpace(uri[3:])
+	}
+	if i := strings.Index(uri, "://"); i >= 0 {
+		u, err := url.Parse(uri)
+		if err != nil {
+			return ""
+		}
+		if ip := u.Query().Get("ip"); ip != "" {
+			return ip
+		}
+		host := u.Hostname()
+		if host == "" {
+			host = u.Host
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
+			}
+		}
+		if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+			return ""
+		}
+		return host
+	}
+	return ""
 }

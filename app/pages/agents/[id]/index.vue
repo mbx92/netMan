@@ -147,6 +147,37 @@
               </div>
             </dd>
           </div>
+          <div v-if="agent.printerInfo?.length" class="sm:col-span-2">
+            <dt class="text-base-content/60">Printer{{ agent.printerInfo.length > 1 ? 's' : '' }}</dt>
+            <dd class="font-medium">
+              <div v-for="(printer, i) in agent.printerInfo" :key="i" class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>{{ printer.name || 'Unknown' }}</span>
+                <span v-if="printer.default" class="badge badge-ghost badge-sm rounded-none">default</span>
+                <span class="text-base-content/60 text-xs">
+                  {{ printerKind(printer) }}
+                  <template v-if="printer.host"> · <span class="font-mono">{{ printer.host }}</span></template>
+                  <template v-if="printer.status"> · {{ printer.status }}</template>
+                </span>
+                <NuxtLink
+                  v-if="printer.deviceId"
+                  :to="`/devices/${printer.deviceId}`"
+                  class="btn btn-ghost btn-xs gap-1"
+                >
+                  View
+                </NuxtLink>
+                <button
+                  v-else-if="isNetworkPrinter(printer)"
+                  class="btn btn-ghost btn-xs gap-1"
+                  :disabled="addingPrinterKey === printerHostKey(printer)"
+                  @click="addNetworkPrinter(printer)"
+                >
+                  <span v-if="addingPrinterKey === printerHostKey(printer)" class="loading loading-spinner loading-xs"></span>
+                  <Plus v-else class="w-3 h-3" :stroke-width="2" />
+                  Add
+                </button>
+              </div>
+            </dd>
+          </div>
           <div v-if="agent.memoryType || agent.memorySlotsTotal || agent.memoryTotalBytes">
             <dt class="text-base-content/60">Memory</dt>
             <dd class="font-medium">
@@ -373,7 +404,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Copy, Cpu, Download, Eye, EyeOff, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, Power, RefreshCw, RotateCcw, Terminal, Trash2, X, XCircle } from '@lucide/vue'
+import { ArrowLeft, Copy, Cpu, Download, Eye, EyeOff, ExternalLink, HardDrive, Layers, MemoryStick, Monitor, Pencil, Plus, Power, RefreshCw, RotateCcw, Terminal, Trash2, X, XCircle } from '@lucide/vue'
 import type { AgentMetricsSnapshot, AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const route = useRoute()
@@ -460,6 +491,42 @@ function copy(text: string | undefined) {
 
 function formatPercent(value: number | null | undefined): string {
   return value == null ? '-' : `${Math.round(value)}%`
+}
+
+function printerKind(printer: NonNullable<AgentSummary['printerInfo']>[number]): string {
+  if (printer.network || printer.host) return 'network'
+  return 'local'
+}
+
+function isNetworkPrinter(printer: NonNullable<AgentSummary['printerInfo']>[number]): boolean {
+  return !!(printer.host && (printer.network || printer.host))
+}
+
+function printerHostKey(printer: NonNullable<AgentSummary['printerInfo']>[number]): string {
+  return `${printer.name || ''}|${printer.host || ''}`
+}
+
+const addingPrinterKey = ref<string | null>(null)
+
+async function addNetworkPrinter(printer: NonNullable<AgentSummary['printerInfo']>[number]) {
+  if (!printer.host || !printer.name) return
+  const key = printerHostKey(printer)
+  addingPrinterKey.value = key
+  try {
+    await $fetch(`/api/agents/${id}/add-printer`, {
+      method: 'POST',
+      body: { name: printer.name, host: printer.host },
+    })
+    await refreshAgent()
+  } catch (err: any) {
+    await alertDialog({
+      title: 'Could not add printer',
+      message: err?.data?.statusMessage || err?.message || 'Failed to add printer',
+      variant: 'danger',
+    })
+  } finally {
+    addingPrinterKey.value = null
+  }
 }
 
 function formatBytes(bytes: number | null | undefined): string {

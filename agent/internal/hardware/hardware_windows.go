@@ -121,3 +121,62 @@ func ddrTypeFromSMBIOS(code int) string {
 		return ""
 	}
 }
+
+type wmiPrinter struct {
+	Name          string `json:"Name"`
+	DriverName    string `json:"DriverName"`
+	PortName      string `json:"PortName"`
+	Default       bool   `json:"Default"`
+	Shared        bool   `json:"Shared"`
+	Network       bool   `json:"Network"`
+	WorkOffline   bool   `json:"WorkOffline"`
+	PrinterStatus int    `json:"PrinterStatus"`
+}
+
+func collectPrinters() []Printer {
+	raw, err := runPS("Get-CimInstance Win32_Printer | Select-Object Name,DriverName,PortName,Default,Shared,Network,WorkOffline,PrinterStatus | ConvertTo-Json -Compress")
+	if err != nil {
+		return nil
+	}
+	var rows []wmiPrinter
+	if unmarshalOneOrMany(raw, &rows) != nil {
+		return nil
+	}
+	var out []Printer
+	for _, r := range rows {
+		name := strings.TrimSpace(r.Name)
+		if name == "" || isSoftwarePrinter(name, r.PortName, r.DriverName) {
+			continue
+		}
+		p := Printer{
+			Name:    name,
+			Driver:  strings.TrimSpace(r.DriverName),
+			Port:    strings.TrimSpace(r.PortName),
+			Host:    hostFromPrinterURI(r.PortName),
+			Default: r.Default,
+			Shared:  r.Shared,
+			Network: r.Network || hostFromPrinterURI(r.PortName) != "",
+			Status:  windowsPrinterStatus(r.WorkOffline, r.PrinterStatus),
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+func windowsPrinterStatus(workOffline bool, code int) string {
+	if workOffline {
+		return "offline"
+	}
+	switch code {
+	case 3:
+		return "idle"
+	case 4:
+		return "printing"
+	case 5:
+		return "idle"
+	case 6, 7:
+		return "offline"
+	default:
+		return "unknown"
+	}
+}

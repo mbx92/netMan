@@ -3,7 +3,10 @@
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  // native = local macOS/Linux dev. debian-openssl-3.0.x = Coolify/Docker
+  // (node:20-bookworm, glibc + OpenSSL 3). Do not use linux-musl here — the
+  // runtime image is Debian, not Alpine.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

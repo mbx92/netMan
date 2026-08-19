@@ -11,15 +11,15 @@ RUN mkdir -p /agent/dist \
     && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /agent/dist/netman-agent-macos ./cmd/netman-agent \
     && touch /agent/dist/.built
 
-# Node stages use Debian slim (glibc). Do not apk/apt in any stage: Coolify
-# build hosts often cannot reach Alpine or Debian package mirrors (apk exit 3,
-# apt exit 2). node:20-bookworm-slim already ships libssl + ca-certificates
-# for Prisma; the HEALTHCHECK uses Node fetch instead of curl.
-#
+# Node stages use Debian bookworm (not slim, not Alpine):
+# - Coolify cannot apk/apt (mirrors blocked), so we need an image that
+#   already includes the openssl CLI. Slim lacks it; Prisma then defaults to
+#   openssl-1.1.x and the schema engine fails on OpenSSL 3.
+# - bookworm + debian-openssl-3.0.x matches Prisma's glibc engine.
 # COPY --from=agent-builder runs first so BuildKit cannot finalize the Go
 # stage and the Node deps stage at the same time. Parallel commits on Coolify
 # hit "snapshot does not exist: not found".
-FROM node:20-bookworm-slim AS deps
+FROM node:20-bookworm AS deps
 WORKDIR /app
 COPY --from=agent-builder /agent/dist/.built /tmp/.agent-built
 COPY package*.json ./
@@ -27,7 +27,7 @@ COPY packages ./packages
 RUN npm ci
 
 # Build stage - Builder
-FROM node:20-bookworm-slim AS builder
+FROM node:20-bookworm AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -45,17 +45,20 @@ ENV SSO_CLIENT_SECRET=$SSO_CLIENT_SECRET
 ENV SSO_REDIRECT_URI=$SSO_REDIRECT_URI
 ENV APP_URL=$APP_URL
 ENV SSO_AUTO_PROVISION=true
+ENV PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x
 
 RUN npx prisma generate
 RUN npm run build
 
 # Production stage
-FROM node:20-bookworm-slim AS runner
+FROM node:20-bookworm AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
+# Pin the engine Prisma's CLI picks at migrate/seed (no openssl auto-detect).
+ENV PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x
 
 # Copy built output
 COPY --from=builder /app/.output ./.output

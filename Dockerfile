@@ -10,10 +10,10 @@ RUN mkdir -p /agent/dist \
     && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /agent/dist/netman-agent-linux ./cmd/netman-agent \
     && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /agent/dist/netman-agent-macos ./cmd/netman-agent
 
-# Node stages use Debian slim, not Alpine: Coolify hosts (and many
-# institutional networks) cannot reach dl-cdn.alpinelinux.org, which made
-# `apk add` fail with exit 3. Builder and runner must share libc so Prisma
-# engines generated here still load in production.
+# Node stages use Debian slim (glibc). Do not apk/apt in any stage: Coolify
+# build hosts often cannot reach Alpine or Debian package mirrors (apk exit 3,
+# apt exit 2). node:20-bookworm-slim already ships libssl + ca-certificates
+# for Prisma; the HEALTHCHECK uses Node fetch instead of curl.
 FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 COPY package*.json ./
@@ -47,20 +47,6 @@ RUN npm run build
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
-# openssl: Prisma query engine. curl: HEALTHCHECK. Retries cover flaky mirrors.
-RUN set -eux; \
-    ok=0; \
-    for i in 1 2 3 4 5; do \
-      if apt-get update && apt-get install -y --no-install-recommends openssl curl ca-certificates; then \
-        ok=1; \
-        break; \
-      fi; \
-      echo "apt-get failed (attempt $$i), retrying..."; \
-      sleep $$((i * 3)); \
-    done; \
-    rm -rf /var/lib/apt/lists/*; \
-    [ "$$ok" = 1 ]
-
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
@@ -73,7 +59,7 @@ COPY --from=builder /app/server ./server
 COPY --from=agent-builder /agent/dist ./agent/dist
 COPY package*.json ./
 COPY packages ./packages
-COPY docker-entrypoint.sh ./
+COPY docker-entrypoint.sh docker-healthcheck.mjs ./
 RUN chmod +x ./docker-entrypoint.sh
 
 EXPOSE 3000
@@ -85,7 +71,7 @@ EXPOSE 3000
 # on a slow DB link that can take well over 30s, which was flapping the
 # container to "unhealthy" mid-startup.
 HEALTHCHECK --interval=15s --timeout=10s --start-period=90s --retries=3 \
-  CMD curl -f http://localhost:${PORT}/api/health || exit 1
+  CMD node docker-healthcheck.mjs
 
 # Apply pending Prisma migrations, seed baseline data (admin user + device
 # types), then start the application. Both steps are additive/upsert-only,

@@ -34,7 +34,7 @@ services:
     env_file:
       - .env.docker
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3002}/api/health"]
+      test: ["CMD", "node", "docker-healthcheck.mjs"]
       interval: 15s
       timeout: 10s
       retries: 3

@@ -10,15 +10,18 @@ RUN mkdir -p /agent/dist \
     && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /agent/dist/netman-agent-linux ./cmd/netman-agent \
     && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /agent/dist/netman-agent-macos ./cmd/netman-agent
 
-# Build stage - Dependencies
-FROM node:20-alpine AS deps
+# Node stages use Debian slim, not Alpine: Coolify hosts (and many
+# institutional networks) cannot reach dl-cdn.alpinelinux.org, which made
+# `apk add` fail with exit 3. Builder and runner must share libc so Prisma
+# engines generated here still load in production.
+FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 COPY package*.json ./
 COPY packages ./packages
 RUN npm ci
 
 # Build stage - Builder
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -41,11 +44,22 @@ RUN npx prisma generate
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
-# Install OpenSSL and other dependencies for Prisma, curl for the healthcheck
-RUN apk add --no-cache openssl libc6-compat curl
+# openssl: Prisma query engine. curl: HEALTHCHECK. Retries cover flaky mirrors.
+RUN set -eux; \
+    ok=0; \
+    for i in 1 2 3 4 5; do \
+      if apt-get update && apt-get install -y --no-install-recommends openssl curl ca-certificates; then \
+        ok=1; \
+        break; \
+      fi; \
+      echo "apt-get failed (attempt $$i), retrying..."; \
+      sleep $$((i * 3)); \
+    done; \
+    rm -rf /var/lib/apt/lists/*; \
+    [ "$$ok" = 1 ]
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0

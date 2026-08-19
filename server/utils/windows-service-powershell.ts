@@ -67,15 +67,19 @@ function Repair-NetManService([string]$ExePath) {
 }
 
 function Install-NetManTray([string]$ExePath) {
-    $installDir = Split-Path $ExePath
+    $installDir = Split-Path -LiteralPath $ExePath
     $vbsPath = Join-Path $installDir "start-tray.vbs"
-    Set-Content -Path $vbsPath -Value @"
-Set sh = CreateObject("Wscript.Shell")
-sh.Run """$ExePath"" -tray", 0, False
-"@
+    # Chr(34) avoids quote-counting bugs in VBS. An unquoted path under
+    # "C:\Program Files\..." is parsed as executable "C:\Program" and WSH
+    # errors with "There is no file extension in ...".
+    $vbs = @(
+        'Set sh = CreateObject("Wscript.Shell")',
+        ('sh.Run Chr(34) & "' + $ExePath.Replace('"', '') + '" & Chr(34) & " -tray", 0, False')
+    )
+    Set-Content -LiteralPath $vbsPath -Value $vbs -Encoding ASCII
     $runCmd = 'wscript.exe //nologo "' + $vbsPath + '"'
-    reg.exe add "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v NetManAgentTray /t REG_SZ /d $runCmd /f | Out-Null
-    Start-Process -FilePath "wscript.exe" -ArgumentList @("//nologo", $vbsPath) -ErrorAction SilentlyContinue
+    & reg.exe @('add', 'HKLM\Software\Microsoft\Windows\CurrentVersion\Run', '/v', 'NetManAgentTray', '/t', 'REG_SZ', '/d', $runCmd, '/f') | Out-Null
+    Start-Process -FilePath $ExePath -ArgumentList '-tray' -WindowStyle Hidden -ErrorAction SilentlyContinue
 }
 `
 

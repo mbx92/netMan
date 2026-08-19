@@ -230,10 +230,11 @@ model Agent {
   // rather than every heartbeat since it essentially never changes mid-run.
   // Best-effort: agent shells out to platform tools (dmidecode / WMI /
   // system_profiler) to get this, so any field can be null.
-  diskInfo         Json? // [{ model, vendor? }] — one entry per physical drive
+  diskInfo         Json? // [{ model, vendor?, sizeBytes? }] — one entry per physical drive
   memorySlotsTotal Int? // total DIMM slots on the motherboard
   memorySlotsUsed  Int? // slots currently populated
   memoryType       String? // e.g. "DDR3", "DDR4", "DDR5"
+  memoryTotalBytes BigInt? // installed RAM (from SMBIOS / OS)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

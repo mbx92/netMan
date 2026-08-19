@@ -1,5 +1,6 @@
 import prisma from '../../utils/prisma'
 import { agentManager } from '../../utils/agent-manager'
+import { serializeAgentBigints } from '../../utils/serialize-agent'
 
 // GET /api/agents - List all agents
 export default defineEventHandler(async () => {
@@ -9,7 +10,7 @@ export default defineEventHandler(async () => {
     })
 
     return agents.map(({ enrollTokenHash, authKeyHash, vncPassword, ...agent }) => ({
-        ...agent,
+        ...serializeAgentBigints(agent),
         isConnected: agentManager.isOnline(agent.id),
     }))
 })

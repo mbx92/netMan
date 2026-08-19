@@ -39,12 +39,13 @@ func unmarshalOneOrMany[T any](raw string, dst *[]T) error {
 }
 
 type wmiDisk struct {
-	Model        string `json:"Model"`
-	Manufacturer string `json:"Manufacturer"`
+	Model        string  `json:"Model"`
+	Manufacturer string  `json:"Manufacturer"`
+	Size         float64 `json:"Size"`
 }
 
 func collectDisks() []Disk {
-	raw, err := runPS("Get-CimInstance Win32_DiskDrive | Select-Object Model,Manufacturer | ConvertTo-Json -Compress")
+	raw, err := runPS("Get-CimInstance Win32_DiskDrive | Select-Object Model,Manufacturer,Size | ConvertTo-Json -Compress")
 	if err != nil {
 		return nil
 	}
@@ -59,18 +60,48 @@ func collectDisks() []Disk {
 			continue
 		}
 		vendor := strings.TrimSpace(d.Manufacturer)
-		// Win32_DiskDrive.Manufacturer is usually the generic "(Standard
-		// disk drives)" rather than a real brand — not worth surfacing.
 		if vendor == "(Standard disk drives)" {
 			vendor = ""
 		}
-		disks = append(disks, Disk{Model: model, Vendor: vendor})
+		disk := Disk{Model: model, Vendor: vendor}
+		if d.Size > 0 {
+			disk.SizeBytes = uint64(d.Size)
+		}
+		disks = append(disks, disk)
 	}
 	return disks
 }
 
 type wmiMemChip struct {
-	SMBIOSMemoryType int `json:"SMBIOSMemoryType"`
+	SMBIOSMemoryType int     `json:"SMBIOSMemoryType"`
+	Capacity         float64 `json:"Capacity"`
+}
+
+func collectMemory() *Memory {
+	raw, err := runPS("Get-CimInstance Win32_PhysicalMemory | Select-Object SMBIOSMemoryType,Capacity | ConvertTo-Json -Compress")
+	if err != nil {
+		return nil
+	}
+	var chips []wmiMemChip
+	if unmarshalOneOrMany(raw, &chips) != nil || len(chips) == 0 {
+		return nil
+	}
+
+	mem := &Memory{SlotsUsed: len(chips), Type: ddrTypeFromSMBIOS(chips[0].SMBIOSMemoryType)}
+	for _, c := range chips {
+		if c.Capacity > 0 {
+			mem.TotalBytes += uint64(c.Capacity)
+		}
+	}
+
+	mem.SlotsTotal = mem.SlotsUsed
+	if slotsRaw, err := runPS("(Get-CimInstance Win32_PhysicalMemoryArray | Measure-Object -Property MemoryDevices -Sum).Sum"); err == nil {
+		if n, convErr := strconv.Atoi(strings.TrimSpace(slotsRaw)); convErr == nil && n > 0 {
+			mem.SlotsTotal = n
+		}
+	}
+
+	return mem
 }
 
 func ddrTypeFromSMBIOS(code int) string {
@@ -89,28 +120,4 @@ func ddrTypeFromSMBIOS(code int) string {
 	default:
 		return ""
 	}
-}
-
-func collectMemory() *Memory {
-	raw, err := runPS("Get-CimInstance Win32_PhysicalMemory | Select-Object SMBIOSMemoryType | ConvertTo-Json -Compress")
-	if err != nil {
-		return nil
-	}
-	var chips []wmiMemChip
-	if unmarshalOneOrMany(raw, &chips) != nil || len(chips) == 0 {
-		return nil
-	}
-
-	mem := &Memory{SlotsUsed: len(chips), Type: ddrTypeFromSMBIOS(chips[0].SMBIOSMemoryType)}
-
-	// Total physical slots (including empty ones) lives on the memory array,
-	// not the individual chips — fall back to "used" if this fails.
-	mem.SlotsTotal = mem.SlotsUsed
-	if slotsRaw, err := runPS("(Get-CimInstance Win32_PhysicalMemoryArray | Measure-Object -Property MemoryDevices -Sum).Sum"); err == nil {
-		if n, convErr := strconv.Atoi(strings.TrimSpace(slotsRaw)); convErr == nil && n > 0 {
-			mem.SlotsTotal = n
-		}
-	}
-
-	return mem
 }

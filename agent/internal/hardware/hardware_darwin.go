@@ -18,6 +18,7 @@ func runSystemProfiler(dataType string, dst any) error {
 type spNVMe struct {
 	Items []struct {
 		DeviceModel string `json:"device_model"`
+		SizeInBytes int64  `json:"size_in_bytes"`
 	} `json:"SPNVMeDataType"`
 }
 
@@ -25,22 +26,25 @@ type spSATA struct {
 	Items []struct {
 		Items []struct {
 			DeviceModel string `json:"device_model"`
+			SizeInBytes int64  `json:"size_in_bytes"`
 		} `json:"_items"`
 	} `json:"SPSerialATADataType"`
 }
 
 func collectDisks() []Disk {
-	// Apple Silicon internal storage shows up under NVMe; older/Intel Macs
-	// (and any external SATA/USB drives) show up under Serial-ATA. Try
-	// both and merge — either can legitimately come back empty.
 	var disks []Disk
 
 	var nvme spNVMe
 	if runSystemProfiler("SPNVMeDataType", &nvme) == nil {
 		for _, it := range nvme.Items {
-			if it.DeviceModel != "" {
-				disks = append(disks, Disk{Model: it.DeviceModel})
+			if it.DeviceModel == "" && it.SizeInBytes <= 0 {
+				continue
 			}
+			d := Disk{Model: it.DeviceModel}
+			if it.SizeInBytes > 0 {
+				d.SizeBytes = uint64(it.SizeInBytes)
+			}
+			disks = append(disks, d)
 		}
 	}
 
@@ -48,9 +52,14 @@ func collectDisks() []Disk {
 	if runSystemProfiler("SPSerialATADataType", &sata) == nil {
 		for _, bus := range sata.Items {
 			for _, it := range bus.Items {
-				if it.DeviceModel != "" {
-					disks = append(disks, Disk{Model: it.DeviceModel})
+				if it.DeviceModel == "" && it.SizeInBytes <= 0 {
+					continue
 				}
+				d := Disk{Model: it.DeviceModel}
+				if it.SizeInBytes > 0 {
+					d.SizeBytes = uint64(it.SizeInBytes)
+				}
+				disks = append(disks, d)
 			}
 		}
 	}
@@ -60,17 +69,15 @@ func collectDisks() []Disk {
 
 type spMemory struct {
 	Items []struct {
-		Items []struct {
+		PhysicalMemory string `json:"physical_memory"`
+		Items          []struct {
 			DimmType   string `json:"dimm_type"`
 			DimmStatus string `json:"dimm_status"`
+			DimmSize   string `json:"dimm_size"`
 		} `json:"_items"`
 	} `json:"SPMemoryDataType"`
 }
 
-// collectMemory only finds real slot data on Intel Macs with socketed RAM.
-// Apple Silicon RAM is soldered/unified and system_profiler reports no per-
-// slot breakdown for it, so this comes back nil there — an accurate
-// "not applicable" rather than a guess.
 func collectMemory() *Memory {
 	var parsed spMemory
 	if runSystemProfiler("SPMemoryDataType", &parsed) != nil {
@@ -86,11 +93,15 @@ func collectMemory() *Memory {
 				if mem.Type == "" && slot.DimmType != "" {
 					mem.Type = slot.DimmType
 				}
+				mem.TotalBytes += parseCapacityBytes(slot.DimmSize)
 			}
+		}
+		if mem.TotalBytes == 0 && bank.PhysicalMemory != "" {
+			mem.TotalBytes = parseCapacityBytes(bank.PhysicalMemory)
 		}
 	}
 
-	if mem.SlotsTotal == 0 {
+	if mem.SlotsTotal == 0 && mem.TotalBytes == 0 {
 		return nil
 	}
 	return mem

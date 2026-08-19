@@ -8,7 +8,11 @@ export interface AgentMetricsSnapshot {
   loadAvg1?: number | null
   loadAvg5?: number | null
   loadAvg15?: number | null
-  partitions?: { mountpoint: string; percent: number }[]
+  partitions?: { mountpoint: string; percent: number; totalBytes?: number; usedBytes?: number }[]
+  memTotalBytes?: number | null
+  memUsedBytes?: number | null
+  diskTotalBytes?: number | null
+  diskUsedBytes?: number | null
   topProcesses?: { name: string; pid: number; cpuPercent: number; memPercent: number }[]
   loggedInUsers?: string[]
 }
@@ -31,10 +35,11 @@ export interface AgentSummary {
   lastDiskPercent: number | null
   lastUptimeSec: number | null
   lastMetrics: AgentMetricsSnapshot | null
-  diskInfo: { model?: string; vendor?: string }[] | null
+  diskInfo: { model?: string; vendor?: string; sizeBytes?: number }[] | null
   memorySlotsTotal: number | null
   memorySlotsUsed: number | null
   memoryType: string | null
+  memoryTotalBytes: number | null
   enrollExpiresAt: string | null
   isConnected: boolean
   device: { id: string; name: string; ip: string | null; siteId: string | null } | null

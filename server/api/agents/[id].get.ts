@@ -1,5 +1,6 @@
 import prisma from '../../utils/prisma'
 import { agentManager } from '../../utils/agent-manager'
+import { serializeAgentBigints } from '../../utils/serialize-agent'
 
 // GET /api/agents/[id]
 export default defineEventHandler(async (event) => {
@@ -13,5 +14,5 @@ export default defineEventHandler(async (event) => {
     if (!agent) throw createError({ statusCode: 404, statusMessage: 'Agent not found' })
 
     const { enrollTokenHash, authKeyHash, ...safeAgent } = agent
-    return { ...safeAgent, isConnected: agentManager.isOnline(agent.id) }
+    return { ...serializeAgentBigints(safeAgent), isConnected: agentManager.isOnline(agent.id) }
 })

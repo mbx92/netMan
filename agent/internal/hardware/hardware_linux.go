@@ -32,7 +32,11 @@ func collectDisks() []Disk {
 		if model == "" && vendor == "" {
 			continue
 		}
-		disks = append(disks, Disk{Model: model, Vendor: vendor})
+		disk := Disk{Model: model, Vendor: vendor}
+		if sectors, err := strconv.ParseUint(readSysfsTrimmed(filepath.Join("/sys/block", name, "size")), 10, 64); err == nil && sectors > 0 {
+			disk.SizeBytes = sectors * 512
+		}
+		disks = append(disks, disk)
 	}
 	return disks
 }
@@ -72,8 +76,10 @@ func parseDmidecodeMemory(out string) *Memory {
 		case trimmed == "Memory Device":
 			inDevice = true
 		case inDevice && strings.HasPrefix(trimmed, "Size:"):
-			if strings.TrimSpace(strings.TrimPrefix(trimmed, "Size:")) != "No Module Installed" {
+			size := strings.TrimSpace(strings.TrimPrefix(trimmed, "Size:"))
+			if size != "No Module Installed" {
 				mem.SlotsUsed++
+				mem.TotalBytes += parseCapacityBytes(size)
 			}
 		case inDevice && strings.HasPrefix(trimmed, "Type:") && !strings.HasPrefix(trimmed, "Type Detail"):
 			if mem.Type == "" {

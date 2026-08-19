@@ -38,11 +38,15 @@ type helloMessage struct {
 }
 
 type heartbeatMessage struct {
-	Type        string  `json:"type"`
-	CPUPercent  float64 `json:"cpuPercent"`
-	MemPercent  float64 `json:"memPercent"`
-	DiskPercent float64 `json:"diskPercent"`
-	UptimeSec   uint64  `json:"uptimeSec"`
+	Type           string  `json:"type"`
+	CPUPercent     float64 `json:"cpuPercent"`
+	MemPercent     float64 `json:"memPercent"`
+	MemTotalBytes  uint64  `json:"memTotalBytes,omitempty"`
+	MemUsedBytes   uint64  `json:"memUsedBytes,omitempty"`
+	DiskPercent    float64 `json:"diskPercent"`
+	DiskTotalBytes uint64  `json:"diskTotalBytes,omitempty"`
+	DiskUsedBytes  uint64  `json:"diskUsedBytes,omitempty"`
+	UptimeSec      uint64  `json:"uptimeSec"`
 
 	CPUPerCore []float64 `json:"cpuPerCore,omitempty"`
 
@@ -257,8 +261,12 @@ func sendHeartbeat(conn *websocket.Conn, collector *telemetry.Collector, writeMu
 		CPUPercent:           snap.CPUPercent,
 		CPUPerCore:           snap.CPUPerCore,
 		MemPercent:           snap.MemPercent,
+		MemTotalBytes:        snap.MemTotalBytes,
+		MemUsedBytes:         snap.MemUsedBytes,
 		SwapPercent:          snap.SwapPercent,
 		DiskPercent:          snap.DiskPercent,
+		DiskTotalBytes:       snap.DiskTotalBytes,
+		DiskUsedBytes:        snap.DiskUsedBytes,
 		UptimeSec:            snap.UptimeSec,
 		NetRxBytesPerSec:     snap.NetRxBytesPerSec,
 		NetTxBytesPerSec:     snap.NetTxBytesPerSec,

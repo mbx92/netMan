@@ -96,12 +96,14 @@
             <MemoryStick class="w-4 h-4" :stroke-width="2" /> Memory
           </div>
           <div class="text-2xl font-semibold">{{ formatPercent(agent.lastMemPercent) }}</div>
+          <div v-if="memoryUsedTotalLabel" class="text-xs font-mono text-base-content/60 mt-1">{{ memoryUsedTotalLabel }}</div>
         </div>
         <div class="bg-base-100 border border-base-300 rounded-none p-4">
           <div class="flex items-center gap-2 text-base-content/60 text-sm mb-1">
             <HardDrive class="w-4 h-4" :stroke-width="2" /> Disk
           </div>
           <div class="text-2xl font-semibold">{{ formatPercent(agent.lastDiskPercent) }}</div>
+          <div v-if="diskUsedTotalLabel" class="text-xs font-mono text-base-content/60 mt-1">{{ diskUsedTotalLabel }}</div>
         </div>
         <div class="bg-base-100 border border-base-300 rounded-none p-4">
           <div class="flex items-center gap-2 text-base-content/60 text-sm mb-1">
@@ -141,13 +143,18 @@
             <dd class="font-medium">
               <div v-for="(disk, i) in agent.diskInfo" :key="i">
                 {{ [disk.vendor, disk.model].filter(Boolean).join(' ') || 'Unknown' }}
+                <span v-if="disk.sizeBytes" class="text-base-content/60 font-mono"> · {{ formatBytes(disk.sizeBytes) }}</span>
               </div>
             </dd>
           </div>
-          <div v-if="agent.memoryType || agent.memorySlotsTotal">
+          <div v-if="agent.memoryType || agent.memorySlotsTotal || agent.memoryTotalBytes">
             <dt class="text-base-content/60">Memory</dt>
             <dd class="font-medium">
-              {{ agent.memoryType || 'Unknown type' }}
+              <span v-if="agent.memoryTotalBytes" class="font-mono">{{ formatBytes(agent.memoryTotalBytes) }}</span>
+              <span v-if="agent.memoryType" :class="agent.memoryTotalBytes ? 'text-base-content/60' : ''">
+                {{ agent.memoryTotalBytes ? ' · ' : '' }}{{ agent.memoryType }}
+              </span>
+              <span v-else-if="!agent.memoryTotalBytes">Unknown type</span>
               <span v-if="agent.memorySlotsTotal" class="text-base-content/60">
                 · {{ agent.memorySlotsUsed ?? '?' }}/{{ agent.memorySlotsTotal }} slots used
               </span>
@@ -196,7 +203,12 @@
               class="flex items-center justify-between text-xs font-mono bg-base-200/50 px-2 py-1"
             >
               <span class="truncate">{{ p.mountpoint }}</span>
-              <span class="font-medium shrink-0 ml-2">{{ formatPercent(p.percent) }}</span>
+              <span class="font-medium shrink-0 ml-2">
+                {{ formatPercent(p.percent) }}
+                <span v-if="p.totalBytes" class="text-base-content/60">
+                  · {{ formatBytes(p.usedBytes) }} / {{ formatBytes(p.totalBytes) }}
+                </span>
+              </span>
             </div>
           </div>
         </div>
@@ -449,6 +461,33 @@ function copy(text: string | undefined) {
 function formatPercent(value: number | null | undefined): string {
   return value == null ? '-' : `${Math.round(value)}%`
 }
+
+function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null || bytes <= 0) return '-'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  const digits = value >= 10 || unit === 0 ? 0 : 1
+  return `${value.toFixed(digits)} ${units[unit]}`
+}
+
+const memoryUsedTotalLabel = computed(() => {
+  const used = agent.value?.lastMetrics?.memUsedBytes
+  const total = agent.value?.lastMetrics?.memTotalBytes || agent.value?.memoryTotalBytes
+  if (!total) return ''
+  return used ? `${formatBytes(used)} / ${formatBytes(total)}` : formatBytes(total)
+})
+
+const diskUsedTotalLabel = computed(() => {
+  const used = agent.value?.lastMetrics?.diskUsedBytes
+  const total = agent.value?.lastMetrics?.diskTotalBytes
+  if (!total) return ''
+  return used ? `${formatBytes(used)} / ${formatBytes(total)}` : formatBytes(total)
+})
 
 const powerActionPending = ref<'restart' | 'shutdown' | null>(null)
 

@@ -23,6 +23,8 @@ import (
 type PartitionUsage struct {
 	Mountpoint string  `json:"mountpoint"`
 	Percent    float64 `json:"percent"`
+	TotalBytes uint64  `json:"totalBytes,omitempty"`
+	UsedBytes  uint64  `json:"usedBytes,omitempty"`
 }
 
 type ProcessInfo struct {
@@ -33,12 +35,16 @@ type ProcessInfo struct {
 }
 
 type Snapshot struct {
-	CPUPercent  float64   `json:"cpuPercent"`
-	CPUPerCore  []float64 `json:"cpuPerCore,omitempty"`
-	MemPercent  float64   `json:"memPercent"`
-	SwapPercent float64   `json:"swapPercent"`
-	DiskPercent float64   `json:"diskPercent"`
-	UptimeSec   uint64    `json:"uptimeSec"`
+	CPUPercent     float64   `json:"cpuPercent"`
+	CPUPerCore     []float64 `json:"cpuPerCore,omitempty"`
+	MemPercent     float64   `json:"memPercent"`
+	MemTotalBytes  uint64    `json:"memTotalBytes,omitempty"`
+	MemUsedBytes   uint64    `json:"memUsedBytes,omitempty"`
+	SwapPercent    float64   `json:"swapPercent"`
+	DiskPercent    float64   `json:"diskPercent"`
+	DiskTotalBytes uint64    `json:"diskTotalBytes,omitempty"`
+	DiskUsedBytes  uint64    `json:"diskUsedBytes,omitempty"`
+	UptimeSec      uint64    `json:"uptimeSec"`
 
 	// Rates, computed from the delta against the previous Collect() call —
 	// nil (omitted) on the very first sample of a process's lifetime.
@@ -92,6 +98,8 @@ func (c *Collector) Collect() Snapshot {
 
 	if vm, err := mem.VirtualMemory(); err == nil {
 		snap.MemPercent = vm.UsedPercent
+		snap.MemTotalBytes = vm.Total
+		snap.MemUsedBytes = vm.Used
 	}
 	if sm, err := mem.SwapMemory(); err == nil {
 		snap.SwapPercent = sm.UsedPercent
@@ -99,6 +107,8 @@ func (c *Collector) Collect() Snapshot {
 
 	if du, err := disk.Usage(systemDrive()); err == nil {
 		snap.DiskPercent = du.UsedPercent
+		snap.DiskTotalBytes = du.Total
+		snap.DiskUsedBytes = du.Used
 	}
 	snap.Partitions = collectPartitions()
 
@@ -176,7 +186,12 @@ func collectPartitions() []PartitionUsage {
 		if err != nil {
 			continue
 		}
-		out = append(out, PartitionUsage{Mountpoint: p.Mountpoint, Percent: du.UsedPercent})
+		out = append(out, PartitionUsage{
+			Mountpoint: p.Mountpoint,
+			Percent:    du.UsedPercent,
+			TotalBytes: du.Total,
+			UsedBytes:  du.Used,
+		})
 	}
 	return out
 }

@@ -17,10 +17,10 @@ import { updateDeviceNetworkInfo } from '../../utils/device-network-info'
 import { agentDownloadPlatformFromDb, getAgentLatestForPlatform } from '../../utils/agent-release'
 import { resolveAgentCommand } from '../../utils/agent-commands'
 
-interface HardwareDisk { model?: string; vendor?: string }
+interface HardwareDisk { model?: string; vendor?: string; sizeBytes?: number }
 interface HardwareInfo {
     disks?: HardwareDisk[]
-    memory?: { slotsTotal?: number; slotsUsed?: number; type?: string }
+    memory?: { slotsTotal?: number; slotsUsed?: number; type?: string; totalBytes?: number }
 }
 
 interface HelloMessage {
@@ -34,14 +34,18 @@ interface HelloMessage {
     hardware?: HardwareInfo
 }
 
-interface PartitionUsage { mountpoint: string; percent: number }
+interface PartitionUsage { mountpoint: string; percent: number; totalBytes?: number; usedBytes?: number }
 interface ProcessInfo { name: string; pid: number; cpuPercent: number; memPercent: number }
 
 interface HeartbeatMessage {
     type: 'heartbeat'
     cpuPercent?: number
     memPercent?: number
+    memTotalBytes?: number
+    memUsedBytes?: number
     diskPercent?: number
+    diskTotalBytes?: number
+    diskUsedBytes?: number
     uptimeSec?: number
     cpuPerCore?: number[]
     swapPercent?: number
@@ -173,6 +177,9 @@ async function handleHello(peer: any, msg: HelloMessage) {
             memorySlotsTotal: msg.hardware?.memory?.slotsTotal ?? undefined,
             memorySlotsUsed: msg.hardware?.memory?.slotsUsed ?? undefined,
             memoryType: msg.hardware?.memory?.type ?? undefined,
+            memoryTotalBytes: msg.hardware?.memory?.totalBytes != null
+                ? BigInt(Math.round(msg.hardware.memory.totalBytes))
+                : undefined,
         },
     })
 
@@ -222,6 +229,10 @@ async function handleHeartbeat(peer: any, msg: HeartbeatMessage) {
     const lastMetrics = {
         cpuPerCore: msg.cpuPerCore,
         swapPercent: msg.swapPercent,
+        memTotalBytes: msg.memTotalBytes,
+        memUsedBytes: msg.memUsedBytes,
+        diskTotalBytes: msg.diskTotalBytes,
+        diskUsedBytes: msg.diskUsedBytes,
         netRxBytesPerSec: msg.netRxBytesPerSec,
         netTxBytesPerSec: msg.netTxBytesPerSec,
         diskReadBytesPerSec: msg.diskReadBytesPerSec,

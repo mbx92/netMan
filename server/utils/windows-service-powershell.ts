@@ -54,6 +54,8 @@ function Replace-NetManExe([string]$Source, [string]$Dest) {
     Move-Item -LiteralPath $Source -Destination $Dest
     Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
 }
+
+function Unblock-NetManFile([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return }
     Unblock-File -LiteralPath $Path -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath ($Path + ":Zone.Identifier") -ErrorAction SilentlyContinue

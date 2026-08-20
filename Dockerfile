@@ -5,10 +5,14 @@ WORKDIR /agent
 COPY agent/go.mod agent/go.sum ./
 RUN go mod download
 COPY agent/ ./
+ARG APP_URL=https://netman.baliroyalhospital.co.id
 RUN mkdir -p /agent/dist \
     && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /agent/dist/netman-agent-windows.exe ./cmd/netman-agent \
     && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /agent/dist/netman-agent-linux ./cmd/netman-agent \
     && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /agent/dist/netman-agent-macos ./cmd/netman-agent \
+    && mkdir -p /agent/cmd/netman-agent-setup/payload \
+    && cp /agent/dist/netman-agent-windows.exe /agent/cmd/netman-agent-setup/payload/netman-agent.exe \
+    && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-X main.defaultServer=${APP_URL}" -o /agent/dist/NetMan-Agent-Setup.exe ./cmd/netman-agent-setup \
     && touch /agent/dist/.built
 
 # Node stages use Debian bookworm (not slim, not Alpine):

@@ -8,10 +8,16 @@
           Windows &amp; Linux machines monitored via the netMan agent — reachable even behind NAT
         </p>
       </div>
-      <button class="btn btn-primary gap-2" @click="openCreateModal">
-        <Plus class="w-4 h-4" :stroke-width="2" />
-        Add Agent
-      </button>
+        <div class="flex items-center gap-2">
+          <NuxtLink to="/download" class="btn btn-outline gap-2">
+            <Download class="w-4 h-4" :stroke-width="2" />
+            Installer
+          </NuxtLink>
+          <button class="btn btn-primary gap-2" @click="openCreateModal">
+            <Plus class="w-4 h-4" :stroke-width="2" />
+            Add Agent
+          </button>
+        </div>
     </div>
 
     <!-- Agent Table -->

@@ -26,6 +26,12 @@ export default defineNitroPlugin((nitroApp) => {
 })
 
 async function pruneOldSamples() {
+    if (typeof prisma.agentMetricSample?.deleteMany !== 'function') {
+        console.warn(
+            '[AgentMetricsRetention] Prisma client has no AgentMetricSample — run npx prisma generate and restart the dev server',
+        )
+        return
+    }
     const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000)
     const result = await prisma.agentMetricSample.deleteMany({ where: { recordedAt: { lt: cutoff } } })
     if (result.count > 0) {

@@ -39,3 +39,7 @@ export function buildInstallCommands(appUrl: string, token: string) {
         macos: `curl -fsSL ${appUrl}/api/agents/install/macos.sh | sudo bash -s -- --token '${token}' --server '${appUrl}'`,
     }
 }
+
+export function publicAppUrl(): string {
+    return String(useRuntimeConfig().public.appUrl || '').replace(/\/$/, '')
+}

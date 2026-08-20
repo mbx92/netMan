@@ -34,10 +34,25 @@ declare global {
   var prisma: undefined | ReturnType<typeof prismaClientSingleton>
 }
 
+/** Recreate the singleton if this process still holds a client generated
+ *  before a newer model existed — otherwise plugins like metrics retention
+ *  see `undefined.deleteMany`. */
+const REQUIRED_DELEGATES = [
+  'hikvisionDevice',
+  'appUser',
+  'agent',
+  'agentMetricSample',
+] as const
+
+function isStalePrismaClient(client: object): boolean {
+  return REQUIRED_DELEGATES.some(
+    (key) => typeof (client as Record<string, unknown>)[key]?.deleteMany !== 'function',
+  )
+}
+
 function getPrisma() {
   const existing = globalThis.prisma ?? prismaClientSingleton()
-  // Recreate if this process still holds a client generated before newer models
-  if (!(existing as { hikvisionDevice?: unknown }).hikvisionDevice) {
+  if (isStalePrismaClient(existing)) {
     globalThis.prisma = prismaClientSingleton()
     return globalThis.prisma
   }

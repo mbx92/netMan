@@ -78,7 +78,13 @@ function Install-NetManTray([string]$ExePath) {
     )
     Set-Content -LiteralPath $vbsPath -Value $vbs -Encoding ASCII
     $runCmd = 'wscript.exe //nologo "' + $vbsPath + '"'
-    & reg.exe @('add', 'HKLM\Software\Microsoft\Windows\CurrentVersion\Run', '/v', 'NetManAgentTray', '/t', 'REG_SZ', '/d', $runCmd, '/f') | Out-Null
+    # Do not use reg.exe: /d with quotes around "C:\Program Files\..." is parsed
+    # as extra key names ("Invalid key name"). Set-ItemProperty keeps the value intact.
+    $runKey = "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+    if (-not (Test-Path -LiteralPath $runKey)) {
+        New-Item -Path $runKey -Force | Out-Null
+    }
+    Set-ItemProperty -LiteralPath $runKey -Name "NetManAgentTray" -Value $runCmd
     Start-Process -FilePath $ExePath -ArgumentList '-tray' -WindowStyle Hidden -ErrorAction SilentlyContinue
 }
 `

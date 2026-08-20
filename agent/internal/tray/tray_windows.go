@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/netman/agent/internal/client"
 	"golang.org/x/sys/windows"
 )
 
@@ -21,12 +22,17 @@ const (
 	wmTray   = wmUser + 1
 	nidID    = 1
 
-	wmDestroy   = 0x0002
-	wmCommand   = 0x0111
-	wmLButtonUp = 0x0202
-	wmRButtonUp = 0x0205
+	wmDestroy       = 0x0002
+	wmCommand       = 0x0111
+	wmContextMenu   = 0x007B
+	wmLButtonUp     = 0x0202
+	wmLButtonDblClk = 0x0203
+	wmRButtonUp     = 0x0205
+	wmNull          = 0x0000
 
-	hwndMessage = ^windows.HWND(2) // HWND_MESSAGE
+	wsPopup       = 0x80000000
+	wsExToolwindow = 0x00000080
+
 
 	nimAdd    = 0
 	nimModify = 1
@@ -150,7 +156,14 @@ func Run() error {
 		return err
 	}
 
-	h, _, err := procCreateWindowEx.Call(0, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(className)), 0, 0, 0, 0, 0, uintptr(hwndMessage), 0, instance, 0)
+	h, _, err := procCreateWindowEx.Call(
+		wsExToolwindow,
+		uintptr(unsafe.Pointer(className)),
+		uintptr(unsafe.Pointer(className)),
+		wsPopup,
+		0, 0, 0, 0,
+		0, 0, instance, 0,
+	)
 	if h == 0 {
 		return err
 	}
@@ -179,8 +192,8 @@ func Run() error {
 func trayWndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
 	case wmTray:
-		switch lParam {
-		case wmLButtonUp, wmRButtonUp:
+		switch lParam & 0xFFFF {
+		case wmLButtonUp, wmRButtonUp, wmLButtonDblClk, wmContextMenu:
 			showMenu(hwnd)
 		case ninBalloonUserClick:
 			beginUpdateUI()
@@ -188,23 +201,7 @@ func trayWndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr 
 		}
 		return 0
 	case wmCommand:
-		switch uint16(wParam) {
-		case cmdUpdate:
-			beginUpdateUI()
-			request("apply")
-		case cmdCheck:
-			request("check")
-		case cmdQuit:
-			progMu.Lock()
-			phase := progPhase
-			can := progCanClose
-			progMu.Unlock()
-			if can && phase == "complete" {
-				finishUpdateAndQuit(phase)
-				return 0
-			}
-			procPostQuit.Call(0)
-		}
+		handleTrayCommand(uint16(wParam))
 		return 0
 	case wmDestroy:
 		procPostQuit.Call(0)
@@ -230,6 +227,11 @@ func showMenu(hwnd windows.HWND) {
 	pendingMu.Unlock()
 
 	appendMenu(h, mfString|mfGrayed, 0, "netMan Agent v"+ver)
+	ip := client.DetectLocalIP()
+	if ip == "" {
+		ip = "unknown"
+	}
+	appendMenu(h, mfString|mfGrayed, 0, "IP  "+ip)
 	appendMenu(h, mfSeparator, 0, "")
 	if p != "" {
 		appendMenu(h, mfString, cmdUpdate, "Update to v"+p)
@@ -245,8 +247,37 @@ func showMenu(hwnd windows.HWND) {
 	procSetForeground.Call(uintptr(hwnd))
 	const tpmRightAlign = 0x0008
 	const tpmBottomAlign = 0x0020
-	const tpmRightButton = 0x0002
-	procTrackPopupMenu.Call(h, tpmRightAlign|tpmBottomAlign|tpmRightButton, uintptr(pt.X), uintptr(pt.Y), 0, uintptr(hwnd), 0)
+	const tpmReturnCmd = 0x0100
+	cmd, _, _ := procTrackPopupMenu.Call(
+		h,
+		tpmRightAlign|tpmBottomAlign|tpmReturnCmd,
+		uintptr(pt.X), uintptr(pt.Y),
+		0, uintptr(hwnd), 0,
+	)
+	procPostMessage.Call(uintptr(hwnd), wmNull, 0, 0)
+	if cmd != 0 {
+		handleTrayCommand(uint16(cmd))
+	}
+}
+
+func handleTrayCommand(id uint16) {
+	switch id {
+	case cmdUpdate:
+		beginUpdateUI()
+		request("apply")
+	case cmdCheck:
+		request("check")
+	case cmdQuit:
+		progMu.Lock()
+		phase := progPhase
+		can := progCanClose
+		progMu.Unlock()
+		if can && phase == "complete" {
+			finishUpdateAndQuit(phase)
+			return
+		}
+		procPostQuit.Call(0)
+	}
 }
 
 func appendMenu(h uintptr, flags uintptr, id uintptr, text string) {

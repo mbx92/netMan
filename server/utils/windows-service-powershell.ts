@@ -15,7 +15,45 @@
  * Windows PowerShell 5.1 may decode it as ANSI.
  */
 export const WINDOWS_SERVICE_PS = `
-function Unblock-NetManFile([string]$Path) {
+function Stop-NetManAgentProcesses {
+    Stop-Service -Name netman-agent -Force -ErrorAction SilentlyContinue
+    $deadline = (Get-Date).AddSeconds(20)
+    while ($true) {
+        $svc = Get-Service -Name netman-agent -ErrorAction SilentlyContinue
+        if ($null -eq $svc -or $svc.Status -ne "Running") { break }
+        if ((Get-Date) -gt $deadline) { break }
+        Stop-Service -Name netman-agent -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 400
+    }
+    Get-CimInstance Win32_Process -Filter "Name = 'netman-agent.exe'" -ErrorAction SilentlyContinue | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Seconds 1
+}
+
+function Replace-NetManExe([string]$Source, [string]$Dest) {
+    # Move-Item -Force does not reliably overwrite a locked or existing exe
+    # on Windows PowerShell 5.1. Rename the running file out of the way first.
+    $old = "$Dest.old"
+    Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
+    $deadline = (Get-Date).AddSeconds(25)
+    while (Test-Path -LiteralPath $Dest) {
+        try {
+            Rename-Item -LiteralPath $Dest -NewName "netman-agent.exe.old" -ErrorAction Stop
+            break
+        } catch {
+            if ((Get-Date) -gt $deadline) {
+                throw "Could not replace netman-agent.exe (file in use). Close the tray icon and retry."
+            }
+            Get-CimInstance Win32_Process -Filter "Name = 'netman-agent.exe'" -ErrorAction SilentlyContinue | ForEach-Object {
+                Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+            }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    Move-Item -LiteralPath $Source -Destination $Dest
+    Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
+}
     if (-not (Test-Path -LiteralPath $Path)) { return }
     Unblock-File -LiteralPath $Path -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath ($Path + ":Zone.Identifier") -ErrorAction SilentlyContinue

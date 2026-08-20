@@ -17,12 +17,12 @@ ${WINDOWS_SERVICE_PS}
 $exePath = "$env:ProgramFiles\\netMan Agent\\netman-agent.exe"
 
 Write-Host "Stopping netman-agent service..."
-Stop-Service -Name netman-agent -ErrorAction SilentlyContinue
+Stop-NetManAgentProcesses
 
 Write-Host "Downloading latest netman-agent..."
 Invoke-WebRequest -Uri "$Server/api/agents/download/windows" -OutFile "$exePath.new"
 Unblock-NetManFile "$exePath.new"
-Move-Item -Force "$exePath.new" $exePath
+Replace-NetManExe "$exePath.new" $exePath
 Unblock-NetManFile $exePath
 
 # Regenerate and re-apply the VNC password on every update. The new value is

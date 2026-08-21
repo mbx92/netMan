@@ -24,6 +24,8 @@ const (
 	minHeartbeatInterval     = 5 * time.Second
 	minBackoff               = 1 * time.Second
 	maxBackoff               = 60 * time.Second
+	wsPongWait               = 60 * time.Second
+	wsPingPeriod             = 20 * time.Second
 )
 
 type helloMessage struct {
@@ -85,9 +87,19 @@ func Run(cfg *config.Config, version string, stop <-chan struct{}) {
 	collector := telemetry.NewCollector()
 	upd := update.New(cfg, version)
 	go upd.Loop(stop)
-	// Collected once — it shells out to slow platform inventory tools and
-	// essentially never changes for the life of the process.
-	hw := hardware.Collect()
+	upd.SetIdentity(Hostname(), OSVersion(), DetectLocalIP(), DetectMACAddress())
+	// CIM / dmidecode can take tens of seconds (or hang) as LocalSystem.
+	// Do not block the first WebSocket hello on that — otherwise NetMan
+	// marks the agent offline and the service looks "stuck" until restart.
+	var hw hardware.Info
+	var hwMu sync.Mutex
+	go func() {
+		collected := hardware.Collect()
+		hwMu.Lock()
+		hw = collected
+		hwMu.Unlock()
+		upd.SetHardware(formatDisks(collected.Disks), formatMemory(collected.Memory), formatPrinters(collected.Printers))
+	}()
 
 	for {
 		select {
@@ -98,9 +110,13 @@ func Run(cfg *config.Config, version string, stop <-chan struct{}) {
 		default:
 		}
 
-		connectedAt, err := runOnce(cfg, version, collector, &hw, stop, upd)
+		hwMu.Lock()
+		hwSnap := hw
+		hwMu.Unlock()
+		connectedAt, err := runOnce(cfg, version, collector, &hwSnap, stop, upd)
 		if err != nil {
 			log.Printf("[agent] connection error: %v", err)
+			upd.SetConnected(false, err.Error())
 		}
 
 		select {
@@ -173,6 +189,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 		return time.Time{}, err
 	}
 	if ack.Type == "error" {
+		upd.SetConnected(false, ack.Message)
 		return time.Time{}, &authError{ack.Message}
 	}
 	if ack.Latest != nil {
@@ -180,13 +197,22 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 	}
 	conn.SetReadDeadline(time.Time{})
 	connectedAt = time.Now()
+	upd.SetConnected(true, "")
 	log.Printf("[agent] connected (agentId=%s)", cfg.AgentID)
+
+	conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(wsPongWait))
+		return nil
+	})
 
 	done := make(chan struct{})
 	go readLoop(conn, tm, &writeMu, done)
 
 	ticker := time.NewTicker(heartbeatInterval())
 	defer ticker.Stop()
+	pinger := time.NewTicker(wsPingPeriod)
+	defer pinger.Stop()
 
 	// Send one heartbeat immediately so telemetry shows up right away.
 	sendHeartbeat(conn, collector, &writeMu)
@@ -201,7 +227,15 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 		case <-upd.ExitRequested():
 			return connectedAt, nil
 		case <-done:
+			upd.SetConnected(false, "connection closed")
 			return connectedAt, nil
+		case <-pinger.C:
+			writeMu.Lock()
+			err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second))
+			writeMu.Unlock()
+			if err != nil {
+				return connectedAt, err
+			}
 		case <-ticker.C:
 			if err := sendHeartbeat(conn, collector, &writeMu); err != nil {
 				return connectedAt, err
@@ -219,6 +253,7 @@ func readLoop(conn *websocket.Conn, tm *tunnelManager, writeMu *sync.Mutex, done
 		if err != nil {
 			return
 		}
+		_ = conn.SetReadDeadline(time.Now().Add(wsPongWait))
 
 		switch msgType {
 		case websocket.BinaryMessage:
@@ -256,6 +291,7 @@ func sendHeartbeat(conn *websocket.Conn, collector *telemetry.Collector, writeMu
 	snap := collector.Collect()
 	writeMu.Lock()
 	defer writeMu.Unlock()
+	_ = conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 	return conn.WriteJSON(heartbeatMessage{
 		Type:                 "heartbeat",
 		CPUPercent:           snap.CPUPercent,

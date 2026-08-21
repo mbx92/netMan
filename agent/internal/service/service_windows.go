@@ -6,6 +6,7 @@
 package service
 
 import (
+	"log"
 	"os"
 	"os/signal"
 
@@ -21,10 +22,16 @@ func (s *winService) Execute(_ []string, r <-chan svc.ChangeRequest, changes cha
 
 	stop := make(chan struct{})
 	done := make(chan struct{})
+	stoppedBySCM := false
 
 	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("[agent] service panic: %v", rec)
+			}
+			close(done)
+		}()
 		s.run(stop)
-		close(done)
 	}()
 
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
@@ -37,6 +44,7 @@ loop:
 			case svc.Interrogate:
 				changes <- req.CurrentStatus
 			case svc.Stop, svc.Shutdown:
+				stoppedBySCM = true
 				changes <- svc.Status{State: svc.StopPending}
 				close(stop)
 				break loop
@@ -48,6 +56,12 @@ loop:
 
 	<-done
 	changes <- svc.Status{State: svc.Stopped}
+	if !stoppedBySCM {
+		// Exit 1 so SCM recovery (restart) runs. Exit 0 is a clean stop
+		// and leaves the agent offline until someone starts the service.
+		log.Printf("[agent] worker exited unexpectedly; requesting SCM restart")
+		return false, 1
+	}
 	return false, 0
 }
 

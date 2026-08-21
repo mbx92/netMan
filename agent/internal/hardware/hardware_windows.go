@@ -3,17 +3,21 @@
 package hardware
 
 import (
+	"context"
 	"encoding/json"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // runPS runs a PowerShell command and returns its trimmed stdout. wmic is
 // deprecated/removed on recent Windows builds, so CIM cmdlets are the
 // reliable path here.
 func runPS(script string) (string, error) {
-	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", script).Output()
 	if err != nil {
 		return "", err
 	}

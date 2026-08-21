@@ -29,8 +29,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/shirou/gopsutil/v3/host"
-
 	"github.com/netman/agent/internal/client"
 	"github.com/netman/agent/internal/config"
 	"github.com/netman/agent/internal/service"
@@ -39,7 +37,7 @@ import (
 )
 
 const (
-	agentVersion = "0.6.4"
+	agentVersion = "0.6.6"
 	serviceName  = "netman-agent"
 )
 
@@ -87,11 +85,8 @@ func runEnroll(token, server string) {
 		os.Exit(2)
 	}
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = "unknown-host"
-	}
-	osVersion := detectOSVersion()
+	hostname := client.Hostname()
+	osVersion := client.OSVersion()
 	macAddress := client.DetectMACAddress()
 
 	agentID, authKey, err := client.Enroll(server, token, hostname, osVersion, agentVersion, macAddress)
@@ -125,10 +120,3 @@ func initServiceLog() {
 	log.SetOutput(io.MultiWriter(os.Stderr, f))
 }
 
-func detectOSVersion() string {
-	info, err := host.Info()
-	if err != nil {
-		return runtime.GOOS
-	}
-	return fmt.Sprintf("%s %s", info.Platform, info.PlatformVersion)
-}

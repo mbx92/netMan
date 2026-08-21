@@ -25,18 +25,26 @@ const (
 	wmDestroy       = 0x0002
 	wmCommand       = 0x0111
 	wmContextMenu   = 0x007B
+	wmLButtonDown   = 0x0201
 	wmLButtonUp     = 0x0202
 	wmLButtonDblClk = 0x0203
+	wmRButtonDown   = 0x0204
 	wmRButtonUp     = 0x0205
 	wmNull          = 0x0000
 
-	wsPopup       = 0x80000000
+	ninSelect    = wmUser     // NOTIFYICON_VERSION_4 left click
+	ninKeySelect = wmUser + 1 // keyboard activate
+
+	wsPopup        = 0x80000000
 	wsExToolwindow = 0x00000080
+	wsExTopmost    = 0x00000008
+	swShowNA       = 8
 
-
-	nimAdd    = 0
-	nimModify = 1
-	nimDelete = 2
+	nimAdd        = 0
+	nimModify     = 1
+	nimDelete     = 2
+	nimSetVersion = 4
+	notifyIconV4  = 4
 
 	nifMessage = 0x00000001
 	nifIcon    = 0x00000002
@@ -57,6 +65,7 @@ const (
 	cmdUpdate = 1
 	cmdCheck  = 2
 	cmdQuit   = 3
+	cmdOpen   = 4
 )
 
 type notifyIconData struct {
@@ -99,7 +108,10 @@ var (
 	procGetMessage      = user32.NewProc("GetMessageW")
 	procTranslateMsg    = user32.NewProc("TranslateMessage")
 	procDispatchMsg     = user32.NewProc("DispatchMessageW")
-	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
+	procGetModuleHandle          = kernel32.NewProc("GetModuleHandleW")
+	procFindWindow               = user32.NewProc("FindWindowW")
+	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	procSetWindowPos             = user32.NewProc("SetWindowPos")
 
 	hwnd      windows.HWND
 	hIcon     uintptr
@@ -136,6 +148,7 @@ type winMsg struct {
 
 func Run() error {
 	hideConsole()
+	closeStaleTray()
 	if !singleInstance() {
 		return nil
 	}
@@ -156,23 +169,29 @@ func Run() error {
 		return err
 	}
 
+	// A real (off-screen) popup is required so SetForegroundWindow works.
+	// HWND_MESSAGE / 0×0 hidden windows never own the tray menu on Win11.
 	h, _, err := procCreateWindowEx.Call(
-		wsExToolwindow,
+		wsExToolwindow|wsExTopmost,
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(className)),
 		wsPopup,
-		0, 0, 0, 0,
+		uintptr(int32(-10000)),
+		uintptr(int32(-10000)),
+		1, 1,
 		0, 0, instance, 0,
 	)
 	if h == 0 {
 		return err
 	}
 	hwnd = windows.HWND(h)
+	procShowWindow.Call(h, swShowNA)
 
 	hIcon = loadIcon()
 	if err := notify(nimAdd, "", ""); err != nil {
 		return err
 	}
+	notifySetVersion()
 	defer notify(nimDelete, "", "")
 
 	go pipeLoop()
@@ -193,11 +212,14 @@ func trayWndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr 
 	switch msg {
 	case wmTray:
 		switch lParam & 0xFFFF {
-		case wmLButtonUp, wmRButtonUp, wmLButtonDblClk, wmContextMenu:
+		case wmLButtonUp, wmLButtonDblClk, ninSelect, ninKeySelect:
+			showStatusWindow()
+		case wmRButtonUp, wmRButtonDown, wmContextMenu:
 			showMenu(hwnd)
 		case ninBalloonUserClick:
+			showStatusWindow()
 			beginUpdateUI()
-			request("apply")
+			go request("apply")
 		}
 		return 0
 	case wmCommand:
@@ -207,7 +229,13 @@ func trayWndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr 
 		procPostQuit.Call(0)
 		return 0
 	case wmShowProgress:
-		ensureProgressWindow()
+		ensureStatusWindow()
+		return 0
+	case wmShowPanel:
+		ensureStatusWindow()
+		return 0
+	case wmRefreshPanel:
+		applyPanelUI()
 		return 0
 	}
 	r, _, _ := procDefWindowProc.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
@@ -233,6 +261,8 @@ func showMenu(hwnd windows.HWND) {
 	}
 	appendMenu(h, mfString|mfGrayed, 0, "IP  "+ip)
 	appendMenu(h, mfSeparator, 0, "")
+	appendMenu(h, mfString, cmdOpen, "Open netMan Agent")
+	appendMenu(h, mfSeparator, 0, "")
 	if p != "" {
 		appendMenu(h, mfString, cmdUpdate, "Update to v"+p)
 	} else {
@@ -244,13 +274,18 @@ func showMenu(hwnd windows.HWND) {
 
 	var pt point
 	procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+	const swpNoSize = 0x0001
+	const swpShowWindow = 0x0040
+	const hwndTopmost = ^uintptr(0) // HWND_TOPMOST = -1
+	procSetWindowPos.Call(uintptr(hwnd), hwndTopmost, uintptr(pt.X), uintptr(pt.Y), 0, 0, swpNoSize|swpShowWindow)
 	procSetForeground.Call(uintptr(hwnd))
 	const tpmRightAlign = 0x0008
 	const tpmBottomAlign = 0x0020
+	const tpmNoNotify = 0x0080
 	const tpmReturnCmd = 0x0100
 	cmd, _, _ := procTrackPopupMenu.Call(
 		h,
-		tpmRightAlign|tpmBottomAlign|tpmReturnCmd,
+		tpmRightAlign|tpmBottomAlign|tpmNoNotify|tpmReturnCmd,
 		uintptr(pt.X), uintptr(pt.Y),
 		0, uintptr(hwnd), 0,
 	)
@@ -262,11 +297,13 @@ func showMenu(hwnd windows.HWND) {
 
 func handleTrayCommand(id uint16) {
 	switch id {
+	case cmdOpen:
+		showStatusWindow()
 	case cmdUpdate:
 		beginUpdateUI()
-		request("apply")
+		go request("apply")
 	case cmdCheck:
-		request("check")
+		go request("check")
 	case cmdQuit:
 		progMu.Lock()
 		phase := progPhase
@@ -308,6 +345,48 @@ func notify(action uint32, title, info string) error {
 	return nil
 }
 
+func notifySetVersion() {
+	nid := notifyIconData{
+		Wnd:     uintptr(hwnd),
+		ID:      nidID,
+		Timeout: notifyIconV4,
+	}
+	nid.Size = uint32(unsafe.Sizeof(nid))
+	_, _, _ = procShellNotifyIcon.Call(nimSetVersion, uintptr(unsafe.Pointer(&nid)))
+}
+
+func closeStaleTray() {
+	className, err := windows.UTF16PtrFromString("NetManAgentTray")
+	if err != nil {
+		return
+	}
+	h, _, _ := procFindWindow.Call(uintptr(unsafe.Pointer(className)), 0)
+	if h == 0 {
+		return
+	}
+	var pid uint32
+	_, _, _ = procGetWindowThreadProcessId.Call(h, uintptr(unsafe.Pointer(&pid)))
+	_, _, _ = procPostMessage.Call(h, wmClose, 0, 0)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		h2, _, _ := procFindWindow.Call(uintptr(unsafe.Pointer(className)), 0)
+		if h2 == 0 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if pid == 0 || pid == uint32(os.Getpid()) {
+		return
+	}
+	ph, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, pid)
+	if err != nil {
+		return
+	}
+	_ = windows.TerminateProcess(ph, 1)
+	_ = windows.CloseHandle(ph)
+	log.Printf("[tray] stopped stale tray pid %d", pid)
+}
+
 func utf16Copy(dst []uint16, s string) {
 	u, _ := windows.UTF16FromString(s)
 	n := len(u)
@@ -338,17 +417,25 @@ func hideConsole() {
 
 func singleInstance() bool {
 	name, _ := windows.UTF16PtrFromString(`Global\NetManAgentTray`)
-	_, err := windows.CreateMutex(nil, true, name)
-	if err == windows.ERROR_ALREADY_EXISTS {
-		return false
+	for i := 0; i < 15; i++ {
+		h, err := windows.CreateMutex(nil, false, name)
+		if err == windows.ERROR_ALREADY_EXISTS {
+			if h != 0 {
+				_ = windows.CloseHandle(h)
+			}
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		return err == nil
 	}
-	return true
+	return false
 }
 
 func pipeLoop() {
 	for {
 		conn, err := winio.DialPipe(pipeName, nil)
 		if err != nil {
+			markServiceDown()
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -361,6 +448,7 @@ func pipeLoop() {
 			handleIPC(msg)
 		}
 		_ = conn.Close()
+		markServiceDown()
 		time.Sleep(time.Second)
 	}
 }
@@ -369,6 +457,7 @@ func handleIPC(msg map[string]any) {
 	typ, _ := msg["type"].(string)
 	switch typ {
 	case "status":
+		setPanelFromIPC(msg)
 		if v, ok := msg["version"].(string); ok && v != "" {
 			pendingMu.Lock()
 			current = v
@@ -383,6 +472,7 @@ func handleIPC(msg map[string]any) {
 				_ = notify(nimModify, "Update available", "netMan Agent v"+p+" is ready. Click to install.")
 			}
 		}
+		refreshStatusWindow()
 	case "update-available":
 		ver, _ := msg["version"].(string)
 		if ver == "" {
@@ -391,6 +481,10 @@ func handleIPC(msg map[string]any) {
 		pendingMu.Lock()
 		pending = ver
 		pendingMu.Unlock()
+		panelMu.Lock()
+		panel.pending = ver
+		panelMu.Unlock()
+		refreshStatusWindow()
 		_ = notify(nimModify, "Update available", "netMan Agent v"+ver+" is ready. Click to install.")
 	case "progress":
 		phase, _ := msg["phase"].(string)
@@ -408,13 +502,37 @@ func handleIPC(msg map[string]any) {
 }
 
 func request(typ string) {
-	timeout := 2 * time.Second
+	timeout := 3 * time.Second
+	if typ == "check" {
+		timeout = 25 * time.Second
+	}
 	conn, err := winio.DialPipe(pipeName, &timeout)
 	if err != nil {
 		log.Printf("[tray] agent service not reachable: %v", err)
+		markServiceDown()
 		return
 	}
 	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+
+	sc := bufio.NewScanner(conn)
+	if sc.Scan() {
+		var msg map[string]any
+		if json.Unmarshal(sc.Bytes(), &msg) == nil {
+			handleIPC(msg)
+		}
+	}
+	if typ == "ping" || typ == "" {
+		return
+	}
 	data, _ := json.Marshal(map[string]string{"type": typ})
-	_, _ = conn.Write(append(data, '\n'))
+	if _, err := conn.Write(append(data, '\n')); err != nil {
+		return
+	}
+	if typ == "check" && sc.Scan() {
+		var msg map[string]any
+		if json.Unmarshal(sc.Bytes(), &msg) == nil {
+			handleIPC(msg)
+		}
+	}
 }

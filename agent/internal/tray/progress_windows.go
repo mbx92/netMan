@@ -90,10 +90,10 @@ func postProgress(phase string, percent int, text string) {
 	}
 	wanted := progressWanted
 	progMu.Unlock()
-	if !wanted || hwnd == 0 {
-		return
-	}
-	procPostMessage.Call(uintptr(hwnd), wmShowProgress, 0, 0)
+		if !wanted || hwnd == 0 {
+			return
+		}
+		procPostMessage.Call(uintptr(hwnd), wmShowPanel, 0, 0)
 }
 
 func beginUpdateUI() {
@@ -155,7 +155,7 @@ func ensureProgressWindow() {
 	procShowWindow.Call(hwndNew, swShow)
 	procUpdateWindow.Call(hwndNew)
 	procSetForegroundWnd.Call(hwndNew)
-	request("progress-ack")
+	go request("progress-ack")
 }
 
 func layoutProgress(hwnd windows.HWND) {
@@ -227,7 +227,7 @@ func progressWndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uint
 
 func finishUpdateAndQuit(phase string) {
 	if phase == "complete" {
-		request("restart")
+		go request("restart")
 	}
 	if hProgress != 0 {
 		procDestroyWindow.Call(uintptr(hProgress))

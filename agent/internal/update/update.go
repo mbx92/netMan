@@ -48,6 +48,16 @@ type Manager struct {
 	stageBusy bool
 	applying  bool
 
+	connected bool
+	lastError string
+	hostname  string
+	osVersion string
+	localIP   string
+	mac       string
+	disks     string
+	memory    string
+	printers  string
+
 	applyCh     chan struct{}
 	exitCh      chan struct{}
 	exitOnce    sync.Once
@@ -71,6 +81,35 @@ func New(cfg *config.Config, currentVersion string) *Manager {
 func (m *Manager) ExitRequested() <-chan struct{} { return m.exitCh }
 
 func (m *Manager) CurrentVersion() string { return m.current }
+
+// SetIdentity stores the host fields the agent reports to the server (and
+// the tray window). Safe to call more than once as inventory trickles in.
+func (m *Manager) SetIdentity(hostname, osVersion, localIP, mac string) {
+	m.mu.Lock()
+	m.hostname = hostname
+	m.osVersion = osVersion
+	m.localIP = localIP
+	m.mac = mac
+	m.mu.Unlock()
+	pushTrayStatus(m)
+}
+
+func (m *Manager) SetHardware(disks, memory, printers string) {
+	m.mu.Lock()
+	m.disks = disks
+	m.memory = memory
+	m.printers = printers
+	m.mu.Unlock()
+	pushTrayStatus(m)
+}
+
+func (m *Manager) SetConnected(ok bool, errMsg string) {
+	m.mu.Lock()
+	m.connected = ok
+	m.lastError = errMsg
+	m.mu.Unlock()
+	pushTrayStatus(m)
+}
 
 func (m *Manager) Snapshot() Status {
 	m.mu.Lock()

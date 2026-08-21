@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/Microsoft/go-winio"
 )
@@ -77,6 +79,12 @@ func serveTrayConn(m *Manager, conn net.Conn) {
 			m.RequestApply()
 		case "restart":
 			m.RequestRestart()
+		case "restart-service":
+			log.Printf("[agent] restart requested from tray")
+			go func() {
+				time.Sleep(400 * time.Millisecond)
+				os.Exit(1)
+			}()
 		case "progress-ack":
 			m.RequestProgressAck()
 		case "check":
@@ -91,14 +99,31 @@ func serveTrayConn(m *Manager, conn net.Conn) {
 }
 
 func snapshotMessage(m *Manager) map[string]any {
-	s := m.Snapshot()
-	out := map[string]any{
-		"type":    "status",
-		"version": s.Current,
-		"message": s.Message,
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	agentID, serverURL := "", ""
+	if m.cfg != nil {
+		agentID = m.cfg.AgentID
+		serverURL = m.cfg.ServerURL
 	}
-	if s.Pending != nil {
-		out["pending"] = s.Pending.Version
+	out := map[string]any{
+		"type":      "status",
+		"version":   m.current,
+		"message":   m.status,
+		"connected": m.connected,
+		"lastError": m.lastError,
+		"hostname":  m.hostname,
+		"osVersion": m.osVersion,
+		"localIp":   m.localIP,
+		"mac":       m.mac,
+		"agentId":   agentID,
+		"serverUrl": serverURL,
+		"disks":     m.disks,
+		"memory":    m.memory,
+		"printers":  m.printers,
+	}
+	if m.pending != nil {
+		out["pending"] = m.pending.Version
 	}
 	return out
 }

@@ -21,12 +21,21 @@ var (
 	procWTSQueryUserToken       = wtsapi32.NewProc("WTSQueryUserToken")
 	procCreateEnvironmentBlock  = userenv.NewProc("CreateEnvironmentBlock")
 	procDestroyEnvironmentBlock = userenv.NewProc("DestroyEnvironmentBlock")
+	user32                      = windows.NewLazySystemDLL("user32.dll")
+	procFindWindow              = user32.NewProc("FindWindowW")
 )
 
 func TryStart() {
 	sessionID, _, _ := procWTSGetActiveConsole.Call()
 	if sessionID == 0xFFFFFFFF || sessionID == 0 {
 		return
+	}
+
+	className, err := windows.UTF16PtrFromString("NetManAgentTray")
+	if err == nil {
+		if h, _, _ := procFindWindow.Call(uintptr(unsafe.Pointer(className)), 0); h != 0 {
+			return
+		}
 	}
 
 	var token windows.Token

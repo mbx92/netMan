@@ -176,8 +176,8 @@ func Run() error {
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(className)),
 		wsPopup,
-		uintptr(int32(-10000)),
-		uintptr(int32(-10000)),
+		winCoord(-10000),
+		winCoord(-10000),
 		1, 1,
 		0, 0, instance, 0,
 	)
@@ -385,6 +385,10 @@ func closeStaleTray() {
 	_ = windows.TerminateProcess(ph, 1)
 	_ = windows.CloseHandle(ph)
 	log.Printf("[tray] stopped stale tray pid %d", pid)
+}
+
+func winCoord(v int32) uintptr {
+	return uintptr(uint32(v))
 }
 
 func utf16Copy(dst []uint16, s string) {

@@ -20,6 +20,32 @@
         </div>
     </div>
 
+    <div class="bg-base-100 border border-base-300 rounded-none p-3 mb-6">
+      <div class="flex items-center gap-3">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search by name, hostname, IP, OS, or platform..."
+          class="input input-bordered flex-1 min-w-0"
+        />
+        <select v-model="statusFilter" class="select select-bordered w-40 shrink-0">
+          <option value="">All Status</option>
+          <option value="ONLINE">Online</option>
+          <option value="OFFLINE">Offline</option>
+          <option value="PENDING">Pending</option>
+        </select>
+        <select v-model="platformFilter" class="select select-bordered w-40 shrink-0">
+          <option value="">All Platforms</option>
+          <option value="WINDOWS">Windows</option>
+          <option value="LINUX">Linux</option>
+          <option value="MACOS">macOS</option>
+        </select>
+        <button v-if="hasFilters" class="btn btn-ghost shrink-0" @click="clearFilters">
+          Clear
+        </button>
+      </div>
+    </div>
+
     <!-- Agent Table -->
     <div class="bg-base-100 border border-base-300 rounded-none overflow-hidden">
       <div class="overflow-x-auto">
@@ -42,13 +68,13 @@
                 <span class="loading loading-spinner loading-lg text-primary"></span>
               </td>
             </tr>
-            <tr v-else-if="!agents?.length" class="h-32">
+            <tr v-else-if="!filteredAgents.length" class="h-32">
               <td colspan="8" class="text-center text-base-content/60">
-                No agents enrolled yet — click "Add Agent" to install one on a Windows PC or Linux server
+                {{ agents?.length ? 'No agents match this search' : 'No agents enrolled yet — click "Add Agent" to install one on a Windows PC or Linux server' }}
               </td>
             </tr>
             <tr
-              v-for="agent in agents"
+              v-for="agent in filteredAgents"
               :key="agent.id"
               class="hover:bg-base-200/50 cursor-pointer"
               @click="navigateTo(`/agents/${agent.id}`)"
@@ -118,7 +144,7 @@
         </table>
       </div>
       <div class="p-4 border-t border-base-200 text-sm text-base-content/60">
-        Total: {{ agents?.length || 0 }} agents
+        Total: {{ filteredAgents.length }}{{ hasFilters && agents?.length ? ` of ${agents.length}` : '' }} agents
       </div>
     </div>
 
@@ -236,6 +262,42 @@ import { Copy, Download, Eye, Laptop, Monitor, Pencil, Plus, Server, Trash2 } fr
 import type { AgentSummary, InstallCommands } from '~/composables/useAgents'
 
 const { data: agents, pending, refresh: loadAgents } = await useFetch<AgentSummary[]>('/api/agents')
+
+const searchQuery = ref('')
+const statusFilter = ref('')
+const platformFilter = ref('')
+const hasFilters = computed(() => !!(searchQuery.value || statusFilter.value || platformFilter.value))
+
+const filteredAgents = computed(() => {
+  const list = agents.value || []
+  const q = searchQuery.value.trim().toLowerCase()
+  return list.filter((agent) => {
+    if (statusFilter.value && agent.status !== statusFilter.value) return false
+    if (platformFilter.value && agent.platform !== platformFilter.value) return false
+    if (!q) return true
+    const hay = [
+      agent.alias,
+      agent.hostname,
+      agent.lastIp,
+      agent.osVersion,
+      agent.agentVersion,
+      agent.platform,
+      agent.device?.name,
+      agent.device?.ip,
+      platformLabel(agent.platform),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return hay.includes(q)
+  })
+})
+
+function clearFilters() {
+  searchQuery.value = ''
+  statusFilter.value = ''
+  platformFilter.value = ''
+}
 
 interface Site { id: string; name: string }
 const { data: sitesData } = await useFetch<{ sites: Site[] }>('/api/sites')

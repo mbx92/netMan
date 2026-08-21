@@ -65,7 +65,7 @@
           <button 
             type="submit" 
             class="btn btn-success w-full"
-            :disabled="connecting || !host || !username || !password"
+            :disabled="connecting || (!viaAgent && !host) || !username || !password"
           >
             <span v-if="connecting" class="loading loading-spinner loading-sm"></span>
             <TerminalIcon v-else class="w-4 h-4" :stroke-width="2" />
@@ -138,7 +138,8 @@ watch(() => props.deviceIp, (newIp) => {
 
 async function connect() {
   if (connecting.value || connected.value) return
-  if (!host.value || !username.value || !password.value) return
+  if (props.viaAgent) host.value = host.value || 'agent-tunnel'
+  if ((!props.viaAgent && !host.value) || !username.value || !password.value) return
 
   connecting.value = true
   error.value = ''

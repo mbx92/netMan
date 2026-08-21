@@ -425,14 +425,14 @@ func setStaticColor(id int, c uint32) {
 func createFont(px, weight int32) uintptr {
 	face, _ := windows.UTF16PtrFromString("IBM Plex Sans")
 	h, _, _ := procCreateFont.Call(
-		uintptr(int32(-px)), 0, 0, 0, uintptr(weight),
+		winCoord(-px), 0, 0, 0, uintptr(weight),
 		0, 0, 0, 1, 0, 0, 5, 0,
 		uintptr(unsafe.Pointer(face)),
 	)
 	if h == 0 {
 		face, _ = windows.UTF16PtrFromString("Segoe UI")
 		h, _, _ = procCreateFont.Call(
-			uintptr(int32(-px)), 0, 0, 0, uintptr(weight),
+			winCoord(-px), 0, 0, 0, uintptr(weight),
 			0, 0, 0, 1, 0, 0, 5, 0,
 			uintptr(unsafe.Pointer(face)),
 		)

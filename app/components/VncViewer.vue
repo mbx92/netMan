@@ -57,7 +57,7 @@
           <button 
             type="submit" 
             class="btn btn-info flex-1"
-            :disabled="connecting || !host"
+            :disabled="connecting || (!viaAgent && !host)"
           >
             <span v-if="connecting" class="loading loading-spinner loading-sm"></span>
             <Monitor v-else class="w-4 h-4" :stroke-width="2" />
@@ -154,6 +154,9 @@ const vncIframeRef = ref<HTMLIFrameElement | null>(null)
 watch(() => props.deviceIp, (newIp) => {
   if (newIp) host.value = newIp
 })
+watch(() => props.initialPassword, (pw) => {
+  if (pw && !password.value) password.value = pw
+})
 
 onUnmounted(() => {
   disconnect()
@@ -163,6 +166,9 @@ function connect() {
   console.log('[VNC] Connect button clicked')
   
   if (connecting.value || connected.value) return
+  if (props.viaAgent) {
+    host.value = host.value || 'agent-tunnel'
+  }
   if (!host.value) return
 
   connecting.value = true

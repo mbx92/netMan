@@ -117,6 +117,22 @@
                   >
                     <Power class="w-4 h-4" :stroke-width="2" />
                   </button>
+                  <NuxtLink
+                    v-if="device.agent?.platform === 'WINDOWS'"
+                    :to="`/devices/${device.id}?remote=vnc`"
+                    class="btn btn-ghost btn-xs tooltip"
+                    data-tip="Remote Desktop"
+                  >
+                    <Monitor class="w-4 h-4" :stroke-width="2" />
+                  </NuxtLink>
+                  <NuxtLink
+                    v-else-if="device.agent && device.agent.platform !== 'WINDOWS'"
+                    :to="`/devices/${device.id}?remote=ssh`"
+                    class="btn btn-ghost btn-xs tooltip"
+                    data-tip="SSH"
+                  >
+                    <Terminal class="w-4 h-4" :stroke-width="2" />
+                  </NuxtLink>
                   <NuxtLink :to="`/devices/${device.id}`" class="btn btn-ghost btn-xs">
                     <Eye class="w-4 h-4" :stroke-width="2" />
                   </NuxtLink>
@@ -147,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { Eye, Plus, Power, Trash2 } from '@lucide/vue'
+import { Eye, Monitor, Plus, Power, Terminal, Trash2 } from '@lucide/vue'
 
 interface Device {
   id: string
@@ -162,6 +178,7 @@ interface Device {
   wakeable: boolean
   siteId: string | null
   site: { id: string; name: string } | null
+  agent?: { id: string; status: string; platform: string } | null
 }
 
 // Filters state

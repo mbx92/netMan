@@ -32,22 +32,23 @@
         </div>
         <div class="flex flex-wrap gap-2">
           <!-- SSH Button (for Linux servers) -->
-          <button 
-            v-if="canSSH && device.ip" 
+          <button
+            v-if="canSSH"
             class="btn btn-success"
+            :disabled="viaAgent && device.agent?.status !== 'ONLINE'"
             @click="showSshModal = true"
           >
             <Terminal class="w-4 h-4" :stroke-width="2" />
             SSH
           </button>
-          <!-- VNC Button (for Windows PCs) -->
-          <button 
-            v-if="canVNC && device.ip" 
+          <button
+            v-if="canVNC"
             class="btn btn-info"
+            :disabled="viaAgent && device.agent?.status !== 'ONLINE'"
             @click="showVncModal = true"
           >
             <Monitor class="w-4 h-4" :stroke-width="2" />
-            VNC
+            Remote Desktop
           </button>
           <button 
             v-if="device.wakeable && device.mac" 
@@ -318,10 +319,8 @@
             v-if="device"
             :device-id="device.id"
             :device-name="device.name"
-            :device-ip="device.ip || undefined"
-            @connected="onRemoteConnected('SSH')"
-            @disconnected="onRemoteDisconnected('SSH')"
-            @error="onRemoteError"
+            :device-ip="viaAgent ? 'agent-tunnel' : (device.ip || undefined)"
+            :via-agent="viaAgent"
           />
         </div>
       </div>
@@ -332,7 +331,7 @@
     <div v-if="showVncModal" class="modal modal-open" role="dialog" aria-modal="true">
       <div class="modal-box max-w-6xl h-[85vh] p-0 flex flex-col glass-modal rounded-none">
         <div class="flex items-center justify-between p-4 border-b border-base-200">
-          <h3 class="type-card-title">VNC Remote Desktop - {{ device?.name }}</h3>
+          <h3 class="type-card-title">Remote Desktop - {{ device?.name }}</h3>
           <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="closeVncModal">
             <X class="w-5 h-5" :stroke-width="2" />
           </button>
@@ -342,7 +341,9 @@
             v-if="device"
             :device-id="device.id"
             :device-name="device.name"
-            :device-ip="device.ip || undefined"
+            :device-ip="viaAgent ? 'agent-tunnel' : (device.ip || undefined)"
+            :via-agent="viaAgent"
+            :initial-password="device.agent?.vncPassword"
             @connected="onRemoteConnected('VNC')"
             @disconnected="onRemoteDisconnected('VNC')"
             @error="onRemoteError"
@@ -434,6 +435,13 @@ interface Device {
   site?: { id: string; name: string }
   parentDevice?: { id: string; name: string; ip: string | null; typeCode: string } | null
   childDevices?: { id: string; name: string; ip: string | null; typeCode: string }[]
+  agent?: {
+    id: string
+    status: string
+    platform: 'WINDOWS' | 'LINUX' | 'MACOS'
+    vncPassword?: string | null
+    hostname?: string | null
+  } | null
   createdAt: string
   updatedAt: string
   ports: Port[]
@@ -514,21 +522,35 @@ const serverNicActive = computed(() => {
 
 // Check if device supports SSH (Linux servers/PCs)
 const canSSH = computed(() => {
-  if (!device.value?.typeCode) return false
-  const sshTypes = ['SERVER_LINUX', 'PC_LINUX', 'ROUTER']
+  if (!device.value) return false
+  if (device.value.agent && device.value.agent.platform !== 'WINDOWS') return true
+  if (!device.value.typeCode || !device.value.ip) return false
+  const sshTypes = ['SERVER_LINUX', 'PC_LINUX', 'PC_MACOS', 'ROUTER']
   return sshTypes.some(t => device.value!.typeCode.includes(t))
 })
 
-// Check if device supports VNC (Windows PCs/servers)
 const canVNC = computed(() => {
-  if (!device.value?.typeCode) return false
+  if (!device.value) return false
+  if (device.value.agent?.platform === 'WINDOWS') return true
+  if (!device.value.typeCode || !device.value.ip) return false
   const vncTypes = ['PC_WINDOWS', 'SERVER_WINDOWS']
   return vncTypes.some(t => device.value!.typeCode.includes(t))
 })
 
-// Remote access modal state
+const viaAgent = computed(() => !!device.value?.agent)
+
 const showSshModal = ref(false)
 const showVncModal = ref(false)
+
+watch(
+  () => [device.value?.id, route.query.remote] as const,
+  () => {
+    if (!device.value) return
+    if (route.query.remote === 'vnc' && canVNC.value) showVncModal.value = true
+    if (route.query.remote === 'ssh' && canSSH.value) showSshModal.value = true
+  },
+  { immediate: true },
+)
 
 function closeSshModal() {
   showSshModal.value = false

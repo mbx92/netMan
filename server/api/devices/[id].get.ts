@@ -17,7 +17,15 @@ export default defineEventHandler(async (event) => {
         include: {
             deviceType: true,
             site: true,
-            agent: { select: { id: true, status: true } },
+            agent: {
+                select: {
+                    id: true,
+                    status: true,
+                    platform: true,
+                    vncPassword: true,
+                    hostname: true,
+                },
+            },
             parentDevice: { select: { id: true, name: true, ip: true, typeCode: true } },  // Parent host for VMs
             childDevices: { select: { id: true, name: true, ip: true, typeCode: true } },  // Child VMs
             ports: {

@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
             include: {
                 deviceType: true,
                 site: { select: { id: true, name: true } },
-                agent: { select: { id: true, status: true } },
+                agent: { select: { id: true, status: true, platform: true } },
                 _count: {
                     select: { ports: true, sessions: true }
                 }

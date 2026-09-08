@@ -7,6 +7,7 @@
  * `tunnel-*` JSON control frames (text) plus channelId-prefixed binary
  * frames carrying the actual proxied bytes.
  */
+import type { Prisma } from '@prisma/client'
 import prisma from '../../utils/prisma'
 import { verifySecret } from '../../utils/agent-auth'
 import { agentManager } from '../../utils/agent-manager'
@@ -49,6 +50,8 @@ interface PartitionUsage { mountpoint: string; percent: number; totalBytes?: num
 interface ProcessInfo { name: string; pid: number; cpuPercent: number; memPercent: number }
 
 interface HeartbeatMessage {
+    zimbra?: Prisma.InputJsonObject
+    fail2ban?: Prisma.InputJsonObject
     type: 'heartbeat'
     cpuPercent?: number
     memPercent?: number
@@ -239,6 +242,8 @@ async function handleHeartbeat(peer: any, msg: HeartbeatMessage) {
     }
 
     const lastMetrics = {
+        zimbra: msg.zimbra,
+        fail2ban: msg.fail2ban,
         cpuPerCore: msg.cpuPerCore,
         swapPercent: msg.swapPercent,
         memTotalBytes: msg.memTotalBytes,

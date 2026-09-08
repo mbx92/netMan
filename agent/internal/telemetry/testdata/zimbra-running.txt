@@ -1,0 +1,14 @@
+Host mail.example.test
+ antispam Running
+ antivirus Running
+ dnscache Running
+ ldap Running
+ logger Running
+ mailbox Running
+ memcached Running
+ mta Running
+ proxy Running
+ spell Running
+ stats Running
+ snmp Running
+ zmconfigd Running

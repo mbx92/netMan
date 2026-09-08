@@ -1,8 +1,22 @@
 <template>
   <div class="bg-base-100 border border-base-300 rounded-none p-4 sm:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-      <h2 class="type-card-title">Resource History</h2>
-      <div class="flex items-center gap-2">
+      <div>
+        <h2 class="type-card-title">Resource History</h2>
+        <p class="type-body-sm text-base-content/60 mt-1">{{ chartSubtitle }}</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="join">
+          <button
+            v-for="opt in MODE_OPTIONS"
+            :key="opt.value"
+            type="button"
+            :class="['btn btn-xs join-item', mode === opt.value ? 'btn-primary' : 'btn-outline']"
+            @click="mode = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
         <div class="join">
           <button
             v-for="opt in RANGE_OPTIONS"
@@ -25,116 +39,33 @@
     </div>
 
     <div v-else-if="!samples.length" class="py-16 text-center text-sm text-base-content/60">
-      No history yet — samples arrive as heartbeats come in.
+      No history yet - samples arrive as heartbeats come in.
     </div>
 
     <template v-else>
-      <!-- Legend -->
-      <div class="flex flex-wrap items-center gap-4 mb-3 text-xs">
-        <div v-for="s in SERIES" :key="s.key" class="flex items-center gap-1.5">
-          <span class="inline-block w-2.5 h-2.5 rounded-full" :style="{ background: seriesColor(s.key) }"></span>
-          <span class="text-base-content/70">{{ s.label }}</span>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div v-for="metric in summaryMetrics" :key="metric.label" class="bg-base-200 p-3">
+          <p class="text-xs text-base-content/60">{{ metric.label }}</p>
+          <p class="text-2xl font-semibold mt-1">{{ metric.value }}</p>
         </div>
       </div>
 
-      <div v-if="!showTable" class="relative select-none" @mouseleave="hoverIndex = null">
-        <svg
-          :viewBox="`0 0 ${chart.width} ${chart.height}`"
-          class="w-full h-[220px]"
-          preserveAspectRatio="none"
-          @mousemove="onMouseMove"
-        >
-          <!-- Gridlines (recessive) -->
-          <line
-            v-for="gy in gridLines"
-            :key="gy.value"
-            :x1="chart.padLeft"
-            :x2="chart.width - chart.padRight"
-            :y1="gy.y"
-            :y2="gy.y"
-            class="chart-grid"
-          />
-          <text
-            v-for="gy in gridLines"
-            :key="`label-${gy.value}`"
-            :x="chart.padLeft - 6"
-            :y="gy.y"
-            text-anchor="end"
-            dominant-baseline="middle"
-            class="chart-axis-label"
-          >{{ gy.value }}%</text>
-
-          <!-- Series lines -->
-          <polyline
-            v-for="s in SERIES"
-            :key="s.key"
-            :points="linePoints(s.key)"
-            fill="none"
-            :stroke="seriesColor(s.key)"
-            stroke-width="2"
-            stroke-linejoin="round"
-            stroke-linecap="round"
-          />
-
-          <!-- Hover crosshair -->
-          <line
-            v-if="hoverIndex !== null"
-            :x1="hoverX"
-            :x2="hoverX"
-            :y1="chart.padTop"
-            :y2="chart.height - chart.padBottom"
-            class="chart-crosshair"
-          />
-          <template v-if="hoverIndex !== null">
-            <circle
-              v-for="s in SERIES"
-              :key="`dot-${s.key}`"
-              :cx="hoverX"
-              :cy="yFor(samples[hoverIndex][s.key])"
-              r="3"
-              :fill="seriesColor(s.key)"
-            />
-          </template>
-        </svg>
-
-        <!-- Tooltip -->
-        <div
-          v-if="hoverIndex !== null"
-          class="absolute top-2 pointer-events-none bg-base-300 border border-base-content/10 rounded-none px-2.5 py-1.5 text-xs shadow-lg"
-          :style="tooltipStyle"
-        >
-          <div class="text-base-content/60 mb-1">{{ formatTimestamp(samples[hoverIndex].recordedAt) }}</div>
-          <div v-for="s in SERIES" :key="s.key" class="flex items-center gap-1.5 whitespace-nowrap">
-            <span class="inline-block w-2 h-2 rounded-full" :style="{ background: seriesColor(s.key) }"></span>
-            <span class="text-base-content/70">{{ s.label }}:</span>
-            <span class="font-medium">{{ formatValue(samples[hoverIndex][s.key]) }}</span>
-          </div>
-        </div>
-
-        <!-- X axis labels: first / middle / last -->
-        <div class="flex justify-between text-xs text-base-content/50 mt-1 px-1">
-          <span>{{ formatTimestamp(samples[0].recordedAt) }}</span>
-          <span>{{ formatTimestamp(samples[samples.length - 1].recordedAt) }}</span>
-        </div>
+      <div v-if="!showTable" class="metric-chart-shell">
+        <canvas ref="canvasRef" aria-label="Agent resource history chart"></canvas>
       </div>
 
-      <!-- Table fallback -->
-      <div v-else class="overflow-x-auto max-h-[260px] overflow-y-auto">
+      <div v-else class="overflow-x-auto max-h-[300px] overflow-y-auto">
         <table class="table table-zebra table-sm">
           <thead>
             <tr class="bg-base-200/50">
               <th>Time</th>
-              <th>CPU</th>
-              <th>Memory</th>
-              <th>Disk</th>
+              <th v-for="s in activeSeries" :key="s.key">{{ s.label }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(row, i) in [...samples].reverse()" :key="i">
               <td class="text-xs text-base-content/60">{{ formatTimestamp(row.recordedAt) }}</td>
-              <td>{{ formatValue(row.cpuPercent) }}</td>
-              <td>{{ formatValue(row.memPercent) }}</td>
-              <td>{{ formatValue(row.diskPercent) }}</td>
+              <td v-for="s in activeSeries" :key="s.key">{{ formatSeriesValue(valueFor(row, s.key)) }}</td>
             </tr>
           </tbody>
         </table>
@@ -144,6 +75,8 @@
 </template>
 
 <script setup lang="ts">
+import type { Chart, ChartConfiguration, ChartDataset, ChartTypeRegistry } from 'chart.js'
+
 interface MetricSample {
   recordedAt: string
   cpuPercent: number
@@ -157,18 +90,29 @@ interface MetricSample {
   loadAvg1: number | null
 }
 
+type ChartMode = 'usage' | 'io'
+type SeriesKey = 'cpuPercent' | 'memPercent' | 'diskPercent' | 'diskReadBytesPerSec' | 'diskWriteBytesPerSec'
+
 const props = defineProps<{ agentId: string }>()
 
 const { isDark } = useTheme()
 
+const MODE_OPTIONS = [
+  { value: 'usage' as const, label: 'Usage' },
+  { value: 'io' as const, label: 'Disk I/O' },
+]
 const RANGE_OPTIONS = [
   { hours: 1, label: '1h' },
   { hours: 24, label: '24h' },
   { hours: 24 * 7, label: '7d' },
 ]
+
+const mode = ref<ChartMode>('usage')
 const rangeHours = ref(24)
 const showTable = ref(false)
-const hoverIndex = ref<number | null>(null)
+const canvasRef = ref<HTMLCanvasElement | null>(null)
+let chartInstance: Chart<'line'> | null = null
+let chartCtor: typeof Chart<keyof ChartTypeRegistry> | null = null
 
 const { data, pending, refresh } = await useFetch<{ samples: MetricSample[] }>(
   () => `/api/agents/${props.agentId}/metrics`,
@@ -176,70 +120,200 @@ const { data, pending, refresh } = await useFetch<{ samples: MetricSample[] }>(
 )
 const samples = computed(() => data.value?.samples || [])
 
-// Validated categorical slots 1–3 (blue/orange/aqua) from the dataviz skill's
-// reference palette — the only three that pass CVD separation under
-// --pairs all, which is what a hover-driven multi-series chart needs.
 const SERIES_COLORS = {
-  light: { cpu: '#2a78d6', mem: '#eb6834', disk: '#1baf7a' },
-  dark: { cpu: '#3987e5', mem: '#d95926', disk: '#199e70' },
+  light: {
+    cpu: '#2a78d6',
+    mem: '#eb6834',
+    disk: '#1baf7a',
+    read: '#7b61ff',
+    write: '#c84f89',
+    grid: 'rgba(22, 22, 22, 0.10)',
+    tick: '#6f6f6f',
+  },
+  dark: {
+    cpu: '#3987e5',
+    mem: '#d95926',
+    disk: '#199e70',
+    read: '#9a85ff',
+    write: '#e36aa4',
+    grid: 'rgba(255, 255, 255, 0.12)',
+    tick: '#c6c6c6',
+  },
 } as const
 
-const SERIES = [
-  { key: 'cpuPercent' as const, label: 'CPU' },
-  { key: 'memPercent' as const, label: 'Memory' },
-  { key: 'diskPercent' as const, label: 'Disk' },
-]
+const palette = computed(() => isDark.value ? SERIES_COLORS.dark : SERIES_COLORS.light)
+const activeSeries = computed(() => mode.value === 'io'
+  ? [
+      { key: 'diskReadBytesPerSec' as const, label: 'Read', color: palette.value.read },
+      { key: 'diskWriteBytesPerSec' as const, label: 'Write', color: palette.value.write },
+    ]
+  : [
+      { key: 'cpuPercent' as const, label: 'CPU', color: palette.value.cpu },
+      { key: 'memPercent' as const, label: 'Memory', color: palette.value.mem },
+      { key: 'diskPercent' as const, label: 'Disk', color: palette.value.disk },
+    ])
 
-function seriesColor(key: 'cpuPercent' | 'memPercent' | 'diskPercent'): string {
-  const palette = isDark.value ? SERIES_COLORS.dark : SERIES_COLORS.light
-  if (key === 'cpuPercent') return palette.cpu
-  if (key === 'memPercent') return palette.mem
-  return palette.disk
-}
-
-const chart = { width: 800, height: 220, padLeft: 36, padRight: 8, padTop: 8, padBottom: 8 }
-
-const gridLines = computed(() => [0, 25, 50, 75, 100].map((value) => ({ value, y: yFor(value) })))
-
-function yFor(percent: number): number {
-  const usable = chart.height - chart.padTop - chart.padBottom
-  const clamped = Math.max(0, Math.min(100, percent))
-  return chart.padTop + usable * (1 - clamped / 100)
-}
-
-function xFor(index: number): number {
-  const usable = chart.width - chart.padLeft - chart.padRight
-  const n = samples.value.length
-  if (n <= 1) return chart.padLeft
-  return chart.padLeft + usable * (index / (n - 1))
-}
-
-function linePoints(key: 'cpuPercent' | 'memPercent' | 'diskPercent'): string {
-  return samples.value.map((s, i) => `${xFor(i)},${yFor(s[key] ?? 0)}`).join(' ')
-}
-
-const hoverX = computed(() => (hoverIndex.value === null ? 0 : xFor(hoverIndex.value)))
-
-const tooltipStyle = computed(() => {
-  if (hoverIndex.value === null) return {}
-  const pct = (hoverX.value / chart.width) * 100
-  // Flip to the left side past the midpoint so the tooltip never clips off-screen.
-  return pct > 60 ? { right: `${100 - pct}%` } : { left: `${pct}%` }
+const chartSubtitle = computed(() => mode.value === 'io' ? 'Disk read and write throughput over time.' : 'CPU, memory, and disk utilization over time.')
+const summaryMetrics = computed(() => {
+  const latest = samples.value[samples.value.length - 1]
+  if (!latest) return []
+  if (mode.value === 'io') {
+    const peak = Math.max(...samples.value.flatMap(s => [s.diskReadBytesPerSec || 0, s.diskWriteBytesPerSec || 0]))
+    return [
+      { label: 'Current read', value: formatRate(latest.diskReadBytesPerSec) },
+      { label: 'Current write', value: formatRate(latest.diskWriteBytesPerSec) },
+      { label: 'Peak throughput', value: formatRate(peak) },
+    ]
+  }
+  return [
+    { label: 'CPU now', value: formatPercent(latest.cpuPercent) },
+    { label: 'Memory now', value: formatPercent(latest.memPercent) },
+    { label: 'Disk used', value: formatPercent(latest.diskPercent) },
+  ]
 })
 
-function onMouseMove(event: MouseEvent) {
-  const svg = event.currentTarget as SVGSVGElement
-  const rect = svg.getBoundingClientRect()
-  const relX = ((event.clientX - rect.left) / rect.width) * chart.width
-  const n = samples.value.length
-  if (n === 0) return
-  const usable = chart.width - chart.padLeft - chart.padRight
-  const ratio = Math.max(0, Math.min(1, (relX - chart.padLeft) / usable))
-  hoverIndex.value = Math.round(ratio * (n - 1))
+watch([samples, mode, isDark], () => {
+  nextTick(() => renderChart())
+}, { deep: true })
+
+watch(showTable, (showingTable) => {
+  if (!showingTable) nextTick(() => renderChart())
+})
+
+onMounted(async () => {
+  const chartModule = await import('chart.js/auto')
+  chartCtor = chartModule.Chart
+  renderChart()
+})
+
+onUnmounted(() => {
+  chartInstance?.destroy()
+  chartInstance = null
+})
+
+function renderChart() {
+  if (!chartCtor || !canvasRef.value || !samples.value.length || showTable.value) return
+
+  const ctx = canvasRef.value.getContext('2d')
+  if (!ctx) return
+
+  const datasets = activeSeries.value.map((series) => ({
+    label: series.label,
+    data: samples.value.map(sample => valueFor(sample, series.key)),
+    borderColor: series.color,
+    backgroundColor: gradientFill(ctx, series.color),
+    borderWidth: mode.value === 'io' ? 2.5 : 2,
+    fill: true,
+    tension: 0.35,
+    pointRadius: 0,
+    pointHoverRadius: 4,
+    pointHitRadius: 12,
+  })) satisfies ChartDataset<'line', number[]>[]
+
+  const config: ChartConfiguration<'line', string[], string> = {
+    type: 'line',
+    data: {
+      labels: samples.value.map(sample => formatTimestamp(sample.recordedAt)),
+      datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      animation: { duration: 240 },
+      plugins: {
+        legend: {
+          position: 'top',
+          align: 'start',
+          labels: {
+            boxWidth: 10,
+            boxHeight: 10,
+            color: palette.value.tick,
+            usePointStyle: true,
+            pointStyle: 'circle',
+          },
+        },
+        tooltip: {
+          backgroundColor: isDark.value ? '#262626' : '#ffffff',
+          borderColor: palette.value.grid,
+          borderWidth: 1,
+          titleColor: palette.value.tick,
+          bodyColor: isDark.value ? '#ffffff' : '#161616',
+          displayColors: true,
+          callbacks: {
+            label: item => `${item.dataset.label}: ${formatSeriesValue(Number(item.parsed.y))}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: palette.value.tick,
+            maxTicksLimit: rangeHours.value <= 1 ? 6 : 8,
+            maxRotation: 0,
+          },
+          border: { display: false },
+        },
+        y: {
+          min: 0,
+          max: mode.value === 'usage' ? 100 : undefined,
+          beginAtZero: true,
+          grid: { color: palette.value.grid },
+          ticks: {
+            color: palette.value.tick,
+            callback: value => mode.value === 'io' ? formatRate(Number(value)) : `${Number(value).toFixed(0)}%`,
+          },
+          border: { display: false },
+        },
+      },
+    },
+  }
+
+  if (chartInstance) {
+    chartInstance.data = config.data
+    chartInstance.options = config.options || {}
+    chartInstance.update()
+    return
+  }
+
+  chartInstance = new chartCtor(ctx, config) as Chart<'line'>
 }
 
-function formatValue(value: number | null | undefined): string {
+function gradientFill(ctx: CanvasRenderingContext2D, color: string) {
+  const gradient = ctx.createLinearGradient(0, 0, 0, 260)
+  gradient.addColorStop(0, hexToRgba(color, 0.24))
+  gradient.addColorStop(0.72, hexToRgba(color, 0.06))
+  gradient.addColorStop(1, hexToRgba(color, 0))
+  return gradient
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const value = hex.replace('#', '')
+  const r = Number.parseInt(value.slice(0, 2), 16)
+  const g = Number.parseInt(value.slice(2, 4), 16)
+  const b = Number.parseInt(value.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function valueFor(sample: MetricSample, key: SeriesKey): number {
+  return Number(sample[key] || 0)
+}
+
+function formatSeriesValue(value: number | null | undefined): string {
+  return mode.value === 'io' ? formatRate(value) : formatPercent(value)
+}
+
+function formatPercent(value: number | null | undefined): string {
   return value == null ? '-' : `${Math.round(value)}%`
+}
+
+function formatRate(value: number | null | undefined): string {
+  if (value == null) return '-'
+  if (value < 1024) return `${Math.round(value)} B/s`
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KiB/s`
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MiB/s`
+  return `${(value / 1024 ** 3).toFixed(1)} GiB/s`
 }
 
 function formatTimestamp(iso: string): string {
@@ -253,17 +327,9 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
-.chart-grid {
-  stroke: var(--nm-hairline);
-  stroke-width: 1;
-}
-.chart-axis-label {
-  fill: var(--nm-ink-subtle);
-  font-size: 10px;
-}
-.chart-crosshair {
-  stroke: var(--nm-ink-subtle);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
+.metric-chart-shell {
+  height: 300px;
+  min-height: 300px;
+  position: relative;
 }
 </style>

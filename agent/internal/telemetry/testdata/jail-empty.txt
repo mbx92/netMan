@@ -1,0 +1,8 @@
+Status for the jail: zimbra-auth
+|- Filter
+|  |- Currently failed: 0
+|  `- Total failed: 0
+`- Actions
+   |- Currently banned: 0
+   |- Total banned: 0
+   `- Banned IP list:

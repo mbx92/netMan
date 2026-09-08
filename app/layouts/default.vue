@@ -217,6 +217,8 @@ import {
   Users,
   Video,
   Server,
+  Mail,
+  Shield,
   Bot,
   Activity,
   PanelLeftOpen,
@@ -285,6 +287,8 @@ const configLinks = [
   { to: '/settings/device-types', label: 'Device Types', icon: Boxes },
   { to: '/hikvision', label: 'Hikvision', icon: Video },
   { to: '/proxmox', label: 'Proxmox', icon: Server },
+  { to: '/zimbra', label: 'Zimbra', icon: Mail },
+  { to: '/fail2ban', label: 'Fail2Ban', icon: Shield },
   { to: '/users', label: 'Users', icon: Users },
 ]
 

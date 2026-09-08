@@ -40,15 +40,17 @@ type helloMessage struct {
 }
 
 type heartbeatMessage struct {
-	Type           string  `json:"type"`
-	CPUPercent     float64 `json:"cpuPercent"`
-	MemPercent     float64 `json:"memPercent"`
-	MemTotalBytes  uint64  `json:"memTotalBytes,omitempty"`
-	MemUsedBytes   uint64  `json:"memUsedBytes,omitempty"`
-	DiskPercent    float64 `json:"diskPercent"`
-	DiskTotalBytes uint64  `json:"diskTotalBytes,omitempty"`
-	DiskUsedBytes  uint64  `json:"diskUsedBytes,omitempty"`
-	UptimeSec      uint64  `json:"uptimeSec"`
+	Zimbra         *telemetry.ZimbraSnapshot   `json:"zimbra,omitempty"`
+	Fail2Ban       *telemetry.Fail2BanSnapshot `json:"fail2ban,omitempty"`
+	Type           string                      `json:"type"`
+	CPUPercent     float64                     `json:"cpuPercent"`
+	MemPercent     float64                     `json:"memPercent"`
+	MemTotalBytes  uint64                      `json:"memTotalBytes,omitempty"`
+	MemUsedBytes   uint64                      `json:"memUsedBytes,omitempty"`
+	DiskPercent    float64                     `json:"diskPercent"`
+	DiskTotalBytes uint64                      `json:"diskTotalBytes,omitempty"`
+	DiskUsedBytes  uint64                      `json:"diskUsedBytes,omitempty"`
+	UptimeSec      uint64                      `json:"uptimeSec"`
 
 	CPUPerCore []float64 `json:"cpuPerCore,omitempty"`
 
@@ -85,6 +87,9 @@ type inboundMessage struct {
 func Run(cfg *config.Config, version string, stop <-chan struct{}) {
 	backoff := minBackoff
 	collector := telemetry.NewCollector()
+	monitoringStop := make(chan struct{})
+	defer close(monitoringStop)
+	collector.StartMonitoring(cfg.Monitoring, monitoringStop)
 	upd := update.New(cfg, version)
 	go upd.Loop(stop)
 	upd.SetIdentity(Hostname(), OSVersion(), DetectLocalIP(), DetectMACAddress())
@@ -294,6 +299,8 @@ func sendHeartbeat(conn *websocket.Conn, collector *telemetry.Collector, writeMu
 	_ = conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 	return conn.WriteJSON(heartbeatMessage{
 		Type:                 "heartbeat",
+		Zimbra:               snap.Zimbra,
+		Fail2Ban:             snap.Fail2Ban,
 		CPUPercent:           snap.CPUPercent,
 		CPUPerCore:           snap.CPUPerCore,
 		MemPercent:           snap.MemPercent,

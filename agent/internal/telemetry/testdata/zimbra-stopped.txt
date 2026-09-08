@@ -1,0 +1,15 @@
+Host mail.example.test
+ antispam Running
+ antivirus Stopped
+  zmclamdctl is not running.
+ dnscache Running
+ ldap Running
+ logger Stopped
+ mailbox Running
+ memcached Running
+ mta Running
+ proxy Running
+ spell Running
+ stats Running
+ snmp Running
+ zmconfigd Running

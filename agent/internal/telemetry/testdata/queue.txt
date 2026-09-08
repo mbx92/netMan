@@ -1,0 +1,5 @@
+hold=1
+corrupt=0
+deferred=3
+active=10
+incoming=4

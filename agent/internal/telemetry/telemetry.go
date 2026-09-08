@@ -35,16 +35,18 @@ type ProcessInfo struct {
 }
 
 type Snapshot struct {
-	CPUPercent     float64   `json:"cpuPercent"`
-	CPUPerCore     []float64 `json:"cpuPerCore,omitempty"`
-	MemPercent     float64   `json:"memPercent"`
-	MemTotalBytes  uint64    `json:"memTotalBytes,omitempty"`
-	MemUsedBytes   uint64    `json:"memUsedBytes,omitempty"`
-	SwapPercent    float64   `json:"swapPercent"`
-	DiskPercent    float64   `json:"diskPercent"`
-	DiskTotalBytes uint64    `json:"diskTotalBytes,omitempty"`
-	DiskUsedBytes  uint64    `json:"diskUsedBytes,omitempty"`
-	UptimeSec      uint64    `json:"uptimeSec"`
+	Zimbra         *ZimbraSnapshot   `json:"zimbra,omitempty"`
+	Fail2Ban       *Fail2BanSnapshot `json:"fail2ban,omitempty"`
+	CPUPercent     float64           `json:"cpuPercent"`
+	CPUPerCore     []float64         `json:"cpuPerCore,omitempty"`
+	MemPercent     float64           `json:"memPercent"`
+	MemTotalBytes  uint64            `json:"memTotalBytes,omitempty"`
+	MemUsedBytes   uint64            `json:"memUsedBytes,omitempty"`
+	SwapPercent    float64           `json:"swapPercent"`
+	DiskPercent    float64           `json:"diskPercent"`
+	DiskTotalBytes uint64            `json:"diskTotalBytes,omitempty"`
+	DiskUsedBytes  uint64            `json:"diskUsedBytes,omitempty"`
+	UptimeSec      uint64            `json:"uptimeSec"`
 
 	// Rates, computed from the delta against the previous Collect() call —
 	// nil (omitted) on the very first sample of a process's lifetime.
@@ -68,7 +70,9 @@ type Snapshot struct {
 // actually useful for graphing/alerting. Safe for the single heartbeat
 // goroutine that owns it; not meant to be shared across goroutines.
 type Collector struct {
-	mu sync.Mutex
+	zimbra   *ZimbraSnapshot
+	fail2ban *Fail2BanSnapshot
+	mu       sync.Mutex
 
 	prevAt        time.Time
 	prevNetRx     uint64
@@ -86,7 +90,7 @@ func (c *Collector) Collect() Snapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	snap := Snapshot{}
+	snap := Snapshot{Zimbra: c.zimbra, Fail2Ban: c.fail2ban}
 	now := time.Now()
 
 	if pcts, err := cpu.Percent(500*time.Millisecond, false); err == nil && len(pcts) > 0 {

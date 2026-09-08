@@ -32,11 +32,11 @@
           class="input input-bordered flex-1 min-w-0"
           @input="debouncedSearch"
         />
-        <select v-model="filters.type" class="select select-bordered w-44 shrink-0" @change="loadDevices">
+        <select v-model="filters.type" class="select select-bordered w-44 shrink-0" @change="resetAndLoadDevices">
           <option value="">All Types</option>
           <option v-for="dt in deviceTypes" :key="dt.code" :value="dt.code">{{ dt.name }}</option>
         </select>
-        <select v-model="filters.status" class="select select-bordered w-40 shrink-0" @change="loadDevices">
+        <select v-model="filters.status" class="select select-bordered w-40 shrink-0" @change="resetAndLoadDevices">
           <option value="">All Status</option>
           <option value="ONLINE">Online</option>
           <option value="OFFLINE">Offline</option>
@@ -155,15 +155,36 @@
           </ClientOnly>
         </table>
       </div>
-      <div class="p-4 border-t border-base-200 text-sm text-base-content/60">
-        Total: {{ totalDevices }} devices
+      <div class="p-4 border-t border-base-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-sm text-base-content/60">
+        <div>
+          Showing {{ pageRangeStart }}-{{ pageRangeEnd }} of {{ totalDevices }} devices
+        </div>
+        <div class="flex items-center gap-2">
+          <select v-model.number="pagination.pageSize" class="select select-bordered select-sm w-24" @change="resetAndLoadDevices">
+            <option :value="10">10</option>
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+          <div class="join">
+            <button class="btn btn-sm join-item" :disabled="pagination.page <= 1 || pending" @click="goToPage(pagination.page - 1)">
+              <ChevronLeft class="w-4 h-4" :stroke-width="2" />
+            </button>
+            <button class="btn btn-sm join-item no-animation">
+              Page {{ pagination.page }} / {{ totalPages }}
+            </button>
+            <button class="btn btn-sm join-item" :disabled="pagination.page >= totalPages || pending" @click="goToPage(pagination.page + 1)">
+              <ChevronRight class="w-4 h-4" :stroke-width="2" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Eye, Monitor, Plus, Power, Terminal, Trash2 } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, Eye, Monitor, Plus, Power, Terminal, Trash2 } from '@lucide/vue'
 
 interface Device {
   id: string
@@ -187,6 +208,10 @@ const filters = reactive({
   type: '',
   status: '',
 })
+const pagination = reactive({
+  page: 1,
+  pageSize: 25,
+})
 
 const hasFilters = computed(() => filters.search || filters.type || filters.status)
 
@@ -196,6 +221,8 @@ const queryParams = computed(() => {
   if (filters.search) params.search = filters.search
   if (filters.type) params.type = filters.type
   if (filters.status) params.status = filters.status
+  params.page = String(pagination.page)
+  params.pageSize = String(pagination.pageSize)
   return params
 })
 
@@ -207,6 +234,9 @@ const { data: deviceData, pending, refresh: loadDevices } = await useFetch('/api
 const devices = computed(() => deviceData.value?.devices as Device[] || [])
 
 const totalDevices = computed(() => deviceData.value?.total || 0)
+const totalPages = computed(() => deviceData.value?.totalPages || 1)
+const pageRangeStart = computed(() => totalDevices.value ? ((pagination.page - 1) * pagination.pageSize) + 1 : 0)
+const pageRangeEnd = computed(() => Math.min(totalDevices.value, pagination.page * pagination.pageSize))
 
 // Fetch device types for dropdowns
 interface DeviceType { id: string; code: string; name: string; isNetworkDevice: boolean; canHavePorts: boolean }
@@ -296,14 +326,24 @@ onUnmounted(() => {
 let searchTimeout: ReturnType<typeof setTimeout>
 function debouncedSearch() {
   clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => loadDevices(), 300)
+  searchTimeout = setTimeout(() => resetAndLoadDevices(), 300)
+}
+
+function resetAndLoadDevices() {
+  pagination.page = 1
+  loadDevices()
+}
+
+function goToPage(page: number) {
+  pagination.page = Math.min(Math.max(1, page), totalPages.value)
+  loadDevices()
 }
 
 function clearFilters() {
   filters.search = ''
   filters.type = ''
   filters.status = ''
-  loadDevices()
+  resetAndLoadDevices()
 }
 
 async function confirmDelete(device: Device) {

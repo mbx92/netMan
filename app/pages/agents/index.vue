@@ -27,14 +27,15 @@
           type="text"
           placeholder="Search by name, hostname, IP, OS, or platform..."
           class="input input-bordered flex-1 min-w-0"
+          @input="debouncedSearch"
         />
-        <select v-model="statusFilter" class="select select-bordered w-40 shrink-0">
+        <select v-model="statusFilter" class="select select-bordered w-40 shrink-0" @change="resetAndLoadAgents">
           <option value="">All Status</option>
           <option value="ONLINE">Online</option>
           <option value="OFFLINE">Offline</option>
           <option value="PENDING">Pending</option>
         </select>
-        <select v-model="platformFilter" class="select select-bordered w-40 shrink-0">
+        <select v-model="platformFilter" class="select select-bordered w-40 shrink-0" @change="resetAndLoadAgents">
           <option value="">All Platforms</option>
           <option value="WINDOWS">Windows</option>
           <option value="LINUX">Linux</option>
@@ -68,13 +69,13 @@
                 <span class="loading loading-spinner loading-lg text-primary"></span>
               </td>
             </tr>
-            <tr v-else-if="!filteredAgents.length" class="h-32">
+            <tr v-else-if="!agents.length" class="h-32">
               <td colspan="8" class="text-center text-base-content/60">
-                {{ agents?.length ? 'No agents match this search' : 'No agents enrolled yet — click "Add Agent" to install one on a Windows PC or Linux server' }}
+                {{ hasFilters ? 'No agents match this search' : 'No agents enrolled yet - click "Add Agent" to install one on a Windows PC or Linux server' }}
               </td>
             </tr>
             <tr
-              v-for="agent in filteredAgents"
+              v-for="agent in agents"
               :key="agent.id"
               class="hover:bg-base-200/50 cursor-pointer"
               @click="navigateTo(`/agents/${agent.id}`)"
@@ -143,8 +144,29 @@
           </tbody>
         </table>
       </div>
-      <div class="p-4 border-t border-base-200 text-sm text-base-content/60">
-        Total: {{ filteredAgents.length }}{{ hasFilters && agents?.length ? ` of ${agents.length}` : '' }} agents
+      <div class="p-4 border-t border-base-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-sm text-base-content/60">
+        <div>
+          Showing {{ pageRangeStart }}-{{ pageRangeEnd }} of {{ totalAgents }} agents
+        </div>
+        <div class="flex items-center gap-2">
+          <select v-model.number="pagination.pageSize" class="select select-bordered select-sm w-24" @change="resetAndLoadAgents">
+            <option :value="10">10</option>
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+          <div class="join">
+            <button class="btn btn-sm join-item" :disabled="pagination.page <= 1 || pending" @click="goToPage(pagination.page - 1)">
+              <ChevronLeft class="w-4 h-4" :stroke-width="2" />
+            </button>
+            <button class="btn btn-sm join-item no-animation">
+              Page {{ pagination.page }} / {{ totalPages }}
+            </button>
+            <button class="btn btn-sm join-item" :disabled="pagination.page >= totalPages || pending" @click="goToPage(pagination.page + 1)">
+              <ChevronRight class="w-4 h-4" :stroke-width="2" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -258,45 +280,69 @@
 </template>
 
 <script setup lang="ts">
-import { Copy, Download, Eye, Laptop, Monitor, Pencil, Plus, Server, Trash2 } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, Copy, Download, Eye, Laptop, Monitor, Pencil, Plus, Server, Trash2 } from '@lucide/vue'
 import type { AgentSummary, InstallCommands } from '~/composables/useAgents'
 
-const { data: agents, pending, refresh: loadAgents } = await useFetch<AgentSummary[]>('/api/agents')
+interface AgentListResponse {
+  agents: AgentSummary[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
 
 const searchQuery = ref('')
 const statusFilter = ref('')
 const platformFilter = ref('')
+const pagination = reactive({
+  page: 1,
+  pageSize: 25,
+})
 const hasFilters = computed(() => !!(searchQuery.value || statusFilter.value || platformFilter.value))
 
-const filteredAgents = computed(() => {
-  const list = agents.value || []
-  const q = searchQuery.value.trim().toLowerCase()
-  return list.filter((agent) => {
-    if (statusFilter.value && agent.status !== statusFilter.value) return false
-    if (platformFilter.value && agent.platform !== platformFilter.value) return false
-    if (!q) return true
-    const hay = [
-      agent.alias,
-      agent.hostname,
-      agent.lastIp,
-      agent.osVersion,
-      agent.agentVersion,
-      agent.platform,
-      agent.device?.name,
-      agent.device?.ip,
-      platformLabel(agent.platform),
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-    return hay.includes(q)
-  })
+const queryParams = computed(() => {
+  const params: Record<string, string> = {
+    page: String(pagination.page),
+    pageSize: String(pagination.pageSize),
+  }
+  const search = searchQuery.value.trim()
+  if (search) params.search = search
+  if (statusFilter.value) params.status = statusFilter.value
+  if (platformFilter.value) params.platform = platformFilter.value
+  return params
 })
+
+const { data: agentData, pending, refresh: loadAgents } = await useFetch<AgentListResponse>('/api/agents', {
+  query: queryParams,
+})
+
+const agents = computed(() => agentData.value?.agents || [])
+const totalAgents = computed(() => agentData.value?.total || 0)
+const totalPages = computed(() => agentData.value?.totalPages || 1)
+const pageRangeStart = computed(() => totalAgents.value ? ((pagination.page - 1) * pagination.pageSize) + 1 : 0)
+const pageRangeEnd = computed(() => Math.min(totalAgents.value, pagination.page * pagination.pageSize))
 
 function clearFilters() {
   searchQuery.value = ''
   statusFilter.value = ''
   platformFilter.value = ''
+  resetAndLoadAgents()
+}
+
+let searchTimeout: ReturnType<typeof setTimeout>
+function debouncedSearch() {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => resetAndLoadAgents(), 300)
+}
+
+function resetAndLoadAgents() {
+  pagination.page = 1
+  loadAgents()
+}
+
+function goToPage(page: number) {
+  pagination.page = Math.min(Math.max(1, page), totalPages.value)
+  loadAgents()
 }
 
 interface Site { id: string; name: string }

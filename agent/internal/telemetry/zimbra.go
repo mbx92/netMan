@@ -24,6 +24,7 @@ type ZimbraQueue struct {
 	Counts   map[string]int64 `json:"counts"`
 }
 type ZimbraSnapshot struct {
+	SSL       *ZimbraCertificate       `json:"ssl,omitempty"`
 	Available bool                     `json:"available"`
 	Healthy   bool                     `json:"healthy"`
 	Status    string                   `json:"status"`
@@ -146,5 +147,6 @@ func collectZimbra(ctx context.Context, cfg config.Module, run commandRunner) Zi
 		}
 		s.Storage = append(s.Storage, PartitionUsage{Mountpoint: path, Percent: du.UsedPercent, TotalBytes: du.Total, UsedBytes: du.Used})
 	}
+	s.SSL = collectZimbraCertificate(cfg.CertificatePath, time.Now().UTC())
 	return s
 }

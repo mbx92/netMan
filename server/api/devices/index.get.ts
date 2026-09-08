@@ -4,6 +4,9 @@ import { loadConfigManagedHosts, resolveDeviceStatus } from '../../utils/device-
 // GET /api/devices - List all devices with optional filters
 export default defineEventHandler(async (event) => {
     const query = getQuery(event)
+    const page = Math.max(1, Number(query.page) || 1)
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 25))
+    const shouldPaginate = query.page !== undefined || query.pageSize !== undefined
 
     const where: Record<string, unknown> = {}
 
@@ -60,9 +63,16 @@ export default defineEventHandler(async (event) => {
     const filtered = statusFilter
         ? withPresence.filter((device) => device.status === statusFilter)
         : withPresence
+    const total = filtered.length
+    const paged = shouldPaginate
+        ? filtered.slice((page - 1) * pageSize, page * pageSize)
+        : filtered
 
     return {
-        devices: filtered,
-        total: filtered.length,
+        devices: paged,
+        total,
+        page: shouldPaginate ? page : 1,
+        pageSize: shouldPaginate ? pageSize : total,
+        totalPages: shouldPaginate ? Math.max(1, Math.ceil(total / pageSize)) : 1,
     }
 })

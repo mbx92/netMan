@@ -25,10 +25,11 @@ type Monitoring struct {
 
 // Durations use Go notation, e.g. "60s". Modules are disabled by default.
 type Module struct {
-	Enabled  bool   `json:"enabled"`
-	Interval string `json:"interval,omitempty"`
-	Timeout  string `json:"timeout,omitempty"`
-	Sudo     bool   `json:"sudo,omitempty"`
+	CertificatePath string `json:"certificatePath,omitempty"`
+	Enabled         bool   `json:"enabled"`
+	Interval        string `json:"interval,omitempty"`
+	Timeout         string `json:"timeout,omitempty"`
+	Sudo            bool   `json:"sudo,omitempty"`
 }
 
 var ErrNotEnrolled = errors.New("agent is not enrolled — run with -enroll -token <token> -server <url> first")

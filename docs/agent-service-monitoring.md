@@ -46,6 +46,48 @@ omit these modules. Heartbeat frequency still uses `NETMAN_HEARTBEAT_INTERVAL_SE
 
 ## Commands and privilege
 
+### Zimbra SSL certificate and mail port checks
+
+Updated agents automatically include `zimbra.ssl` when Zimbra monitoring is enabled.
+The default certificate is `/opt/zimbra/ssl/zimbra/commercial/commercial.crt`.
+Override it with `monitoring.zimbra.certificatePath` for self-signed certificates
+or a different deployed certificate location. The agent reads the first PEM
+certificate directly as its service account; it does not read private keys or
+use sudo for this check. Ensure the configured file contains the leaf certificate first.
+
+```json
+{
+  "monitoring": {
+    "zimbra": {
+      "enabled": true,
+      "interval": "60s",
+      "timeout": "10s",
+      "sudo": false,
+      "certificatePath": "/opt/zimbra/ssl/zimbra/commercial/commercial.crt"
+    },
+    "fail2ban": { "enabled": true, "interval": "60s", "timeout": "10s", "sudo": false }
+  }
+}
+```
+
+Merge this into the existing config, preserving the top-level `serverUrl`,
+`agentId`, and `authKey`. Install the updated Linux binary and restart the agent.
+SSL reports subject, issuer, DNS names, validity dates, and remaining full days.
+Statuses are `valid`, `expiring` (30 days or less), `expired`, `not_yet_valid`,
+and `unknown` on read/parse errors. This checks local validity dates, not trust,
+hostname matching, or the certificate actually served by SMTP/IMAP/HTTPS.
+
+On the Zimbra page, **Check ports** connects from the netMan backend to the
+registered hostname or last reported IP. It checks TCP ports 25, 465, 587, 143,
+993, 110, 995, 443, and 7071 with a three-second deadline per connection.
+The authenticated endpoint `POST /api/agents/:id/mail-ports` accepts
+`{"target":"hostname"}` or `{"target":"ip"}` only; destinations and ports
+cannot be supplied arbitrarily. Checks are limited to one per agent per 10 seconds
+per backend process. Results show open/closed/timeout/error and elapsed milliseconds.
+TCP success does not verify TLS, authentication, or mail delivery. DNS and routing
+use the netMan server/container network; disabled services or firewall-restricted
+ports can legitimately fail. Results are on demand and not persisted.
+
 No ban, unban, reload, restart, queue flush or configuration mutation is exposed.
 Every external command has a timeout and 1 MiB output limit. Linux timeouts kill
 the command process group. Fail2Ban also has a whole-sweep deadline equal to the

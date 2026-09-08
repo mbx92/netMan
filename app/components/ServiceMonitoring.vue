@@ -69,6 +69,7 @@
 
         <div v-if="module === 'zimbra' && agent.lastMetrics?.zimbra" class="p-5 space-y-5">
           <p class="text-sm text-base-content/60">Version: {{ agent.lastMetrics.zimbra.version || 'Unavailable' }}</p>
+          <ZimbraNetworkMonitoring :agent="agent" />
           <div v-if="Object.keys(agent.lastMetrics.zimbra.errors || {}).length" class="border border-warning/40 bg-warning/10 p-3 text-sm" role="status">
             <p class="font-medium mb-1">Some checks could not be completed</p>
             <p v-for="(message, check) in agent.lastMetrics.zimbra.errors" :key="check"><span class="font-mono">{{ check }}</span>: {{ message }}</p>
@@ -157,7 +158,7 @@ function needsReview(agent: MonitoringAgent) {
   const zimbra = agent.lastMetrics?.zimbra
   const fail2ban = agent.lastMetrics?.fail2ban
   return props.module === 'zimbra'
-    ? !zimbra?.healthy || !!Object.keys(zimbra.errors || {}).length
+    ? !zimbra?.healthy || !!Object.keys(zimbra.errors || {}).length || (!!zimbra.ssl && zimbra.ssl.status !== 'valid')
     : !fail2ban?.running || !!fail2ban.error || !!fail2ban.partial
 }
 function statusLabel(agent: MonitoringAgent) {

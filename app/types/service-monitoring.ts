@@ -1,4 +1,15 @@
 export interface ZimbraSnapshot {
+  ssl?: {
+    status: string
+    path: string
+    subject?: string
+    issuer?: string
+    dnsNames?: string[]
+    notBefore?: string
+    notAfter?: string
+    daysRemaining: number
+    error?: string
+  }
   available: boolean
   healthy: boolean
   status: string

@@ -1,40 +1,41 @@
 /**
- * Prunes AgentMetricSample rows older than AGENT_METRIC_RETENTION_DAYS
- * (default 14) so the history table doesn't grow unbounded — at the default
- * 30s heartbeat interval that's ~40k rows/agent over 14 days, still cheap,
- * but there's no reason to keep it forever. Modeled on
- * agent-offline-watcher.ts's Nitro-plugin-with-setInterval pattern.
+ * Prunes historical database rows so telemetry and operational logs do not
+ * grow unbounded. Settings are persisted through Settings -> Database and
+ * fall back to DATA_RETENTION_* / AGENT_METRIC_RETENTION_DAYS env values.
  */
-import prisma from '../utils/prisma'
+import { getDataRetentionSettings, pruneDataRetention } from '../utils/data-retention'
 
-const SWEEP_INTERVAL_MS = Number(process.env.AGENT_METRIC_RETENTION_SWEEP_MS) || 6 * 60 * 60 * 1000 // 6h
-const RETENTION_DAYS = Number(process.env.AGENT_METRIC_RETENTION_DAYS) || 14
+const FALLBACK_SWEEP_INTERVAL_MS = Number(process.env.DATA_RETENTION_SWEEP_MS)
+  || Number(process.env.AGENT_METRIC_RETENTION_SWEEP_MS)
+  || 6 * 60 * 60 * 1000
 
 export default defineNitroPlugin((nitroApp) => {
-    let running = false
-    const prune = () => {
-        if (running) return
-        running = true
-        pruneOldSamples()
-            .catch((e) => console.error('[AgentMetricsRetention] Prune failed:', e))
-            .finally(() => { running = false })
+  let running = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const prune = async () => {
+    if (running) return
+    running = true
+    try {
+      const result = await pruneDataRetention()
+      const count = Object.values(result.pruned).reduce((sum, value) => sum + value, 0)
+      if (count > 0) console.log(`[DataRetention] Pruned ${count} rows`, result.pruned)
+    } catch (e) {
+      console.error('[DataRetention] Prune failed:', e)
+    } finally {
+      running = false
     }
+  }
 
-    prune() // also run once at boot, not just after the first interval elapses
-    const timer = setInterval(prune, SWEEP_INTERVAL_MS)
-    nitroApp.hooks.hook('close', () => clearInterval(timer))
+  const schedule = async () => {
+    await prune()
+    const interval = await getDataRetentionSettings()
+      .then((settings) => settings.sweepIntervalMs)
+      .catch(() => FALLBACK_SWEEP_INTERVAL_MS)
+    timer = setTimeout(schedule, interval)
+  }
+
+  void schedule()
+  nitroApp.hooks.hook('close', () => {
+    if (timer) clearTimeout(timer)
+  })
 })
-
-async function pruneOldSamples() {
-    if (typeof prisma.agentMetricSample?.deleteMany !== 'function') {
-        console.warn(
-            '[AgentMetricsRetention] Prisma client has no AgentMetricSample — run npx prisma generate and restart the dev server',
-        )
-        return
-    }
-    const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000)
-    const result = await prisma.agentMetricSample.deleteMany({ where: { recordedAt: { lt: cutoff } } })
-    if (result.count > 0) {
-        console.log(`[AgentMetricsRetention] Pruned ${result.count} samples older than ${RETENTION_DAYS}d`)
-    }
-}

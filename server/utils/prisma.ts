@@ -42,6 +42,7 @@ const REQUIRED_DELEGATES = [
   'appUser',
   'agent',
   'agentMetricSample',
+  'systemSetting',
 ] as const
 
 function isStalePrismaClient(client: object): boolean {

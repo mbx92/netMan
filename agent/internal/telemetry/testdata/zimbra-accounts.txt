@@ -1,0 +1,19 @@
+# name active@example.com
+displayName: Active User
+mail: active@example.com
+zimbraAccountStatus: active
+zimbraMailQuota: 104857600
+zimbraLastLogonTimestamp: 20260901010101Z
+
+# name locked@example.com
+displayName: Locked User
+mail: locked@example.com
+zimbraAccountStatus: locked
+zimbraMailQuota: 104857600
+zimbraLastLogonTimestamp: 20240101010101Z
+
+# name closed@example.com
+displayName: Closed User
+mail: closed@example.com
+zimbraAccountStatus: closed
+zimbraMailQuota: 0

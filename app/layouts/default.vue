@@ -294,7 +294,7 @@ const configLinks = [
 
 const observeLinks = [
   { to: '/audit', label: 'Audit Logs', icon: ScrollText },
-  { to: '/settings/database', label: 'DB Pool', icon: Activity },
+  { to: '/settings/database', label: 'Database', icon: Activity },
 ]
 
 const toggleSidebarCollapsed = () => {

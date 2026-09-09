@@ -10,6 +10,7 @@ export interface ZimbraSnapshot {
     daysRemaining: number
     error?: string
   }
+  accounts?: ZimbraAccountSnapshot
   available: boolean
   healthy: boolean
   status: string
@@ -19,6 +20,34 @@ export interface ZimbraSnapshot {
   storage?: { mountpoint: string; percent: number; totalBytes?: number; usedBytes?: number }[]
   errors?: Record<string, string>
   checkedAt: string
+}
+
+export interface ZimbraAccountSnapshot {
+  total?: number
+  active?: number
+  locked?: number
+  closed?: number
+  maintenance?: number
+  byStatus?: Record<string, number>
+  quotaWarningCount?: number
+  inactiveCount?: number
+  entries?: ZimbraAccountHealth[]
+  accounts?: ZimbraAccountHealth[]
+  errors?: Record<string, string>
+  checkedAt?: string
+  truncated?: boolean
+}
+
+export interface ZimbraAccountHealth {
+  email: string
+  displayName?: string
+  status?: string
+  quotaPercent?: number
+  quotaUsedBytes?: number
+  quotaLimitBytes?: number
+  mailboxSizeBytes?: number
+  lastLogonAt?: string
+  warnings?: string[]
 }
 
 export interface Fail2BanSnapshot {
@@ -45,6 +74,7 @@ export interface Fail2BanSnapshot {
 export interface MonitoringAgent {
   id: string
   name?: string | null
+  alias?: string | null
   hostname: string
   lastIp?: string | null
   status: string

@@ -49,6 +49,17 @@ func TestZimbraParsers(t *testing.T) {
 			t.Fatal("accepted invalid queue")
 		}
 	}
+	quota := parseZimbraQuotaUsage(fixture(t, "zimbra-quota.txt"))
+	accounts, err := parseZimbraAccounts(fixture(t, "zimbra-accounts.txt"), quota, time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC), 90, 80, 10)
+	if err != nil || accounts.Total != 3 || accounts.Active != 1 || accounts.Locked != 1 || accounts.Closed != 1 || accounts.QuotaWarningCount != 1 || accounts.InactiveCount != 1 {
+		t.Fatalf("%+v %v", accounts, err)
+	}
+	if accounts.Entries[0].Email != "locked@example.com" || accounts.Entries[0].QuotaPercent == nil || *accounts.Entries[0].QuotaPercent < 89 {
+		t.Fatalf("%+v", accounts.Entries[0])
+	}
+	if _, err := parseZimbraAccounts("", nil, time.Now(), 90, 80, 10); err == nil {
+		t.Fatal("accepted invalid accounts")
+	}
 }
 
 func TestFail2BanParsers(t *testing.T) {
@@ -114,6 +125,31 @@ func TestZimbraStoppedWithExitFailure(t *testing.T) {
 	})
 	if s.Healthy || !s.Available || s.Services["antivirus"].Status != "stopped" || s.Queue.Total != 18 {
 		t.Fatalf("%+v", s)
+	}
+}
+
+func TestZimbraAccountsCollector(t *testing.T) {
+	s := collectZimbra(context.Background(), config.Module{AccountsEnabled: true}, func(ctx context.Context, name string, args ...string) (string, error) {
+		joined := strings.Join(append([]string{name}, args...), " ")
+		switch {
+		case strings.Contains(joined, "zmcontrol status"):
+			return fixture(t, "zimbra-running.txt"), nil
+		case strings.Contains(joined, "zmcontrol -v"):
+			return "Release 10.0.0.GA", nil
+		case strings.Contains(joined, "zmqstat"):
+			return fixture(t, "queue.txt"), nil
+		case strings.Contains(joined, "zmprov") && strings.Contains(joined, "gaa") && strings.Contains(joined, "-v"):
+			return fixture(t, "zimbra-accounts.txt"), nil
+		case strings.Contains(joined, "zmhostname"):
+			return "mail.example.com\n", nil
+		case strings.Contains(joined, "zmprov") && strings.Contains(joined, "gqu"):
+			return fixture(t, "zimbra-quota.txt"), nil
+		default:
+			return "", exec.ErrNotFound
+		}
+	})
+	if s.Accounts == nil || s.Accounts.Total != 3 || s.Accounts.QuotaWarningCount != 1 {
+		t.Fatalf("%+v", s.Accounts)
 	}
 }
 

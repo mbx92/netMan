@@ -1,5 +1,9 @@
+import type { DeviceStatus, Prisma } from '@prisma/client'
 import prisma from '../../utils/prisma'
 import { loadConfigManagedHosts, resolveDeviceStatus } from '../../utils/device-presence'
+import { agentManager } from '../../utils/agent-manager'
+
+const DEVICE_STATUSES = new Set<DeviceStatus>(['ONLINE', 'OFFLINE', 'UNKNOWN', 'MAINTENANCE'])
 
 // GET /api/devices - List all devices with optional filters
 export default defineEventHandler(async (event) => {
@@ -8,7 +12,7 @@ export default defineEventHandler(async (event) => {
     const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 25))
     const shouldPaginate = query.page !== undefined || query.pageSize !== undefined
 
-    const where: Record<string, unknown> = {}
+    const where: Prisma.DeviceWhereInput = {}
 
     // Filter by type code
     if (query.type && typeof query.type === 'string') {
@@ -29,50 +33,142 @@ export default defineEventHandler(async (event) => {
         ]
     }
 
-    const [devices, configHosts] = await Promise.all([
+    const include = {
+        deviceType: true,
+        site: { select: { id: true, name: true } },
+        agent: { select: { id: true, status: true, platform: true } },
+        _count: {
+            select: { ports: true, sessions: true }
+        }
+    } as const
+    const orderBy = [
+        { status: 'asc' as const },
+        { name: 'asc' as const },
+    ]
+    const statusFilter = typeof query.status === 'string' && DEVICE_STATUSES.has(query.status as DeviceStatus)
+        ? query.status as DeviceStatus
+        : null
+
+    if (!statusFilter) {
+        const [devices, total, configHosts] = await Promise.all([
+            prisma.device.findMany({
+                where,
+                orderBy,
+                skip: shouldPaginate ? (page - 1) * pageSize : undefined,
+                take: shouldPaginate ? pageSize : undefined,
+                include,
+            }),
+            prisma.device.count({ where }),
+            loadConfigManagedHosts(),
+        ])
+
+        return {
+            devices: devices.map((device) => ({
+                ...device,
+                status: resolveDeviceStatus({
+                    status: device.status,
+                    agent: device.agent,
+                    isApiActive: device.isApiActive,
+                    ip: device.ip,
+                    configHosts,
+                }),
+            })),
+            total,
+            page: shouldPaginate ? page : 1,
+            pageSize: shouldPaginate ? pageSize : total,
+            totalPages: shouldPaginate ? Math.max(1, Math.ceil(total / pageSize)) : 1,
+        }
+    }
+
+    const configHosts = await loadConfigManagedHosts()
+    const effectiveWhere: Prisma.DeviceWhereInput = {
+        AND: [where, presenceStatusWhere(statusFilter, configHosts)],
+    }
+
+    const [devices, total] = await Promise.all([
         prisma.device.findMany({
-            where,
-            orderBy: [
-                { status: 'asc' },
-                { name: 'asc' },
-            ],
-            include: {
-                deviceType: true,
-                site: { select: { id: true, name: true } },
-                agent: { select: { id: true, status: true, platform: true } },
-                _count: {
-                    select: { ports: true, sessions: true }
-                }
-            }
+            where: effectiveWhere,
+            orderBy,
+            skip: shouldPaginate ? (page - 1) * pageSize : undefined,
+            take: shouldPaginate ? pageSize : undefined,
+            include,
         }),
-        loadConfigManagedHosts(),
+        prisma.device.count({ where: effectiveWhere }),
     ])
 
-    const withPresence = devices.map((device) => ({
-        ...device,
-        status: resolveDeviceStatus({
-            status: device.status,
-            agent: device.agent,
-            isApiActive: device.isApiActive,
-            ip: device.ip,
-            configHosts,
-        }),
-    }))
-
-    const statusFilter = typeof query.status === 'string' ? query.status : ''
-    const filtered = statusFilter
-        ? withPresence.filter((device) => device.status === statusFilter)
-        : withPresence
-    const total = filtered.length
-    const paged = shouldPaginate
-        ? filtered.slice((page - 1) * pageSize, page * pageSize)
-        : filtered
-
     return {
-        devices: paged,
+        devices: devices.map((device) => ({
+            ...device,
+            status: resolveDeviceStatus({
+                status: device.status,
+                agent: device.agent,
+                isApiActive: device.isApiActive,
+                ip: device.ip,
+                configHosts,
+            }),
+        })),
         total,
         page: shouldPaginate ? page : 1,
         pageSize: shouldPaginate ? pageSize : total,
         totalPages: shouldPaginate ? Math.max(1, Math.ceil(total / pageSize)) : 1,
     }
 })
+
+function presenceStatusWhere(status: DeviceStatus, configHosts: Set<string>): Prisma.DeviceWhereInput {
+    if (status === 'MAINTENANCE') return { status: 'MAINTENANCE' }
+
+    const onlineAgentIds = agentManager.getAll().map((agent) => agent.agentId)
+    const configHostValues = Array.from(configHosts)
+    const noAgent: Prisma.DeviceWhereInput = { agent: { is: null } }
+    const onlineAgent: Prisma.DeviceWhereInput | null = onlineAgentIds.length > 0
+        ? { agent: { is: { id: { in: onlineAgentIds } } } }
+        : null
+    const offlineAgent: Prisma.DeviceWhereInput = onlineAgentIds.length > 0
+        ? { agent: { is: { id: { notIn: onlineAgentIds } } } }
+        : { agent: { isNot: null } }
+
+    const configManaged: Prisma.DeviceWhereInput | null = configHostValues.length > 0
+        ? { ip: { in: configHostValues } }
+        : null
+    const notConfigManaged: Prisma.DeviceWhereInput = configHostValues.length > 0
+        ? { OR: [{ ip: null }, { NOT: { ip: { in: configHostValues } } }] }
+        : {}
+
+    const nonMaintenance: Prisma.DeviceWhereInput = { status: { not: 'MAINTENANCE' } }
+    if (status === 'ONLINE') {
+        return {
+            AND: [
+                nonMaintenance,
+                {
+                    OR: [
+                        ...(onlineAgent ? [onlineAgent] : []),
+                        { ...noAgent, isApiActive: true },
+                        { ...noAgent, isApiActive: false, status: 'ONLINE' },
+                        ...(configManaged ? [{ ...noAgent, isApiActive: false, ...configManaged }] : []),
+                    ],
+                },
+            ],
+        }
+    }
+
+    if (status === 'OFFLINE') {
+        return {
+            AND: [
+                nonMaintenance,
+                {
+                    OR: [
+                        offlineAgent,
+                        { ...noAgent, isApiActive: false, status: 'OFFLINE', ...notConfigManaged },
+                    ],
+                },
+            ],
+        }
+    }
+
+    return {
+        AND: [
+            nonMaintenance,
+            { ...noAgent, isApiActive: false, status: 'UNKNOWN', ...notConfigManaged },
+        ],
+    }
+}

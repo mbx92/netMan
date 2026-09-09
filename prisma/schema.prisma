@@ -331,6 +331,20 @@ model Notification {
 }
 
 // ============================================
+// SYSTEM SETTINGS
+// ============================================
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
+
+// ============================================
 // IP ADDRESS MANAGEMENT (IPAM)
 // ============================================
 

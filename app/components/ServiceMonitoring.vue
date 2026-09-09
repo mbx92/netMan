@@ -6,9 +6,14 @@
         <h1 class="type-headline">{{ title }} Monitoring</h1>
         <p class="type-body-sm text-base-content/60 mt-1">{{ module === 'zimbra' ? 'Service health, mail queues, and storage across your mail servers.' : 'Service status, active jails, and banned IPs across your servers.' }}</p>
       </div>
-      <button class="btn btn-outline gap-2" :disabled="pending" @click="refresh()">
-        <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': pending }" /> Refresh
-      </button>
+      <div class="flex flex-wrap gap-2">
+        <NuxtLink v-if="module === 'zimbra'" to="/zimbra/accounts" class="btn btn-outline gap-2">
+          <Users class="w-4 h-4" /> Accounts
+        </NuxtLink>
+        <button class="btn btn-outline gap-2" :disabled="pending" @click="refresh()">
+          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': pending }" /> Refresh
+        </button>
+      </div>
     </div>
 
     <div v-if="error" role="alert" class="mb-6 border border-error/40 bg-error/10 p-4">
@@ -137,12 +142,12 @@
 </template>
 
 <script setup lang="ts">
-import { Mail, RefreshCw, Shield } from '@lucide/vue'
+import { Mail, RefreshCw, Shield, Users } from '@lucide/vue'
 import type { Fail2BanSnapshot, MonitoringAgent, ZimbraSnapshot } from '~/types/service-monitoring'
 
 const props = defineProps<{ module: 'zimbra' | 'fail2ban' }>()
 const title = computed(() => props.module === 'zimbra' ? 'Zimbra' : 'Fail2Ban')
-const { data, pending, error, refresh } = await useFetch<MonitoringAgent[]>('/api/agents')
+const { data, pending, error, refresh } = await useFetch<MonitoringAgent[]>(() => `/api/agents/monitoring?module=${props.module}`)
 const search = ref('')
 const filter = ref('all')
 const now = ref(0)

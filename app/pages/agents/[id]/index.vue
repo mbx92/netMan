@@ -35,9 +35,9 @@
             </div>
             <p class="type-body-sm text-base-content/60 mt-1">
               {{ platformLabel(agent.platform) }}
-              <span v-if="agent.alias"> • {{ agent.hostname }}</span>
-              <span v-if="agent.osVersion"> • {{ agent.osVersion }}</span>
-              <span v-if="agent.agentVersion"> • agent v{{ agent.agentVersion }}</span>
+              <span v-if="agent.alias"> | {{ agent.hostname }}</span>
+              <span v-if="agent.osVersion"> | {{ agent.osVersion }}</span>
+              <span v-if="agent.agentVersion"> | agent v{{ agent.agentVersion }}</span>
             </p>
           </div>
         </div>
@@ -143,7 +143,7 @@
             <dd class="font-medium">
               <div v-for="(disk, i) in agent.diskInfo" :key="i">
                 {{ [disk.vendor, disk.model].filter(Boolean).join(' ') || 'Unknown' }}
-                <span v-if="disk.sizeBytes" class="text-base-content/60 font-mono"> · {{ formatBytes(disk.sizeBytes) }}</span>
+                <span v-if="disk.sizeBytes" class="text-base-content/60 font-mono"> | {{ formatBytes(disk.sizeBytes) }}</span>
               </div>
             </dd>
           </div>
@@ -155,8 +155,8 @@
                 <span v-if="printer.default" class="badge badge-ghost badge-sm rounded-none">default</span>
                 <span class="text-base-content/60 text-xs">
                   {{ printerKind(printer) }}
-                  <template v-if="printer.host"> · <span class="font-mono">{{ printer.host }}</span></template>
-                  <template v-if="printer.status"> · {{ printer.status }}</template>
+                  <template v-if="printer.host"> | <span class="font-mono">{{ printer.host }}</span></template>
+                  <template v-if="printer.status"> | {{ printer.status }}</template>
                 </span>
                 <NuxtLink
                   v-if="printer.deviceId"
@@ -183,18 +183,18 @@
             <dd class="font-medium">
               <span v-if="agent.memoryTotalBytes" class="font-mono">{{ formatBytes(agent.memoryTotalBytes) }}</span>
               <span v-if="agent.memoryType" :class="agent.memoryTotalBytes ? 'text-base-content/60' : ''">
-                {{ agent.memoryTotalBytes ? ' · ' : '' }}{{ agent.memoryType }}
+                {{ agent.memoryTotalBytes ? ' | ' : '' }}{{ agent.memoryType }}
               </span>
               <span v-else-if="!agent.memoryTotalBytes">Unknown type</span>
               <span v-if="agent.memorySlotsTotal" class="text-base-content/60">
-                · {{ agent.memorySlotsUsed ?? '?' }}/{{ agent.memorySlotsTotal }} slots used
+                | {{ agent.memorySlotsUsed ?? '?' }}/{{ agent.memorySlotsTotal }} slots used
               </span>
             </dd>
           </div>
           <div v-if="agent.vncPassword">
             <dt class="text-base-content/60">VNC Password</dt>
             <dd class="font-mono font-medium flex items-center gap-1">
-              <span>{{ showVncPassword ? agent.vncPassword : '••••••••' }}</span>
+              <span>{{ showVncPassword ? agent.vncPassword : '********' }}</span>
               <button class="btn btn-ghost btn-xs btn-square" @click="showVncPassword = !showVncPassword">
                 <component :is="showVncPassword ? EyeOff : Eye" class="w-3.5 h-3.5" :stroke-width="2" />
               </button>
@@ -214,7 +214,7 @@
           <div>
             <dt class="text-base-content/60">Network I/O</dt>
             <dd class="font-mono font-medium">
-              ↓{{ formatRate(agent.lastMetrics?.netRxBytesPerSec) }} ↑{{ formatRate(agent.lastMetrics?.netTxBytesPerSec) }}
+              down {{ formatRate(agent.lastMetrics?.netRxBytesPerSec) }} / up {{ formatRate(agent.lastMetrics?.netTxBytesPerSec) }}
             </dd>
           </div>
           <div>
@@ -237,7 +237,7 @@
               <span class="font-medium shrink-0 ml-2">
                 {{ formatPercent(p.percent) }}
                 <span v-if="p.totalBytes" class="text-base-content/60">
-                  · {{ formatBytes(p.usedBytes) }} / {{ formatBytes(p.totalBytes) }}
+                  | {{ formatBytes(p.usedBytes) }} / {{ formatBytes(p.totalBytes) }}
                 </span>
               </span>
             </div>
@@ -286,7 +286,7 @@
       <div class="bg-base-100 border border-base-300 rounded-none p-6">
         <h2 class="type-card-title mb-2">Remote Access</h2>
         <p v-if="agent.status === 'ONLINE'" class="type-body-sm text-base-content/60">
-          {{ agent.platform === 'WINDOWS' ? 'VNC' : 'SSH' }} is relayed through this agent's own tunnel — no direct
+          {{ agent.platform === 'WINDOWS' ? 'VNC' : 'SSH' }} is relayed through this agent's own tunnel - no direct
           network path to the machine is needed.
         </p>
         <p v-else class="type-body-sm text-base-content/60">
@@ -350,7 +350,7 @@
           Close that window to restart the agent service and tray (credentials
           and VNC password stay put). Linux and macOS apply the same update
           without a prompt. Use the command below for agents still on an older
-          build — after that, they self-update.
+          build - after that, they self-update.
         </p>
         <div class="flex items-start gap-2">
           <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ updateCommand }}</pre>
@@ -373,7 +373,7 @@
         </p>
         <div class="space-y-3">
           <div>
-            <div class="text-xs font-medium text-base-content/60 mb-1">Windows (PowerShell as Administrator — paste as-is, do not save a .ps1)</div>
+            <div class="text-xs font-medium text-base-content/60 mb-1">Windows (PowerShell as Administrator - paste as-is, do not save a .ps1)</div>
             <div class="flex items-start gap-2">
               <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ installCommands?.windows }}</pre>
               <button class="btn btn-ghost btn-xs" @click="copy(installCommands?.windows)"><Copy class="w-4 h-4" :stroke-width="2" /></button>
@@ -438,7 +438,7 @@ const updateCommand = computed(() => {
 })
 
 // Only true once a reconnected agent has actually confirmed it's running the
-// latest build (agentVersion is set on every hello, not just at enroll) —
+// latest build (agentVersion is set on every hello, not just at enroll) -
 // null/older means "unknown or stale," which should still offer the update.
 const isUpToDate = computed(() => {
   const latest = useRuntimeConfig().public.agentLatestVersion as string
@@ -572,7 +572,7 @@ async function confirmPowerAction(action: 'restart' | 'shutdown') {
   powerActionPending.value = action
   try {
     await sendPowerAction(id, action)
-    alertDialog(`${label} command sent — the machine will go offline shortly.`)
+    alertDialog(`${label} command sent - the machine will go offline shortly.`)
     await refreshAgent()
   } catch (err: any) {
     alertDialog(err?.data?.statusMessage || err?.message || `Failed to ${action} the machine`)

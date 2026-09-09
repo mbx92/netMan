@@ -36,11 +36,11 @@
       </div>
       <div class="infra-panel p-4">
         <p class="text-sm text-base-content/60">Tracked accounts</p>
-        <p class="text-3xl font-semibold mt-2">{{ totalAccounts.toLocaleString() }}</p>
+        <p class="text-3xl font-semibold mt-2">{{ number(totalAccounts) }}</p>
       </div>
       <div class="infra-panel p-4">
         <p class="text-sm text-base-content/60">Accounts needing review</p>
-        <p class="text-3xl font-semibold mt-2">{{ reviewCount.toLocaleString() }}</p>
+        <p class="text-3xl font-semibold mt-2">{{ number(reviewCount) }}</p>
       </div>
     </div>
 
@@ -114,7 +114,7 @@
         <div class="px-5 py-4 border-b border-base-300 flex flex-col md:flex-row md:items-center justify-between gap-2">
           <div>
             <h2 class="type-card-title">Accounts</h2>
-            <p class="text-sm text-base-content/60">{{ filteredRows.length.toLocaleString() }} of {{ accountRows.length.toLocaleString() }} reported accounts</p>
+            <p class="text-sm text-base-content/60">{{ number(filteredRows.length) }} of {{ number(accountRows.length) }} reported accounts</p>
           </div>
           <span v-if="partialAccountData" class="badge badge-warning">Partial account data</span>
         </div>
@@ -301,17 +301,11 @@ function accountIssues(account: ZimbraAccountHealth, status: string, quotaPercen
   const issues = new Set<string>()
   if (status !== 'active') issues.add('status')
   if (quotaPercent != null && quotaPercent >= 80) issues.add('quota')
-  if (account.lastLogonAt && inactiveDays(account.lastLogonAt) >= 90) issues.add('inactive')
+  if ((account.warnings || []).includes('inactive')) issues.add('inactive')
   for (const warning of account.warnings || []) {
     if (warning) issues.add(warning)
   }
   return Array.from(issues)
-}
-
-function inactiveDays(value?: string) {
-  const parsed = Date.parse(value || '')
-  if (!Number.isFinite(parsed)) return 0
-  return Math.floor((Date.now() - parsed) / 86_400_000)
 }
 
 function statusLabel(status?: string) {
@@ -328,6 +322,7 @@ function statusBadgeClass(status: string) {
   return 'badge-ghost'
 }
 
-const date = (value?: string) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : 'Unavailable'
+const number = (value: number) => new Intl.NumberFormat('en-US').format(value)
+const date = formatAbsoluteTime
 const bytes = (value?: number) => value == null || !Number.isFinite(value) ? 'Unavailable' : `${(value / 1024 ** 3).toFixed(1)} GiB`
 </script>

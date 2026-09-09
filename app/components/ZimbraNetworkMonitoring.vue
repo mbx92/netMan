@@ -30,7 +30,7 @@
       </div>
       <p v-if="error" role="alert" class="text-sm text-error mb-3">{{ error }}</p>
       <template v-if="result">
-        <p class="text-xs text-base-content/60 mb-2 break-all">netMan → {{ result.host }} · {{ date(result.checkedAt) }}{{ checking ? ' (previous result)' : '' }}</p>
+        <p class="text-xs text-base-content/60 mb-2 break-all">netMan -> {{ result.host }} | {{ date(result.checkedAt) }}{{ checking ? ' (previous result)' : '' }}</p>
         <div class="overflow-x-auto">
           <table class="table table-sm">
             <thead><tr><th>Service</th><th>Port</th><th>Status</th><th>Time</th></tr></thead>
@@ -58,7 +58,7 @@ const target = ref('hostname')
 const checking = ref(false)
 const error = ref('')
 const result = ref<{ host: string; checkedAt: string; ports: { port: number; service: string; status: string; latencyMs: number; error?: string }[] } | null>(null)
-const date = (value?: string) => value ? new Date(value).toLocaleString() : 'Unavailable'
+const date = formatAbsoluteTime
 async function checkPorts() {
   checking.value = true
   error.value = ''

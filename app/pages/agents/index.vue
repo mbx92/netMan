@@ -5,7 +5,7 @@
       <div>
         <h1 class="type-headline">Agents</h1>
         <p class="type-body-sm text-base-content/60 mt-1">
-          Windows &amp; Linux machines monitored via the netMan agent — reachable even behind NAT
+          Windows &amp; Linux machines monitored via the netMan agent - reachable even behind NAT
         </p>
       </div>
         <div class="flex items-center gap-2">
@@ -231,13 +231,13 @@
         <p class="type-body-sm text-base-content/60 mb-4">
           Run this on the target machine. The token expires
           <span class="font-medium">{{ tokenExpiresAt ? formatTimeAgo(tokenExpiresAt) : '' }}</span>
-          — regenerate from the agent list if it lapses before install.
+          - regenerate from the agent list if it lapses before install.
         </p>
 
         <div class="space-y-3">
           <div>
             <div class="text-xs font-medium text-base-content/60 mb-1 flex items-center gap-1">
-              <Monitor class="w-3.5 h-3.5" :stroke-width="2" /> Windows (PowerShell as Administrator — paste as-is, do not save a .ps1)
+              <Monitor class="w-3.5 h-3.5" :stroke-width="2" /> Windows (PowerShell as Administrator - paste as-is, do not save a .ps1)
             </div>
             <div class="flex items-start gap-2">
               <pre class="flex-1 bg-base-300 text-xs p-3 rounded-none overflow-x-auto whitespace-pre-wrap break-all">{{ installCommands?.windows }}</pre>

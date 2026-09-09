@@ -21,7 +21,7 @@
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
       <div class="infra-panel p-4"><p class="text-sm text-base-content/60">Reporting hosts</p><p class="text-3xl font-semibold mt-2">{{ hosts.length }}</p></div>
-      <div class="infra-panel p-4"><p class="text-sm text-base-content/60">Connected agents</p><p class="text-3xl font-semibold mt-2">{{ hosts.filter(online).length }}</p></div>
+      <div class="infra-panel p-4"><p class="text-sm text-base-content/60">Online agents</p><p class="text-3xl font-semibold mt-2">{{ hosts.filter(online).length }}</p></div>
       <div class="infra-panel p-4"><p class="text-sm text-base-content/60">Hosts needing review</p><p class="text-3xl font-semibold mt-2">{{ hosts.filter(needsReview).length }}</p></div>
     </div>
     <div class="infra-panel p-4 mb-6 flex flex-col sm:flex-row gap-3 sm:items-center">
@@ -34,8 +34,8 @@
         <select v-model="filter" class="select select-bordered w-full">
           <option value="all">All hosts</option>
           <option value="review">Needs review</option>
-          <option value="online">Agent connected</option>
-          <option value="offline">Agent disconnected</option>
+          <option value="online">Agent online</option>
+          <option value="offline">Agent offline</option>
         </select>
       </label>
       <span class="text-xs text-base-content/60">Auto-refresh every 30s</span>
@@ -65,12 +65,12 @@
             <p class="text-xs text-base-content/60 mt-2">Snapshot: {{ formatDate(snapshot(agent)?.checkedAt) }} &middot; Last heartbeat: {{ formatDate(agent.lastSeen) }}</p>
           </div>
           <div class="flex flex-wrap gap-2">
-            <span class="badge" :class="online(agent) ? 'badge-success' : 'badge-ghost'">Agent {{ online(agent) ? 'connected' : 'disconnected' }}</span>
+            <span class="badge" :class="agentBadgeClass(agent)">{{ agentStateLabel(agent) }}</span>
             <span class="badge" :class="needsReview(agent) ? 'badge-warning' : 'badge-success'">{{ statusLabel(agent) }}</span>
             <span v-if="oldSnapshot(agent)" class="badge badge-warning">Snapshot over 5 min old</span>
           </div>
         </div>
-        <div v-if="!online(agent) || oldSnapshot(agent)" class="px-5 py-3 bg-warning/10 text-sm">Showing the last reported snapshot. Current service state is not confirmed.</div>
+        <div v-if="snapshotNotice(agent)" class="px-5 py-3 bg-warning/10 text-sm">{{ snapshotNotice(agent) }}</div>
 
         <div v-if="module === 'zimbra' && agent.lastMetrics?.zimbra" class="p-5 space-y-5">
           <p class="text-sm text-base-content/60">Version: {{ agent.lastMetrics.zimbra.version || 'Unavailable' }}</p>
@@ -93,7 +93,7 @@
               <h3 class="font-semibold mb-3">Mail queue</h3>
               <template v-if="agent.lastMetrics.zimbra.queue">
                 <div class="grid grid-cols-3 gap-2 mb-3">
-                  <div v-for="metric in queueMetrics(agent.lastMetrics.zimbra.queue)" :key="metric.label" class="bg-base-200 p-3"><p class="text-xs text-base-content/60">{{ metric.label }}</p><p class="text-2xl font-semibold mt-1">{{ metric.value.toLocaleString() }}</p></div>
+                  <div v-for="metric in queueMetrics(agent.lastMetrics.zimbra.queue)" :key="metric.label" class="bg-base-200 p-3"><p class="text-xs text-base-content/60">{{ metric.label }}</p><p class="text-2xl font-semibold mt-1">{{ number(metric.value) }}</p></div>
                 </div>
                 <div class="flex flex-wrap gap-2"><span v-for="(count, name) in agent.lastMetrics.zimbra.queue.counts" :key="name" class="badge badge-ghost">{{ name }}: {{ count }}</span></div>
               </template>
@@ -122,8 +122,8 @@
               <tbody>
                 <tr v-for="jail in agent.lastMetrics.fail2ban.jails" :key="jail.name">
                   <td class="font-medium">{{ jail.name }}<p v-if="jail.error" class="text-warning text-xs mt-1">{{ jail.error }}</p></td>
-                  <td>{{ jail.error ? '—' : jail.currentlyFailed }}</td><td>{{ jail.error ? '—' : jail.totalFailed }}</td>
-                  <td>{{ jail.error ? '—' : jail.currentlyBanned }}</td><td>{{ jail.error ? '—' : jail.totalBanned }}</td>
+                  <td>{{ jail.error ? unavailable : number(jail.currentlyFailed) }}</td><td>{{ jail.error ? unavailable : number(jail.totalFailed) }}</td>
+                  <td>{{ jail.error ? unavailable : number(jail.currentlyBanned) }}</td><td>{{ jail.error ? unavailable : number(jail.totalBanned) }}</td>
                   <td>
                     <span v-if="jail.error" class="text-base-content/60">Unavailable</span>
                     <details v-else-if="jail.bannedIps?.length"><summary class="cursor-pointer text-primary">{{ jail.bannedIps.length }} IPs</summary><div class="font-mono text-xs max-h-48 overflow-y-auto mt-2"><p v-for="ip in jail.bannedIps" :key="ip">{{ ip }}</p></div></details>
@@ -153,7 +153,8 @@ const filter = ref('all')
 const now = ref(0)
 const snapshot = (agent: MonitoringAgent) => agent.lastMetrics?.[props.module]
 const hosts = computed(() => (data.value || []).filter(agent => snapshot(agent)))
-const online = (agent: MonitoringAgent) => agent.status === 'ONLINE' && agent.isConnected
+const online = (agent: MonitoringAgent) => agent.status === 'ONLINE'
+const realtimeConnected = (agent: MonitoringAgent) => online(agent) && agent.isConnected
 const oldSnapshot = (agent: MonitoringAgent) => {
   const checked = Date.parse(snapshot(agent)?.checkedAt || '')
   return !Number.isFinite(checked) || (now.value > 0 && now.value - checked > 5 * 60_000)
@@ -177,17 +178,34 @@ function statusLabel(agent: MonitoringAgent) {
   if (!s || s.error) return 'Service status unknown'
   return s.partial ? 'Partial snapshot' : s.running ? 'Fail2Ban running' : 'Service status unknown'
 }
+function agentStateLabel(agent: MonitoringAgent) {
+  if (realtimeConnected(agent)) return 'Agent connected'
+  if (online(agent)) return 'Agent online'
+  return 'Agent disconnected'
+}
+function agentBadgeClass(agent: MonitoringAgent) {
+  if (online(agent)) return 'badge-success'
+  return 'badge-ghost'
+}
+function snapshotNotice(agent: MonitoringAgent) {
+  const stale = oldSnapshot(agent)
+  if (!stale && online(agent)) return ''
+  if (online(agent)) return 'Agent is online, but this module snapshot is older than 5 minutes. Showing the last completed monitoring sample.'
+  return 'Agent is disconnected. Showing the last reported snapshot; current service state is not confirmed.'
+}
 const filteredHosts = computed(() => hosts.value.filter(agent => {
   const matches = `${agent.name || ''} ${agent.hostname} ${agent.lastIp || ''}`.toLowerCase().includes(search.value.toLowerCase().trim())
   return matches && (filter.value === 'all' || (filter.value === 'review' && needsReview(agent)) || (filter.value === 'online' && online(agent)) || (filter.value === 'offline' && !online(agent)))
 }))
-const formatDate = (value?: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString().replace('T', ' ').replace('Z', ' UTC') : 'Unavailable'
-const bytes = (value?: number) => value == null ? '—' : `${(value / 1024 ** 3).toFixed(1)} GiB`
+const formatDate = formatAbsoluteTime
+const number = (value: number) => new Intl.NumberFormat('en-US').format(value)
+const unavailable = 'Unavailable'
+const bytes = (value?: number) => value == null ? 'Unavailable' : `${(value / 1024 ** 3).toFixed(1)} GiB`
 const queueMetrics = (q: NonNullable<ZimbraSnapshot['queue']>) => [{ label: 'Total queued', value: q.total }, { label: 'Deferred', value: q.deferred }, { label: 'Active', value: q.active }]
 const jailMetrics = (s: Fail2BanSnapshot) => [
-  { label: 'Active jails', value: s.error ? '—' : s.jailCount.toLocaleString() },
-  { label: s.partial ? 'Currently banned (partial)' : 'Currently banned', value: s.error ? '—' : s.currentlyBanned.toLocaleString() },
-  { label: s.partial ? 'Total banned (partial)' : 'Total banned', value: s.error ? '—' : s.totalBanned.toLocaleString() },
+  { label: 'Active jails', value: s.error ? unavailable : number(s.jailCount) },
+  { label: s.partial ? 'Currently banned (partial)' : 'Currently banned', value: s.error ? unavailable : number(s.currentlyBanned) },
+  { label: s.partial ? 'Total banned (partial)' : 'Total banned', value: s.error ? unavailable : number(s.totalBanned) },
 ]
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {

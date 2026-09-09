@@ -318,9 +318,15 @@ function formatRate(value: number | null | undefined): string {
 
 function formatTimestamp(iso: string): string {
   const d = new Date(iso)
-  if (rangeHours.value <= 1) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  if (rangeHours.value <= 24) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (Number.isNaN(d.getTime())) return '-'
+  const hh = String(d.getUTCHours()).padStart(2, '0')
+  const mm = String(d.getUTCMinutes()).padStart(2, '0')
+  const ss = String(d.getUTCSeconds()).padStart(2, '0')
+  if (rangeHours.value <= 1) return `${hh}:${mm}:${ss} UTC`
+  if (rangeHours.value <= 24) return `${hh}:${mm} UTC`
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${month}-${day} ${hh}:${mm} UTC`
 }
 
 defineExpose({ refresh })

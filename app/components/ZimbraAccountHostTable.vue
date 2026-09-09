@@ -28,12 +28,12 @@
               <span v-else class="badge badge-ghost">Unavailable</span>
               <p class="text-xs text-base-content/60 mt-1">{{ date(snapshot(agent)?.checkedAt || agent.lastMetrics?.zimbra?.checkedAt) }}</p>
             </td>
-            <td>{{ accountTotal(snapshot(agent)).toLocaleString() }}</td>
-            <td>{{ statusCount(snapshot(agent), 'active').toLocaleString() }}</td>
-            <td>{{ statusCount(snapshot(agent), 'locked').toLocaleString() }}</td>
-            <td>{{ statusCount(snapshot(agent), 'closed').toLocaleString() }}</td>
-            <td>{{ statusCount(snapshot(agent), 'maintenance').toLocaleString() }}</td>
-            <td>{{ (snapshot(agent)?.quotaWarningCount || 0).toLocaleString() }}</td>
+            <td>{{ number(accountTotal(snapshot(agent))) }}</td>
+            <td>{{ number(statusCount(snapshot(agent), 'active')) }}</td>
+            <td>{{ number(statusCount(snapshot(agent), 'locked')) }}</td>
+            <td>{{ number(statusCount(snapshot(agent), 'closed')) }}</td>
+            <td>{{ number(statusCount(snapshot(agent), 'maintenance')) }}</td>
+            <td>{{ number(snapshot(agent)?.quotaWarningCount || 0) }}</td>
           </tr>
           <tr v-if="!agents.length">
             <td colspan="8" class="text-center py-6 text-base-content/60">No hosts match your filters.</td>
@@ -69,7 +69,6 @@ function statusCount(snapshot: ZimbraAccountSnapshot | undefined, status: string
   return match ? match[1] : 0
 }
 
-function date(value?: string) {
-  return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : 'Unavailable'
-}
+const date = formatAbsoluteTime
+const number = (value: number) => new Intl.NumberFormat('en-US').format(value)
 </script>

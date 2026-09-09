@@ -1,8 +1,8 @@
-/** Absolute UTC stamp — identical on server and client */
+/** Absolute UTC stamp, identical on server and client. */
 export function formatAbsoluteTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return '—'
+  if (!dateStr) return 'Unavailable'
   const date = new Date(dateStr)
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return 'Unavailable'
   const y = date.getUTCFullYear()
   const m = String(date.getUTCMonth() + 1).padStart(2, '0')
   const d = String(date.getUTCDate()).padStart(2, '0')
@@ -11,7 +11,7 @@ export function formatAbsoluteTime(dateStr: string | null | undefined): string {
   return `${y}-${m}-${d} ${hh}:${mm} UTC`
 }
 
-/** Relative labels — only safe after mount (uses wall clock). */
+/** Relative labels. Call through useFormatTimeAgo for SSR-safe rendering. */
 export function formatTimeAgo(dateStr: string | null | undefined, nowMs = Date.now()): string {
   if (!dateStr) return 'Never'
   const date = new Date(dateStr)
@@ -27,9 +27,6 @@ export function formatTimeAgo(dateStr: string | null | undefined, nowMs = Date.n
   return `${diffDays}d ago`
 }
 
-/**
- * Hydration-safe time display: absolute during SSR/hydrate, relative after mount.
- */
 export function useFormatTimeAgo() {
   const ready = ref(false)
   onMounted(() => {

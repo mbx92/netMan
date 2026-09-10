@@ -288,7 +288,6 @@ func installTray(exePath string) {
 	}
 	defer k.Close()
 	_ = k.SetStringValue("NetManAgentTray", `wscript.exe //nologo "`+vbsPath+`"`)
-	_ = exec.Command(exePath, "-tray").Start()
 }
 
 func grantSystemACL(dir string) {

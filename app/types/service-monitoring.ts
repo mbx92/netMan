@@ -76,6 +76,7 @@ export interface MonitoringAgent {
   name?: string | null
   alias?: string | null
   hostname: string
+  agentVersion?: string | null
   lastIp?: string | null
   status: string
   isConnected: boolean

@@ -54,6 +54,9 @@ func collectZimbraCertificate(path string, now time.Time) *ZimbraCertificate {
 	s.Subject, s.Issuer, s.DNSNames = cert.Subject.CommonName, cert.Issuer.String(), cert.DNSNames
 	s.NotBefore, s.NotAfter = &cert.NotBefore, &cert.NotAfter
 	s.DaysRemaining = int(math.Floor(cert.NotAfter.Sub(now).Hours() / 24))
+	if s.DaysRemaining < 0 {
+		s.DaysRemaining = 0
+	}
 	s.Status = "valid"
 	switch {
 	case now.Before(cert.NotBefore):

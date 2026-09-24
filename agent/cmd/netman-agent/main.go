@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	agentVersion = "0.6.9"
+	agentVersion = "0.7.0"
 	serviceName  = "netman-agent"
 )
 
@@ -119,4 +119,3 @@ func initServiceLog() {
 	}
 	log.SetOutput(io.MultiWriter(os.Stderr, f))
 }
-

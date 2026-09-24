@@ -71,14 +71,20 @@ type heartbeatMessage struct {
 }
 
 type inboundMessage struct {
-	Type      string         `json:"type"`
-	Message   string         `json:"message"`
-	ChannelID uint32         `json:"channelId"`
-	Target    string         `json:"target"`
-	Latest    *update.Latest `json:"latest"`
-	RequestID string         `json:"requestId"`
-	PID       int32          `json:"pid"`
-	Action    string         `json:"action"`
+	Type           string         `json:"type"`
+	Message        string         `json:"message"`
+	ChannelID      uint32         `json:"channelId"`
+	Target         string         `json:"target"`
+	Latest         *update.Latest `json:"latest"`
+	RequestID      string         `json:"requestId"`
+	PID            int32          `json:"pid"`
+	Action         string         `json:"action"`
+	SSLMode        string         `json:"sslMode"`
+	Domains        []string       `json:"domains"`
+	Email          string         `json:"email"`
+	CertificatePEM string         `json:"certificatePem"`
+	PrivateKeyPEM  string         `json:"privateKeyPem"`
+	CAChainPEM     string         `json:"caChainPem"`
 }
 
 // Run holds a persistent WebSocket connection to the server for as long as
@@ -212,7 +218,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 	})
 
 	done := make(chan struct{})
-	go readLoop(conn, tm, &writeMu, done)
+	go readLoop(conn, tm, &writeMu, strings.HasPrefix(wsURL, "wss://"), done)
 
 	ticker := time.NewTicker(heartbeatInterval())
 	defer ticker.Stop()
@@ -251,7 +257,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 
 // readLoop is the connection's sole reader (gorilla/websocket requires this)
 // and dispatches every frame: binary = tunnel data, text = JSON control.
-func readLoop(conn *websocket.Conn, tm *tunnelManager, writeMu *sync.Mutex, done chan<- struct{}) {
+func readLoop(conn *websocket.Conn, tm *tunnelManager, writeMu *sync.Mutex, secureTransport bool, done chan<- struct{}) {
 	defer close(done)
 	for {
 		msgType, data, err := conn.ReadMessage()
@@ -285,6 +291,17 @@ func readLoop(conn *websocket.Conn, tm *tunnelManager, writeMu *sync.Mutex, done
 				go handleKillProcess(conn, writeMu, msg.RequestID, msg.PID)
 			case "power-action":
 				go handlePowerAction(conn, writeMu, msg.RequestID, msg.Action)
+			case "zimbra-ssl-deploy":
+				go handleZimbraSSLDeploy(conn, writeMu, zimbraSSLDeployRequest{
+					RequestID:       msg.RequestID,
+					Mode:            msg.SSLMode,
+					Domains:         msg.Domains,
+					Email:           msg.Email,
+					CertificatePEM:  msg.CertificatePEM,
+					PrivateKeyPEM:   msg.PrivateKeyPEM,
+					CAChainPEM:      msg.CAChainPEM,
+					SecureTransport: secureTransport,
+				})
 			case "error":
 				log.Printf("[agent] server error: %s", msg.Message)
 			}

@@ -115,9 +115,15 @@ export default defineWebSocketHandler({
                 await handleHeartbeat(peer, data as HeartbeatMessage)
                 break
             case 'kill-process-result':
-            case 'power-action-result': {
-                const msg = data as { requestId: string; success: boolean; error?: string }
-                resolveAgentCommand(msg.requestId, { success: !!msg.success, error: msg.error })
+            case 'power-action-result':
+            case 'zimbra-ssl-deploy-result': {
+                const msg = data as {
+                    requestId: string
+                    success: boolean
+                    error?: string
+                    details?: { mode: string; subject: string; notAfter: string; fingerprint: string; backupId: string }
+                }
+                resolveAgentCommand(msg.requestId, { success: !!msg.success, error: msg.error, details: msg.details })
                 break
             }
             case 'tunnel-ready':

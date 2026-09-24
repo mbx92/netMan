@@ -43,6 +43,9 @@ func TestZimbraCertificate(t *testing.T) {
 			if s.Status != tc.name || s.Subject != cert.Subject.CommonName || s.NotAfter == nil || !s.NotAfter.Equal(cert.NotAfter) {
 				t.Fatalf("unexpected certificate: %+v", s)
 			}
+			if s.DaysRemaining < 0 {
+				t.Fatalf("negative days remaining: %+v", s)
+			}
 		})
 	}
 	if err := os.WriteFile(path, []byte("invalid"), 0600); err != nil {

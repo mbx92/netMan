@@ -9,7 +9,7 @@ export async function requireSession(event: H3Event) {
     throw createError({ statusCode: 401, statusMessage: 'Sign in required' })
   }
   try {
-    await verifyLocalToken(token, 'access')
+    return await verifyLocalToken(token, 'access')
   } catch {
     throw createError({ statusCode: 401, statusMessage: 'Sign in required' })
   }

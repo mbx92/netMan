@@ -115,7 +115,38 @@ TCP success does not verify TLS, authentication, or mail delivery. DNS and routi
 use the netMan server/container network; disabled services or firewall-restricted
 ports can legitimately fail. Results are on demand and not persisted.
 
-No ban, unban, reload, restart, queue flush or configuration mutation is exposed.
+### Deploying or renewing Zimbra SSL
+
+Administrators can select **Update SSL** on a connected Zimbra host. Two deployment
+modes are available:
+
+- **Let's Encrypt** runs Certbot on the Zimbra host with the HTTP-01 standalone
+  challenge. Install `certbot` first, point every requested DNS name at the host,
+  and ensure public TCP port 80 is reachable and unused during issuance. The ACME
+  private key is generated and retained on the Zimbra host. RSA-2048 is requested
+  for compatibility with Zimbra releases that do not support ECDSA certificates.
+- **Premium / Comodo** accepts the issued server certificate, its matching private
+  key, and the provider CA bundle. The files are limited to 256 KiB each, travel
+  only in the authenticated NetMan-to-agent command, and are not stored in the
+  NetMan database or telemetry. Premium deployment is rejected unless the browser
+  upload uses HTTPS and the agent is connected to NetMan over WSS.
+
+The agent validates all requested hostnames and the certificate/private-key pair,
+then creates a root-only backup under
+`/var/lib/netman-agent/zimbra-ssl-backups/<timestamp>`. It calls `zmcertmgr verifycrt`,
+deploys the certificate, restarts Zimbra, and compares the new SHA-256 certificate
+fingerprint against local TLS ports 443, 465, 993, and 995. A deployment, restart,
+or endpoint-verification failure triggers an automatic attempt to redeploy the
+previous certificate and restart Zimbra. The command is Linux/root-only, restricted
+to administrators, rate-limited, and recorded in the audit log without PEM or
+private-key content.
+
+The operation can briefly interrupt mail and web access. Version 0.7.0 or newer of
+the NetMan agent is required. The first release supports a single Zimbra host; a
+multi-node Zimbra deployment must be updated one node at a time.
+
+No ban, unban, queue flush, or arbitrary shell command is exposed. The only
+configuration mutation is the explicit, administrator-confirmed Zimbra SSL workflow.
 Every external command has a timeout and 1 MiB output limit. Linux timeouts kill
 the command process group. Fail2Ban also has a whole-sweep deadline equal to the
 module interval, so a large number of failing jails cannot hold a worker forever.

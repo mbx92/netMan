@@ -28,6 +28,9 @@ WORKDIR /app
 COPY --from=agent-builder /agent/dist/.built /tmp/.agent-built
 COPY package*.json ./
 COPY packages ./packages
+# package.json postinstall runs `prisma generate`, so the schema must already
+# exist in the dependency stage before `npm ci` executes lifecycle scripts.
+COPY prisma ./prisma
 RUN npm ci
 
 # Build stage - Builder

@@ -10,6 +10,14 @@ const FALLBACK_SWEEP_INTERVAL_MS = Number(process.env.DATA_RETENTION_SWEEP_MS)
   || 6 * 60 * 60 * 1000
 
 export default defineNitroPlugin((nitroApp) => {
+  // A developer may intentionally point .env at a shared or production-like
+  // database. Do not delete retained data merely because `npm run dev` was
+  // started; opt in explicitly when testing the scheduler itself.
+  if (process.env.NODE_ENV !== 'production' && process.env.DATA_RETENTION_RUN_IN_DEV !== 'true') {
+    console.log('[DataRetention] Automatic pruning is disabled in development')
+    return
+  }
+
   let running = false
   let timer: ReturnType<typeof setTimeout> | null = null
   const prune = async () => {

@@ -68,11 +68,12 @@
             :class="sslMode === 'letsencrypt' ? 'btn-primary' : 'btn-outline'"
             role="radio"
             :aria-checked="sslMode === 'letsencrypt'"
+            :disabled="!supportsLetsEncryptDeploy"
             @click="sslMode = 'letsencrypt'"
           >
             <span>
               <span class="block font-semibold">Let’s Encrypt</span>
-              <span class="block text-xs font-normal opacity-75">Otomatis menggunakan Certbot</span>
+              <span class="block text-xs font-normal opacity-75">{{ supportsLetsEncryptDeploy ? 'Otomatis menggunakan Certbot' : 'Memerlukan agent 0.7.1+' }}</span>
             </span>
           </button>
           <button
@@ -162,11 +163,14 @@ const emit = defineEmits<{ deployed: [] }>()
 const { $api } = useNuxtApp()
 const authStore = useAuthStore()
 const canManageSSL = computed(() => authStore.user?.roleName === 'admin')
-const supportsSSLDeploy = computed(() => {
+function supportsAgentVersion(minimumPatch: number) {
   const parts = String(props.agent.agentVersion || '').split('.').map(value => Number.parseInt(value, 10))
   if (parts.some(Number.isNaN)) return false
-  return (parts[0] || 0) > 0 || (parts[1] || 0) >= 7
-})
+  const [major = 0, minor = 0, patch = 0] = parts
+  return major > 0 || minor > 7 || (minor === 7 && patch >= minimumPatch)
+}
+const supportsSSLDeploy = computed(() => supportsAgentVersion(0))
+const supportsLetsEncryptDeploy = computed(() => supportsAgentVersion(1))
 const ssl = computed(() => props.agent.lastMetrics?.zimbra?.ssl)
 const sslLabel = computed(() => ({ valid: 'Valid dates', expired: 'Expired', expiring: 'Expiring soon', not_yet_valid: 'Not yet valid', unknown: 'Unknown' }[ssl.value?.status || 'unknown'] || 'Unknown'))
 const target = ref('hostname')
@@ -181,12 +185,15 @@ const acmeEmail = ref('')
 const confirmed = ref(false)
 const deploying = ref(false)
 const deployError = ref('')
-const deployResult = ref<{ mode: string; subject: string; notAfter: string; fingerprint: string; backupId: string } | null>(null)
+type SSLDeployDetails = { mode: string; subject: string; notAfter: string; fingerprint: string; backupId: string }
+type SSLDeployJob = { status: 'pending' | 'succeeded' | 'failed'; details?: SSLDeployDetails; error?: string }
+const deployResult = ref<SSLDeployDetails | null>(null)
 const premiumMaterial = reactive({ certificatePem: '', privateKeyPem: '', caChainPem: '' })
 const premiumFiles = reactive({ certificate: '', key: '', chain: '' })
 
 function openDeploy() {
   domainInput.value = ssl.value?.dnsNames?.join(', ') || props.agent.hostname
+  if (!supportsLetsEncryptDeploy.value) sslMode.value = 'premium'
   confirmed.value = false
   deployError.value = ''
   deployResult.value = null
@@ -220,9 +227,16 @@ async function readPremiumFile(event: Event, material: keyof typeof premiumMater
 
 const deployErrors: Record<string, string> = {
   ssl_deployment_in_progress: 'Another SSL deployment is already running on this agent.',
+  agent_not_connected: 'The Zimbra agent disconnected before the deployment could start.',
+  agent_timeout: 'The agent did not return a deployment result before the safety deadline.',
+  ssl_deployment_command_failed: 'NetMan could not send the SSL deployment command to the agent.',
   secure_transport_required: 'Premium certificate deployment requires the agent to connect to NetMan over HTTPS/WSS.',
   certbot_not_installed: 'Certbot is not installed on the Zimbra server.',
   acme_issue_failed: 'Let’s Encrypt could not issue the certificate. Check public DNS and TCP port 80.',
+  acme_port_80_in_use: 'TCP port 80 is still occupied after NetMan tried to stop Zimbra Proxy.',
+  acme_proxy_stop_failed: 'NetMan could not stop Zimbra Proxy to free TCP port 80 for Certbot.',
+  acme_proxy_restart_failed: 'The certificate was issued, but Zimbra Proxy could not be restarted. Inspect the Zimbra server immediately.',
+  acme_issue_failed_proxy_restart_failed: 'Certificate issuance failed and Zimbra Proxy could not be restarted. Inspect the Zimbra server immediately.',
   acme_root_ca_unavailable: 'The issuing root CA is not available in /etc/ssl/certs on the Zimbra server.',
   certificate_key_mismatch: 'The uploaded private key does not match the server certificate.',
   certificate_hostname_mismatch: 'The certificate does not cover every configured domain.',
@@ -235,6 +249,17 @@ const deployErrors: Record<string, string> = {
   endpoint_verification_failed_rolled_back: 'The new certificate was not served by Zimbra. The previous certificate was restored.',
   endpoint_verification_failed_rollback_failed: 'Endpoint verification and automatic rollback failed. Inspect the server immediately.',
   backup_failed: 'The active Zimbra certificate could not be backed up, so deployment was stopped.',
+}
+
+async function waitForSSLDeployment(deploymentId: string): Promise<SSLDeployJob> {
+  // The agent has a 12-minute deployment deadline plus rollback time. Polling
+  // keeps every HTTP request short so reverse proxies cannot turn it into 504.
+  for (let attempt = 0; attempt < 400; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 3_000))
+    const job = await $api<SSLDeployJob>(`/agents/${props.agent.id}/zimbra-ssl/deploy/${deploymentId}`)
+    if (job.status !== 'pending') return job
+  }
+  return { status: 'failed', error: 'agent_timeout' }
 }
 
 async function deploySSL() {
@@ -251,7 +276,7 @@ async function deploySSL() {
   }
   deploying.value = true
   try {
-    const response = await $api<{ success: boolean; details: typeof deployResult.value }>(`/agents/${props.agent.id}/zimbra-ssl/deploy`, {
+    const response = await $api<{ success: boolean; deploymentId: string; status: 'pending' }>(`/agents/${props.agent.id}/zimbra-ssl/deploy`, {
       method: 'POST',
       body: {
         sslMode: sslMode.value,
@@ -261,7 +286,17 @@ async function deploySSL() {
           : { ...premiumMaterial }),
       },
     })
-    deployResult.value = response.details
+    const job = await waitForSSLDeployment(response.deploymentId)
+    if (job.status === 'failed') {
+      const code = job.error || 'Zimbra SSL deployment failed.'
+      deployError.value = deployErrors[code] || code
+      return
+    }
+    if (!job.details) {
+      deployError.value = 'The agent reported success without certificate details.'
+      return
+    }
+    deployResult.value = job.details
     premiumMaterial.privateKeyPem = ''
     emit('deployed')
   } catch (error: any) {

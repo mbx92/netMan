@@ -29,6 +29,7 @@ const (
 	zimbraCommercialDir = "/opt/zimbra/ssl/zimbra/commercial"
 	zimbraCertManager   = "/opt/zimbra/bin/zmcertmgr"
 	zimbraControl       = "/opt/zimbra/bin/zmcontrol"
+	zimbraProxyControl  = "/opt/zimbra/bin/zmproxyctl"
 	maxSSLPEMSize       = 256 * 1024
 )
 
@@ -125,8 +126,20 @@ func deployZimbraSSL(ctx context.Context, request zimbraSSLDeployRequest) (*zimb
 		for _, domain := range domains {
 			args = append(args, "-d", domain)
 		}
-		if err := runSSLCommand(ctx, "certbot", args...); err != nil {
+		proxyStopped, prepareCode := prepareACMEHTTPPort(ctx)
+		if prepareCode != "" {
+			return nil, prepareCode
+		}
+		certbotErr := runSSLCommand(ctx, "certbot", args...)
+		proxyRestartErr := restartZimbraProxy(proxyStopped)
+		if certbotErr != nil {
+			if proxyRestartErr != nil {
+				return nil, "acme_issue_failed_proxy_restart_failed"
+			}
 			return nil, "acme_issue_failed"
+		}
+		if proxyRestartErr != nil {
+			return nil, "acme_proxy_restart_failed"
 		}
 		liveDir := filepath.Join("/etc/letsencrypt/live", domains[0])
 		if err := copySSLFile(filepath.Join(liveDir, "cert.pem"), certPath, 0644); err != nil {
@@ -500,6 +513,54 @@ func runAsZimbra(ctx context.Context, binary string, args ...string) error {
 		return runSSLCommand(ctx, runuser, "-l", "zimbra", "-c", strings.Join(parts, " "))
 	}
 	return runSSLCommand(ctx, "su", "-", "zimbra", "-c", strings.Join(parts, " "))
+}
+
+func prepareACMEHTTPPort(ctx context.Context) (bool, string) {
+	if tcpPortAvailable("80") {
+		return false, ""
+	}
+	if _, err := os.Stat(zimbraProxyControl); err != nil {
+		return false, "acme_port_80_in_use"
+	}
+	if err := runAsZimbra(ctx, zimbraProxyControl, "stop"); err != nil {
+		return false, "acme_proxy_stop_failed"
+	}
+
+	deadline := time.NewTimer(30 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+	for {
+		if tcpPortAvailable("80") {
+			return true, ""
+		}
+		select {
+		case <-ctx.Done():
+			_ = restartZimbraProxy(true)
+			return false, "acme_proxy_stop_failed"
+		case <-deadline.C:
+			_ = restartZimbraProxy(true)
+			return false, "acme_port_80_in_use"
+		case <-ticker.C:
+		}
+	}
+}
+
+func restartZimbraProxy(stopped bool) error {
+	if !stopped {
+		return nil
+	}
+	restartCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	return runAsZimbra(restartCtx, zimbraProxyControl, "start")
+}
+
+func tcpPortAvailable(port string) bool {
+	listener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return false
+	}
+	return listener.Close() == nil
 }
 
 func shellEscape(value string) string {

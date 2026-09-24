@@ -2,6 +2,7 @@ import prisma from '../../../../utils/prisma'
 import { deployZimbraSsl, type ZimbraSslDeployRequest } from '../../../../utils/agent-commands'
 import { requireSession } from '../../../../utils/require-session'
 import { isRateLimited } from '../../../../utils/rate-limit'
+import { completeZimbraSslJob, createZimbraSslJob, failZimbraSslJob } from '../../../../utils/zimbra-ssl-jobs'
 
 const MAX_PEM_LENGTH = 256 * 1024
 
@@ -24,12 +25,20 @@ function requirePem(value: unknown, label: string, marker: string): string {
   return value
 }
 
-function supportsSslDeployment(version: string | null): boolean {
+function supportsSslDeployment(version: string | null, minimumPatch = 0): boolean {
   if (!version) return false
   const parts = version.split('.').map(part => Number.parseInt(part, 10))
   if (parts.some(Number.isNaN)) return false
-  const [major = 0, minor = 0] = parts
-  return major > 0 || minor >= 7
+  const [major = 0, minor = 0, patch = 0] = parts
+  return major > 0 || minor > 7 || (minor === 7 && patch >= minimumPatch)
+}
+
+function deploymentErrorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : ''
+  if (message === 'Agent is not connected') return 'agent_not_connected'
+  if (message === 'An SSL deployment is already in progress for this agent') return 'ssl_deployment_in_progress'
+  if (message === 'Agent did not respond in time') return 'agent_timeout'
+  return 'ssl_deployment_command_failed'
 }
 
 export default defineEventHandler(async (event) => {
@@ -43,18 +52,23 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 429, statusMessage: 'Wait 30 seconds before starting another SSL deployment' })
   }
 
-  const agent = await prisma.agent.findUnique({ where: { id }, select: { platform: true, hostname: true, agentVersion: true, lastMetrics: true } })
-  if (!agent) throw createError({ statusCode: 404, statusMessage: 'Agent not found' })
-  if (agent.platform !== 'LINUX') throw createError({ statusCode: 400, statusMessage: 'Zimbra SSL deployment requires a Linux agent' })
-  if (!supportsSslDeployment(agent.agentVersion)) throw createError({ statusCode: 409, statusMessage: 'Update this agent to version 0.7.0 or newer first' })
-  const metrics = agent.lastMetrics as Record<string, unknown> | null
-  if (!metrics?.zimbra) throw createError({ statusCode: 400, statusMessage: 'No Zimbra snapshot for this agent' })
-
   const body = await readBody(event)
   const sslMode = body?.sslMode
   if (sslMode !== 'letsencrypt' && sslMode !== 'premium') {
     throw createError({ statusCode: 400, statusMessage: 'Choose Let’s Encrypt or Premium SSL' })
   }
+
+  const agent = await prisma.agent.findUnique({ where: { id }, select: { platform: true, hostname: true, agentVersion: true, lastMetrics: true } })
+  if (!agent) throw createError({ statusCode: 404, statusMessage: 'Agent not found' })
+  if (agent.platform !== 'LINUX') throw createError({ statusCode: 400, statusMessage: 'Zimbra SSL deployment requires a Linux agent' })
+  const minimumPatch = sslMode === 'letsencrypt' ? 1 : 0
+  if (!supportsSslDeployment(agent.agentVersion, minimumPatch)) {
+    const minimumVersion = sslMode === 'letsencrypt' ? '0.7.1' : '0.7.0'
+    throw createError({ statusCode: 409, statusMessage: `Update this agent to version ${minimumVersion} or newer first` })
+  }
+  const metrics = agent.lastMetrics as Record<string, unknown> | null
+  if (!metrics?.zimbra) throw createError({ statusCode: 400, statusMessage: 'No Zimbra snapshot for this agent' })
+
   const request: ZimbraSslDeployRequest = { sslMode, domains: parseDomains(body?.domains) }
   if (sslMode === 'letsencrypt') {
     const email = String(body?.email || '').trim()
@@ -74,42 +88,54 @@ export default defineEventHandler(async (event) => {
     request.caChainPem = requirePem(body?.caChainPem, 'CA chain', '-----BEGIN CERTIFICATE-----')
   }
 
-  try {
-    const result = await deployZimbraSsl(id, request)
+  const job = createZimbraSslJob(id, sslMode, request.domains)
+  const actor = String(session.email || session.sub || 'unknown')
+
+  void (async () => {
+    let success = false
+    let errorCode: string | undefined
+    let certificate: Record<string, string> | undefined
+
+    try {
+      const result = await deployZimbraSsl(id, request)
+      success = result.success && !!result.details
+      errorCode = result.error
+      if (success && result.details) {
+        completeZimbraSslJob(job.id, result.details)
+        certificate = {
+          subject: result.details.subject,
+          notAfter: result.details.notAfter,
+          fingerprint: result.details.fingerprint,
+          backupId: result.details.backupId,
+        }
+      } else {
+        errorCode ||= 'zimbra_ssl_deployment_failed'
+        failZimbraSslJob(job.id, errorCode)
+      }
+    } catch (error) {
+      errorCode = deploymentErrorCode(error)
+      failZimbraSslJob(job.id, errorCode)
+    }
+
     await prisma.auditLog.create({
       data: {
-        actor: String(session.email || session.sub || 'unknown'),
+        actor,
         action: 'ZIMBRA_SSL_DEPLOY',
         target: id,
         details: {
           hostname: agent.hostname,
           sslMode,
           domains: request.domains,
-          success: result.success,
-          ...(result.error ? { error: result.error } : {}),
-          ...(result.details ? { certificate: {
-            subject: result.details.subject,
-            notAfter: result.details.notAfter,
-            fingerprint: result.details.fingerprint,
-            backupId: result.details.backupId,
-          } } : {}),
+          deploymentId: job.id,
+          success,
+          ...(errorCode ? { error: errorCode } : {}),
+          ...(certificate ? { certificate } : {}),
         },
-        result: result.success ? 'success' : 'failure',
+        result: success ? 'success' : 'failure',
       },
     }).catch(error => console.error('[ZimbraSSL] Failed to write audit log:', error))
-    if (!result.success) {
-      throw createError({ statusCode: 502, statusMessage: result.error || 'Zimbra SSL deployment failed' })
-    }
-    return { success: true, details: result.details }
-  } catch (error: any) {
-    if (error?.statusCode) throw error
-    const message = error instanceof Error ? error.message : 'Zimbra SSL deployment failed'
-    if (message === 'Agent is not connected' || message === 'An SSL deployment is already in progress for this agent') {
-      throw createError({ statusCode: 409, statusMessage: message })
-    }
-    if (message === 'Agent did not respond in time') {
-      throw createError({ statusCode: 504, statusMessage: message })
-    }
-    throw createError({ statusCode: 502, statusMessage: 'Unable to send SSL deployment command' })
-  }
+  })()
+
+  setResponseStatus(event, 202)
+  return { success: true, deploymentId: job.id, status: job.status }
 })

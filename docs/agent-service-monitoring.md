@@ -125,8 +125,9 @@ modes are available:
   and ensure public TCP port 80 is reachable and unused during issuance. The ACME
   private key is generated and retained on the Zimbra host. RSA-2048 is requested
   for compatibility with Zimbra releases that do not support ECDSA certificates.
-- **Premium / Comodo** accepts the issued server certificate, its matching private
-  key, and the provider CA bundle. The files are limited to 256 KiB each, travel
+- **Premium / Sectigo / Comodo** accepts the issued server certificate, its matching
+  private key, and the provider CA bundle (`.ca-bundle`, `.crt`, or PEM). The files
+  are limited to 256 KiB each, travel
   only in the authenticated NetMan-to-agent command, and are not stored in the
   NetMan database or telemetry. Premium deployment is rejected unless the browser
   upload uses HTTPS and the agent is connected to NetMan over WSS.

@@ -61,9 +61,33 @@
           <button class="btn btn-ghost btn-sm" :disabled="deploying" aria-label="Close" @click="closeDeploy">✕</button>
         </div>
 
-        <div class="tabs tabs-box mt-5" role="tablist">
-          <button class="tab flex-1" :class="{ 'tab-active': sslMode === 'letsencrypt' }" role="tab" @click="sslMode = 'letsencrypt'">Let’s Encrypt</button>
-          <button class="tab flex-1" :class="{ 'tab-active': sslMode === 'premium' }" role="tab" @click="sslMode = 'premium'">Premium / Comodo</button>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5" role="radiogroup" aria-label="SSL certificate mode">
+          <button
+            type="button"
+            class="btn h-auto min-h-16 justify-start px-4 py-3 text-left"
+            :class="sslMode === 'letsencrypt' ? 'btn-primary' : 'btn-outline'"
+            role="radio"
+            :aria-checked="sslMode === 'letsencrypt'"
+            @click="sslMode = 'letsencrypt'"
+          >
+            <span>
+              <span class="block font-semibold">Let’s Encrypt</span>
+              <span class="block text-xs font-normal opacity-75">Otomatis menggunakan Certbot</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="btn h-auto min-h-16 justify-start px-4 py-3 text-left"
+            :class="sslMode === 'premium' ? 'btn-primary' : 'btn-outline'"
+            role="radio"
+            :aria-checked="sslMode === 'premium'"
+            @click="sslMode = 'premium'"
+          >
+            <span>
+              <span class="block font-semibold">Sectigo / Comodo</span>
+              <span class="block text-xs font-normal opacity-75">Unggah sertifikat premium</span>
+            </span>
+          </button>
         </div>
 
         <form class="mt-5 space-y-4" @submit.prevent="deploySSL">
@@ -88,7 +112,7 @@
               <label class="border border-base-300 p-3 cursor-pointer">
                 <span class="block font-medium text-sm">Server certificate</span>
                 <span class="block text-xs text-base-content/60 mt-1 break-all">{{ premiumFiles.certificate || '.crt / .pem' }}</span>
-                <input class="file-input file-input-bordered file-input-sm w-full mt-3" type="file" accept=".crt,.pem,.cer" required @change="readPremiumFile($event, 'certificatePem', 'certificate')" />
+                <input class="file-input file-input-bordered file-input-sm w-full mt-3" type="file" accept=".crt,.pem,.cer,.cert" required @change="readPremiumFile($event, 'certificatePem', 'certificate')" />
               </label>
               <label class="border border-base-300 p-3 cursor-pointer">
                 <span class="block font-medium text-sm">Private key</span>
@@ -97,8 +121,8 @@
               </label>
               <label class="border border-base-300 p-3 cursor-pointer">
                 <span class="block font-medium text-sm">CA bundle / chain</span>
-                <span class="block text-xs text-base-content/60 mt-1 break-all">{{ premiumFiles.chain || '.crt / .pem' }}</span>
-                <input class="file-input file-input-bordered file-input-sm w-full mt-3" type="file" accept=".crt,.pem,.cer" required @change="readPremiumFile($event, 'caChainPem', 'chain')" />
+                <span class="block text-xs text-base-content/60 mt-1 break-all">{{ premiumFiles.chain || '.ca-bundle / .crt / .pem' }}</span>
+                <input class="file-input file-input-bordered file-input-sm w-full mt-3" type="file" accept=".ca-bundle,.crt,.pem,.cer,.cert" required @change="readPremiumFile($event, 'caChainPem', 'chain')" />
               </label>
             </div>
             <p class="text-xs text-base-content/60">Comodo/Sectigo deployments normally use the issued server certificate, its matching private key, and the CA bundle supplied by the provider. Files are sent directly to the connected agent and are not saved in the NetMan database.</p>

@@ -22,9 +22,10 @@ import (
 const (
 	defaultHeartbeatInterval = 30 * time.Second
 	minHeartbeatInterval     = 5 * time.Second
+	maxHeartbeatInterval     = 60 * time.Second
 	minBackoff               = 1 * time.Second
 	maxBackoff               = 60 * time.Second
-	wsPongWait               = 60 * time.Second
+	wsPongWait               = 90 * time.Second
 	wsPingPeriod             = 20 * time.Second
 )
 
@@ -170,6 +171,9 @@ func heartbeatInterval() time.Duration {
 	if d < minHeartbeatInterval {
 		return minHeartbeatInterval
 	}
+	if d > maxHeartbeatInterval {
+		return maxHeartbeatInterval
+	}
 	return d
 }
 
@@ -217,7 +221,7 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 		return nil
 	})
 
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	go readLoop(conn, tm, &writeMu, strings.HasPrefix(wsURL, "wss://"), done)
 
 	ticker := time.NewTicker(heartbeatInterval())
@@ -237,9 +241,9 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 			return connectedAt, nil
 		case <-upd.ExitRequested():
 			return connectedAt, nil
-		case <-done:
+		case readErr := <-done:
 			upd.SetConnected(false, "connection closed")
-			return connectedAt, nil
+			return connectedAt, readErr
 		case <-pinger.C:
 			writeMu.Lock()
 			err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second))
@@ -257,11 +261,11 @@ func runOnce(cfg *config.Config, version string, collector *telemetry.Collector,
 
 // readLoop is the connection's sole reader (gorilla/websocket requires this)
 // and dispatches every frame: binary = tunnel data, text = JSON control.
-func readLoop(conn *websocket.Conn, tm *tunnelManager, writeMu *sync.Mutex, secureTransport bool, done chan<- struct{}) {
-	defer close(done)
+func readLoop(conn *websocket.Conn, tm *tunnelManager, writeMu *sync.Mutex, secureTransport bool, done chan<- error) {
 	for {
 		msgType, data, err := conn.ReadMessage()
 		if err != nil {
+			done <- err
 			return
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(wsPongWait))

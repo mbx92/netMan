@@ -11,8 +11,13 @@ import { closeAllForAgent } from '../utils/agent-tunnel'
 import { clearBreachStreaks } from '../utils/agent-alerts'
 import { publishNotification } from '../utils/notification-bus'
 
-const SWEEP_INTERVAL_MS = Number(process.env.AGENT_OFFLINE_SWEEP_MS) || 30_000
-const STALE_AFTER_MS = Number(process.env.AGENT_OFFLINE_THRESHOLD_MS) || 90_000 // ~3x expected heartbeat interval
+function positiveMillis(value: string | undefined, fallback: number): number {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+const SWEEP_INTERVAL_MS = positiveMillis(process.env.AGENT_OFFLINE_SWEEP_MS, 30_000)
+const STALE_AFTER_MS = positiveMillis(process.env.AGENT_OFFLINE_THRESHOLD_MS, 180_000) // tolerate DB/network jitter around 30s heartbeats
 
 export default defineNitroPlugin((nitroApp) => {
     let running = false
@@ -36,6 +41,13 @@ async function sweepStaleAgents() {
 
     for (const agent of stale) {
         try {
+            const connected = agentManager.get(agent.id)
+            if (connected && Date.now() - connected.lastHeartbeatAt.getTime() < STALE_AFTER_MS) {
+                // The socket is actively sending heartbeats; only the database
+                // write is late. Keep the live connection registered.
+                continue
+            }
+
             agentManager.unregisterByAgentId(agent.id)
             closeAllForAgent(agent.id)
             clearBreachStreaks(agent.id)

@@ -13,6 +13,7 @@ interface ConnectedAgent {
     platform: 'WINDOWS' | 'LINUX' | 'MACOS'
     deviceId: string | null
     connectedAt: Date
+    lastHeartbeatAt: Date
 }
 
 class AgentConnectionManager {
@@ -20,13 +21,24 @@ class AgentConnectionManager {
     private peerIdToAgentId: Map<string, string> = new Map()
 
     register(agentId: string, peer: any, meta: { hostname: string; platform: 'WINDOWS' | 'LINUX' | 'MACOS'; deviceId?: string | null }): void {
+        const previous = this.byAgentId.get(agentId)
+        if (previous && previous.peer.id !== peer.id) {
+            // Remove ownership before closing the old socket. Its delayed close
+            // event must not unregister or mark the replacement socket offline.
+            this.peerIdToAgentId.delete(previous.peer.id)
+            try { previous.peer.close() } catch { }
+            console.log(`[AgentManager] Replaced stale connection for agent ${agentId}: ${previous.peer.id} -> ${peer.id}`)
+        }
+
+        const now = new Date()
         this.byAgentId.set(agentId, {
             agentId,
             peer,
             hostname: meta.hostname,
             platform: meta.platform,
             deviceId: meta.deviceId ?? null,
-            connectedAt: new Date(),
+            connectedAt: now,
+            lastHeartbeatAt: now,
         })
         this.peerIdToAgentId.set(peer.id, agentId)
         console.log(`[AgentManager] Registered agent ${agentId} (${meta.hostname}). Online: ${this.byAgentId.size}`)
@@ -36,18 +48,32 @@ class AgentConnectionManager {
         const agentId = this.peerIdToAgentId.get(peerId)
         if (!agentId) return undefined
         this.peerIdToAgentId.delete(peerId)
+
+        const current = this.byAgentId.get(agentId)
+        if (!current || current.peer.id !== peerId) {
+            // A newer connection already owns this agent. Ignore the stale
+            // socket's close/error event instead of tearing down the new one.
+            return undefined
+        }
         this.byAgentId.delete(agentId)
         console.log(`[AgentManager] Unregistered agent ${agentId}. Online: ${this.byAgentId.size}`)
         return agentId
+    }
+
+    markHeartbeat(peerId: string): ConnectedAgent | undefined {
+        const connected = this.getByPeerId(peerId)
+        if (!connected || connected.peer.id !== peerId) return undefined
+        connected.lastHeartbeatAt = new Date()
+        return connected
     }
 
     /** Force-drops a stale registration (e.g. heartbeat timeout with no clean WS close). */
     unregisterByAgentId(agentId: string): void {
         const entry = this.byAgentId.get(agentId)
         if (!entry) return
-        try { entry.peer.close() } catch { }
         this.peerIdToAgentId.delete(entry.peer.id)
         this.byAgentId.delete(agentId)
+        try { entry.peer.close() } catch { }
         console.log(`[AgentManager] Force-unregistered stale agent ${agentId}. Online: ${this.byAgentId.size}`)
     }
 

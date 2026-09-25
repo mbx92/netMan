@@ -241,7 +241,9 @@ async function handleHello(peer: any, msg: HelloMessage) {
 }
 
 async function handleHeartbeat(peer: any, msg: HeartbeatMessage) {
-    const connected = agentManager.getByPeerId(peer.id)
+    // Mark liveness before database work. A slow/unavailable database must not
+    // cause the offline watcher to close an otherwise healthy WebSocket.
+    const connected = agentManager.markHeartbeat(peer.id)
     if (!connected) {
         peer.send(JSON.stringify({ type: 'error', message: 'Not authenticated — send hello first' }))
         return

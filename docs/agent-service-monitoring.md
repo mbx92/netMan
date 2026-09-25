@@ -48,6 +48,13 @@ omit these modules. Heartbeat frequency still uses `NETMAN_HEARTBEAT_INTERVAL_SE
 Account checks are opt-in with `accountsEnabled: true` because account inventory
 and quota usage can be large on busy mail systems.
 
+The agent sends heartbeats every 30 seconds and clamps
+`NETMAN_HEARTBEAT_INTERVAL_SEC` to 5–60 seconds. The server waits 180 seconds by
+default before declaring a connection stale. Override this with
+`AGENT_OFFLINE_THRESHOLD_MS` only when needed; keep it comfortably above three
+heartbeat intervals. Connection ownership is tied to the WebSocket peer so a
+late close event from an old socket cannot unregister a newer reconnect.
+
 Optional account health settings:
 
 ```json

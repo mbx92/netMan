@@ -23,7 +23,7 @@ RUN mkdir -p /agent/dist \
 # COPY --from=agent-builder runs first so BuildKit cannot finalize the Go
 # stage and the Node deps stage at the same time. Parallel commits on Coolify
 # hit "snapshot does not exist: not found".
-FROM node:20-bookworm AS deps
+FROM node:22.23.4-bookworm AS deps
 WORKDIR /app
 COPY --from=agent-builder /agent/dist/.built /tmp/.agent-built
 COPY package*.json ./
@@ -34,7 +34,7 @@ COPY prisma ./prisma
 RUN npm ci
 
 # Build stage - Builder
-FROM node:20-bookworm AS builder
+FROM node:22.23.4-bookworm AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -58,7 +58,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # Production stage
-FROM node:20-bookworm AS runner
+FROM node:22.23.4-bookworm AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

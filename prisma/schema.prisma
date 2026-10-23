@@ -4,7 +4,7 @@
 generator client {
   provider      = "prisma-client-js"
   // native = local macOS/Linux dev. debian-openssl-3.0.x = Coolify/Docker
-  // (node:20-bookworm, glibc + OpenSSL 3). Do not use linux-musl here — the
+  // (node:22.23.4-bookworm, glibc + OpenSSL 3). Do not use linux-musl here — the
   // runtime image is Debian, not Alpine.
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
